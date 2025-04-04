@@ -8,6 +8,7 @@ new Phaser.Game({
   backgroundColor: "#2d2d2d",
   parent: "phaser",
   pixelArt: true,
+  antialias: false,
   scene: World,
   scale: {
     mode: Phaser.Scale.RESIZE,

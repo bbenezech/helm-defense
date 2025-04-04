@@ -12,6 +12,9 @@
     ],
     "file.lastUsedOpenFilter": "Tous les Fichiers (*)",
     "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
         "kenney_tiny-dungeon/Tiled/sampleMap.tmx": {
             "scale": 0.87578125,
             "selectedLayer": 0,

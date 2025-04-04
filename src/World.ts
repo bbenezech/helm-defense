@@ -14,6 +14,10 @@ const TOWN_SPRITE = "kenney-tiny-town";
 const DUNGEON_SPRITE = "kenney-tiny-dungeon";
 const TILE_MAP = "map";
 
+// npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
+// npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
+// tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
+
 export class World extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
@@ -26,10 +30,13 @@ export class World extends Phaser.Scene {
 
   preload() {
     this.load.tilemapTiledJSON(TILE_MAP, "assets/map.json");
-    this.load.image(TOWN_SPRITE, "assets/kenney_tiny-town/Tilemap/tilemap.png");
+    this.load.image(
+      TOWN_SPRITE,
+      "assets/kenney_tiny-town/Tilemap/tilemap_extruded.png"
+    );
     this.load.image(
       DUNGEON_SPRITE,
-      "assets/kenney_tiny-dungeon/Tilemap/tilemap.png"
+      "assets/kenney_tiny-dungeon/Tilemap/tilemap_extruded.png"
     );
     this.load.image(
       ENEMY_SPRITE,
@@ -91,6 +98,7 @@ export class World extends Phaser.Scene {
     );
     this.cameras.main.setZoom(1);
     this.cameras.main.centerToBounds();
+    this.cameras.main.setRoundPixels(true);
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -110,7 +118,7 @@ export class World extends Phaser.Scene {
       // drag: 0.0005,
       maxSpeed: 1,
       maxZoom: 4,
-      minZoom: 0.8,
+      minZoom: 1,
     });
 
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
@@ -159,6 +167,7 @@ export class World extends Phaser.Scene {
     // Get current camera scroll position
     const cam = this.cameras.main;
 
+    cam.setRoundPixels(true); // Ensure pixel-perfect rendering
     // Check mouse position and scroll accordingly
     if (mouseX < SCROLL_BOUNDARY) {
       cam.scrollX -= SCROLL_SPEED;
