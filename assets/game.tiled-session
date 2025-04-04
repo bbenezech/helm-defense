@@ -5,10 +5,10 @@
     },
     "activeFile": "map.json",
     "expandedProjectPaths": [
-        ".",
-        "kenney_tiny-dungeon",
         "kenney_tiny-dungeon/Tiled",
-        "kenney_tiny-town"
+        "kenney_tiny-dungeon",
+        "kenney_tiny-town",
+        "."
     ],
     "file.lastUsedOpenFilter": "Tous les Fichiers (*)",
     "fileStates": {
@@ -39,8 +39,8 @@
             "scale": 1.2958,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 292.09754591757985,
-                "y": 1031.0233060657508
+                "x": 542.9078561506406,
+                "y": 633.5854298502855
             }
         },
         "map.json#kenney-tiny-dungeon": {
@@ -58,13 +58,13 @@
     "map.tileWidth": 16,
     "map.width": 100,
     "openFiles": [
-        "map.json",
-        "kenney_tiny-town/kenney-tiny-town.tsx"
+        "map.json"
     ],
     "project": "game.tiled-project",
+    "property.type": "int",
     "recentFiles": [
-        "kenney_tiny-town/kenney-tiny-town.tsx",
         "map.json",
+        "kenney_tiny-town/kenney-tiny-town.tsx",
         "kenney_tiny-dungeon/Tiled/sampleSheet.tsx",
         "kenney_tiny-dungeon/Tiled/sampleMap.tmx",
         "kenney_tiny-dungeon/kenney-tiny-dungeon.tsx"

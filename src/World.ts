@@ -65,9 +65,19 @@ export class World extends Phaser.Scene {
     createTexture(SHADOW_SPRITE, 0x000000, 10, "circle");
   }
 
+  tileToWorld(tileX: number, tileY: number) {
+    const worldX = this.map.tileToWorldX(tileX);
+    const worldY = this.map.tileToWorldY(tileY);
+
+    if (worldX === null || worldY === null) {
+      throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
+    }
+    return [worldX, worldY] as const;
+  }
+
   create() {
     this.fpsText = this.add
-      .text(10, 10, "FPS: --", {
+      .text(2, 2, "FPS: --", {
         font: "16px Courier",
         color: "#ffffff",
       })
@@ -88,27 +98,31 @@ export class World extends Phaser.Scene {
     this.map.createLayer(1, [townTileset, dungeonTileset], 0, 0); // buildings
     this.map.createLayer(2, [townTileset, dungeonTileset], 0, 0); // trees
     this.map.createLayer(3, [townTileset, dungeonTileset], 0, 0); // objects
-
+    const mapWidthPixels = this.map.widthInPixels;
+    const mapHeightPixels = this.map.heightInPixels;
+    const camera = this.cameras.main;
+    this.adjustCamera();
     // Set camera bounds to map dimensions
-    this.cameras.main.setBounds(
-      0,
-      0,
-      this.map.widthInPixels,
-      this.map.heightInPixels
-    );
-    this.cameras.main.setZoom(1);
-    this.cameras.main.centerToBounds();
-    this.cameras.main.setRoundPixels(true);
+    camera.setBounds(0, 0, mapWidthPixels, mapHeightPixels);
+    camera.setRoundPixels(true);
+
+    // --- 6. Listen for Resize Events ---
+    this.scale.on("resize", this.handleResize, this);
+    this.events.on("shutdown", () => {
+      this.scale.off("resize", this.handleResize, this);
+    });
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
 
     this.controls = new Phaser.Cameras.Controls.SmoothedKeyControl({
-      camera: this.cameras.main,
+      camera,
       left: cursors.left,
       right: cursors.right,
       up: cursors.up,
       down: cursors.down,
+      // acceleration: 0.04,
+      // drag: 0.0005,
       zoomIn: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.MINUS),
       zoomOut: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.PLUS),
       zoomSpeed: 0.1,
@@ -118,14 +132,12 @@ export class World extends Phaser.Scene {
       // drag: 0.0005,
       maxSpeed: 1,
       maxZoom: 4,
-      minZoom: 1,
     });
 
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
-    const { width, height } = this.scale;
-    const cannon = new Cannon(this, width / 2, height - 50);
+    const cannon = new Cannon(this, ...this.tileToWorld(34, 75));
     const bulletGroup = this.physics.add.group();
     const enemyGroup = this.physics.add.group(enemies.list);
 
@@ -155,8 +167,41 @@ export class World extends Phaser.Scene {
     );
   }
 
+  adjustCamera() {
+    const camera = this.cameras.main;
+    const mapWidthPixels = this.map.widthInPixels;
+
+    // Get the current viewport width
+    const viewportWidth = camera.width; // Or this.scale.width if camera fills game
+
+    // Calculate the zoom required to fit the map width perfectly
+    const targetZoom = viewportWidth / mapWidthPixels;
+
+    // Apply the zoom
+    camera.setZoom(targetZoom);
+
+    // Ensure horizontal scroll is 0 (since width fits exactly)
+    // This might be handled by setBounds + follow, but good to be explicit
+    camera.scrollX = 0;
+
+    // Note: Vertical scroll will be handled by setBounds and camera follow (if enabled)
+    // or you could manually set camera.scrollY if needed initially.
+    // camera.scrollY = 0; // Start at the top
+  }
+
+  // Handle game resize event
+  handleResize(gameSize: Phaser.Structs.Size) {
+    // Optional: Ensure the camera viewport itself resizes if necessary
+    // this.cameras.main.setSize(gameSize.width, gameSize.height);
+
+    this.adjustCamera();
+
+    // Re-apply bounds (usually not strictly necessary if map size doesn't change, but safe)
+    // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+  }
+
   update(time: number, delta: number) {
-    this.fpsText.setText(`FPS: ${this.sys.game.loop.actualFps.toFixed(2)}`);
+    this.fpsText.setText(`FPS: ${this.sys.game.loop.actualFps.toFixed()}`);
 
     this.controls.update(delta);
 
