@@ -1,39 +1,40 @@
 import { Bullet } from "./Bullet";
 import { Cannon } from "./Cannon";
-import { PIXELS_PER_METER } from "./constants";
-import { createEnemyContainer } from "./enemies";
-import { ENEMY_HEIGHT_METERS } from "./Enemy";
+import {
+  BULLET_SPRITE,
+  CANNON_SPRITE,
+  ENEMY_SPRITE,
+  PIXELS_PER_METER,
+  SHADOW_SPRITE,
+} from "./constants";
+import { createEnemyContainer, ENEMY_HEIGHT_METERS } from "./Enemy";
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
+const TOWN_SPRITE = "kenney-tiny-town";
+const DUNGEON_SPRITE = "kenney-tiny-dungeon";
+const TILE_MAP = "map";
 
 export class World extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
-  enemies!: Phaser.GameObjects.Container; // Change to Container
-  cannon!: Cannon;
-  bullets: Bullet[] = [];
-  enemiesGroup!: Phaser.Physics.Arcade.Group; // New enemy physics group
-  bulletGroup!: Phaser.Physics.Arcade.Group; // New bullet physics group
+  map!: Phaser.Tilemaps.Tilemap;
+  fpsText!: Phaser.GameObjects.Text;
 
   getGroundHeight(x: number, y: number): number {
-    return 0; // Assume flat ground at Z = 0
+    const buildingTile = this.map.getTileAtWorldXY(x, y, false, undefined, 1);
+    return buildingTile ? 20 : 0;
   }
 
   preload() {
-    // Load the tilemap
-    this.load.tilemapTiledJSON("map", "assets/map.json");
-
-    // Load the tilesets
+    this.load.tilemapTiledJSON(TILE_MAP, "assets/map.json");
+    this.load.image(TOWN_SPRITE, "assets/kenney_tiny-town/Tilemap/tilemap.png");
     this.load.image(
-      "kenney-tiny-town",
-      "assets/kenney_tiny-town/Tilemap/tilemap.png"
-    );
-    this.load.image(
-      "kenney-tiny-dungeon",
+      DUNGEON_SPRITE,
       "assets/kenney_tiny-dungeon/Tilemap/tilemap.png"
     );
-
-    // Add enemy sprite loading
-    this.load.image("enemy", "assets/kenney_tiny-dungeon/Tiles/tile_0100.png");
+    this.load.image(
+      ENEMY_SPRITE,
+      "assets/kenney_tiny-dungeon/Tiles/tile_0100.png"
+    );
 
     const createTexture = (
       key: string,
@@ -52,32 +53,42 @@ export class World extends Phaser.Scene {
       graphics.destroy();
     };
 
-    createTexture("cannon", 0xaaaaaa, 30, "rect");
-    createTexture("bullet", 0xff0000, 10, "circle");
-    createTexture("shadow", 0x000000, 10, "circle");
+    createTexture(CANNON_SPRITE, 0xaaaaaa, 30, "rect");
+    createTexture(BULLET_SPRITE, 0xff0000, 10, "circle");
+    createTexture(SHADOW_SPRITE, 0x000000, 10, "circle");
   }
 
   create() {
+    this.fpsText = this.add
+      .text(10, 10, "FPS: --", {
+        font: "16px Courier",
+        color: "#ffffff",
+      })
+      .setDepth(100000)
+      .setScrollFactor(0); // Ensure text is on top
+
     // Create the tilemap
-    const map = this.make.tilemap({ key: "map" });
-    const townTileset = map.addTilesetImage(
-      "kenney-tiny-town",
-      "kenney-tiny-town"
-    );
-    const dungeonTileset = map.addTilesetImage(
-      "kenney-tiny-dungeon",
-      "kenney-tiny-dungeon"
+    this.map = this.make.tilemap({ key: TILE_MAP });
+    const townTileset = this.map.addTilesetImage(TOWN_SPRITE, TOWN_SPRITE);
+    const dungeonTileset = this.map.addTilesetImage(
+      DUNGEON_SPRITE,
+      DUNGEON_SPRITE
     );
 
     if (!townTileset || !dungeonTileset) throw new Error("Missing asset");
 
-    map.createLayer(0, [townTileset, dungeonTileset], 0, 0); // terrain
-    map.createLayer(1, [townTileset, dungeonTileset], 0, 0); // buildings
-    map.createLayer(2, [townTileset, dungeonTileset], 0, 0); // trees
-    map.createLayer(3, [townTileset, dungeonTileset], 0, 0); // objects
+    this.map.createLayer(0, [townTileset, dungeonTileset], 0, 0); // terrain
+    this.map.createLayer(1, [townTileset, dungeonTileset], 0, 0); // buildings
+    this.map.createLayer(2, [townTileset, dungeonTileset], 0, 0); // trees
+    this.map.createLayer(3, [townTileset, dungeonTileset], 0, 0); // objects
 
     // Set camera bounds to map dimensions
-    this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.map.widthInPixels,
+      this.map.heightInPixels
+    );
     this.cameras.main.setZoom(1);
     this.cameras.main.centerToBounds();
 
@@ -102,24 +113,23 @@ export class World extends Phaser.Scene {
       minZoom: 0.8,
     });
 
-    this.enemies = createEnemyContainer(this, 200, -50, map.height);
-    this.enemiesGroup = this.physics.add.group(this.enemies.list);
+    const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
     const { width, height } = this.scale;
-    this.cannon = new Cannon(this, width / 2, height - 50);
-    this.bulletGroup = this.physics.add.group();
+    const cannon = new Cannon(this, width / 2, height - 50);
+    const bulletGroup = this.physics.add.group();
+    const enemyGroup = this.physics.add.group(enemies.list);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      const bullet = this.cannon.shoot(pointer.worldX, pointer.worldY);
-      this.bulletGroup.add(bullet);
-      this.bullets.push(bullet);
+      const bullet = cannon.shoot(pointer.worldX, pointer.worldY);
+      bulletGroup.add(bullet);
     });
 
     this.physics.add.overlap(
-      this.bulletGroup,
-      this.enemiesGroup,
+      bulletGroup,
+      enemyGroup,
       (bullet, enemy) => {
         // Check if the bullet is within the Z-range of the enemy
         // Bullet too high to hit
@@ -135,14 +145,11 @@ export class World extends Phaser.Scene {
       undefined,
       this
     );
-
-    // Add instruction text
-    this.add
-      .text(10, 10, "Click to shoot!", { fontSize: "16px", color: "#ffffff" })
-      .setDepth(100000); // Ensure text is on top
   }
 
   update(time: number, delta: number) {
+    this.fpsText.setText(`FPS: ${this.sys.game.loop.actualFps.toFixed(2)}`);
+
     this.controls.update(delta);
 
     // Get mouse position relative to the game canvas
@@ -163,15 +170,6 @@ export class World extends Phaser.Scene {
       cam.scrollY -= SCROLL_SPEED;
     } else if (mouseY > this.game.canvas.height - SCROLL_BOUNDARY) {
       cam.scrollY += SCROLL_SPEED;
-    }
-
-    // Update bullets and remove dead ones
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.bullets[i];
-      if (!bullet.update(time, delta)) {
-        bullet.destroy();
-        this.bullets.splice(i, 1); // Remove from array
-      }
     }
   }
 }

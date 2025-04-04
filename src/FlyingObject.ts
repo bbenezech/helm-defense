@@ -1,14 +1,17 @@
 import * as Phaser from "phaser";
 import {
-  GRAVITY,
   BOUNCE_FACTOR,
-  GROUND_FRICTION,
   TILT_FACTOR,
   PIXELS_PER_METER,
+  SHADOW_SPRITE,
 } from "./constants";
 import { World } from "./World";
 
-export class FlyingObject extends Phaser.GameObjects.Image {
+const GRAVITY = 9.81;
+const GROUND_FRICTION = 0.4; // Multiplier for horizontal velocity on bounce (1 = no friction)
+const AIR_RESISTANCE = 0.999; // Multiplier for horizontal velocity in air (1 = no friction)
+
+export class FlyingObject extends Phaser.GameObjects.Sprite {
   public shadowSprite: Phaser.GameObjects.Image;
   public world: World;
   public worldX: number;
@@ -37,7 +40,7 @@ export class FlyingObject extends Phaser.GameObjects.Image {
     this.vx = vx;
     this.vy = vy;
     this.vz = vz;
-    this.shadowSprite = scene.add.sprite(x, y, "shadow").setAlpha(0.5); // Initial alpha
+    this.shadowSprite = scene.add.sprite(x, y, SHADOW_SPRITE).setAlpha(0.5); // Initial alpha
     this.updateVisuals();
   }
 
@@ -45,11 +48,15 @@ export class FlyingObject extends Phaser.GameObjects.Image {
     return this.worldZ - this.world.getGroundHeight(this.worldX, this.worldY);
   }
 
-  update(time: number, delta: number): boolean {
+  preUpdate(time: number, delta: number) {
+    super.preUpdate(time, delta);
+
     const deltaSecs = delta / 1000; // Convert ms to seconds for physics
 
     // Apply gravity
     this.vz -= GRAVITY * PIXELS_PER_METER * deltaSecs;
+    this.vx *= AIR_RESISTANCE; // Apply air resistance to horizontal velocity
+    this.vy *= AIR_RESISTANCE; // Apply air resistance to vertical velocity
 
     // Update world position based on velocity
     this.worldX += this.vx * deltaSecs;
@@ -60,7 +67,10 @@ export class FlyingObject extends Phaser.GameObjects.Image {
       Math.sqrt(this.vx * this.vx + this.vy * this.vy) / PIXELS_PER_METER;
     const groundZ = this.world.getGroundHeight(this.worldX, this.worldY);
     // Stop if slow and at ground
-    if (speedInMetersPerSecond < 10 && this.worldZ <= groundZ) return false;
+    if (speedInMetersPerSecond < 10 && this.worldZ <= groundZ) {
+      this.destroy();
+      return;
+    }
 
     if (this.worldZ <= groundZ && this.vz < 0) {
       // Moving down and at/below ground
@@ -76,8 +86,6 @@ export class FlyingObject extends Phaser.GameObjects.Image {
     }
 
     this.updateVisuals();
-
-    return true;
   }
 
   updateVisuals(): void {

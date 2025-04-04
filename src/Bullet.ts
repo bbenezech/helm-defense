@@ -1,5 +1,6 @@
 import { World } from "./World";
 import { FlyingObject } from "./FlyingObject";
+import { BULLET_SPRITE } from "./constants";
 
 export class Bullet extends FlyingObject {
   constructor(
@@ -11,12 +12,8 @@ export class Bullet extends FlyingObject {
     vy: number,
     vz: number // Initial velocity
   ) {
-    super(scene, x, y, z, vx, vy, vz, "bullet");
+    super(scene, x, y, z, vx, vy, vz, BULLET_SPRITE);
     scene.add.existing(this);
-  }
-
-  update(time: number, delta: number): boolean {
-    return super.update(time, delta);
   }
 
   destroy(): void {

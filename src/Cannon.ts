@@ -1,15 +1,16 @@
 import { Bullet } from "./Bullet";
-import { PIXELS_PER_METER } from "./constants";
+import { CANNON_SPRITE, PIXELS_PER_METER } from "./constants";
 import { World } from "./World";
 
-const INITIAL_SPEED_M_PER_S = 30; // Initial speed of the bullet in m/s
+const INITIAL_SPEED_M_PER_S = 35; // Initial speed of the bullet in m/s
 const CANNON_ELEVATION_ANGLE = Phaser.Math.DegToRad(20); // Angle above horizontal plane
+const MUZZLE_HEIGHT_METERS = 0.5; // Height of the cannon muzzle above ground in meters
 
 export class Cannon extends Phaser.Physics.Arcade.Image {
-  public world: World;
+  world: World;
 
   constructor(world: World, x: number, y: number) {
-    super(world, x, y, "cannon");
+    super(world, x, y, CANNON_SPRITE);
     this.world = world;
     world.add.existing(this);
     this.setOrigin(0.5, 1); // Origin at bottom center
@@ -40,15 +41,14 @@ export class Cannon extends Phaser.Physics.Arcade.Image {
       Math.sin(CANNON_ELEVATION_ANGLE); // Vertical component
 
     // Create the bullet instance (assuming cannon shoots from slightly above ground z=0)
-    const cannonMuzzleHeight = 5; // Small Z offset
     const bullet = new Bullet(
       this.world,
       this.x,
       this.y,
-      cannonMuzzleHeight, // Start position
+      MUZZLE_HEIGHT_METERS * PIXELS_PER_METER, // Start position
       initialVX,
       initialVY,
-      initialVZ // Initial velocity
+      initialVZ
     );
     return bullet;
   }

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { World } from "./World";
 
 new Phaser.Game({
-  type: Phaser.CANVAS,
+  type: Phaser.WEBGL,
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#2d2d2d",
