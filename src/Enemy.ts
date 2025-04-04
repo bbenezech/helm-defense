@@ -1,5 +1,5 @@
 import { ENEMY_SPRITE } from "./constants";
-import { World } from "./World";
+import { GameScene } from "./GameScene";
 
 const ENEMY_CONFIG = {
   ROWS: 20,
@@ -9,7 +9,7 @@ const ENEMY_CONFIG = {
 };
 
 export function createEnemyContainer(
-  scene: World,
+  scene: GameScene,
   x: number,
   y: number,
   height: number
@@ -39,7 +39,7 @@ export function createEnemyContainer(
 
 export const ENEMY_HEIGHT_METERS = 1.5;
 export class Enemy extends Phaser.GameObjects.Sprite {
-  constructor(scene: World, x: number, y: number) {
+  constructor(scene: GameScene, x: number, y: number) {
     super(scene, x, y, ENEMY_SPRITE);
     scene.add.existing(this);
   }

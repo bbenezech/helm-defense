@@ -1,10 +1,10 @@
-import { World } from "./World";
+import { GameScene } from "./GameScene";
 import { FlyingObject } from "./FlyingObject";
 import { BULLET_SPRITE } from "./constants";
 
 export class Bullet extends FlyingObject {
   constructor(
-    scene: World,
+    scene: GameScene,
     x: number,
     y: number,
     z: number, // Initial world position

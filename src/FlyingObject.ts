@@ -5,7 +5,7 @@ import {
   PIXELS_PER_METER,
   SHADOW_SPRITE,
 } from "./constants";
-import { World } from "./World";
+import { GameScene } from "./GameScene";
 
 const GRAVITY = 9.81;
 const GROUND_FRICTION = 0.4; // Multiplier for horizontal velocity on bounce (1 = no friction)
@@ -13,7 +13,7 @@ const AIR_RESISTANCE = 0.999; // Multiplier for horizontal velocity in air (1 = 
 
 export class FlyingObject extends Phaser.GameObjects.Sprite {
   public shadowSprite: Phaser.GameObjects.Image;
-  public world: World;
+  public world: GameScene;
   public worldX: number;
   public worldY: number;
   public worldZ: number; // Height above ground
@@ -22,7 +22,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
   public vz: number; // Velocity in world Z (vertical)
 
   constructor(
-    scene: World,
+    scene: GameScene,
     x: number,
     y: number,
     z: number, // Initial world position

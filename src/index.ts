@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { World } from "./World";
+import { GameScene } from "./GameScene";
+import { UIScene } from "./UIScene";
 
 new Phaser.Game({
   type: Phaser.WEBGL,
@@ -9,7 +10,7 @@ new Phaser.Game({
   parent: "phaser",
   pixelArt: true,
   antialias: false,
-  scene: World,
+  scene: [GameScene, UIScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
   },

@@ -8,6 +8,7 @@ import {
   SHADOW_SPRITE,
 } from "./constants";
 import { createEnemyContainer, ENEMY_HEIGHT_METERS } from "./Enemy";
+
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "kenney-tiny-town";
@@ -18,10 +19,16 @@ const TILE_MAP = "map";
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
 
-export class World extends Phaser.Scene {
+export class GameScene extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
-  fpsText!: Phaser.GameObjects.Text;
+  score: number;
+
+  constructor() {
+    super({ key: "GameScene" });
+
+    this.score = 0;
+  }
 
   getGroundHeight(x: number, y: number): number {
     const buildingTile = this.map.getTileAtWorldXY(x, y, false, undefined, 1);
@@ -69,21 +76,13 @@ export class World extends Phaser.Scene {
     const worldX = this.map.tileToWorldX(tileX);
     const worldY = this.map.tileToWorldY(tileY);
 
-    if (worldX === null || worldY === null) {
+    if (worldX === null || worldY === null)
       throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
-    }
+
     return [worldX, worldY] as const;
   }
 
   create() {
-    this.fpsText = this.add
-      .text(2, 2, "FPS: --", {
-        font: "16px Courier",
-        color: "#ffffff",
-      })
-      .setDepth(100000)
-      .setScrollFactor(0); // Ensure text is on top
-
     // Create the tilemap
     this.map = this.make.tilemap({ key: TILE_MAP });
     const townTileset = this.map.addTilesetImage(TOWN_SPRITE, TOWN_SPRITE);
@@ -101,16 +100,18 @@ export class World extends Phaser.Scene {
     const mapWidthPixels = this.map.widthInPixels;
     const mapHeightPixels = this.map.heightInPixels;
     const camera = this.cameras.main;
-    this.adjustCamera();
+    this.adjustMainCamera();
     // Set camera bounds to map dimensions
     camera.setBounds(0, 0, mapWidthPixels, mapHeightPixels);
     camera.setRoundPixels(true);
 
-    // --- 6. Listen for Resize Events ---
     this.scale.on("resize", this.handleResize, this);
     this.events.on("shutdown", () => {
       this.scale.off("resize", this.handleResize, this);
     });
+
+    // This starts the UIScene running concurrently and renders it on top
+    this.scene.launch("UIScene");
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -159,6 +160,8 @@ export class World extends Phaser.Scene {
         )
           return;
 
+        this.score += 1; // Increment score
+        this.game.events.emit("updateScore", this.score); // Emit event to update score
         // Handle hit
         enemy.destroy();
       },
@@ -167,7 +170,7 @@ export class World extends Phaser.Scene {
     );
   }
 
-  adjustCamera() {
+  adjustMainCamera() {
     const camera = this.cameras.main;
     const mapWidthPixels = this.map.widthInPixels;
 
@@ -194,15 +197,13 @@ export class World extends Phaser.Scene {
     // Optional: Ensure the camera viewport itself resizes if necessary
     // this.cameras.main.setSize(gameSize.width, gameSize.height);
 
-    this.adjustCamera();
+    this.adjustMainCamera();
 
     // Re-apply bounds (usually not strictly necessary if map size doesn't change, but safe)
     // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
   }
 
   update(time: number, delta: number) {
-    this.fpsText.setText(`FPS: ${this.sys.game.loop.actualFps.toFixed()}`);
-
     this.controls.update(delta);
 
     // Get mouse position relative to the game canvas
