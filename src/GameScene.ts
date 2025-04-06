@@ -6,6 +6,7 @@ import {
   ENEMY_SPRITE,
   SHADOW_SPRITE,
   TILE_HEIGHT_PX,
+  TILT_FACTOR,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 
@@ -31,13 +32,19 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
   }
 
-  getWorldZ(x: number, y: number): number {
+  getGroundZ(x: number, y: number): number {
     const buildingTile = this.map.getTileAtWorldXY(x, y, false, undefined, 1);
     return buildingTile ? 2 * TILE_HEIGHT_PX : 0; // top of building is 2 tiles high
   }
 
-  getWorldY(x: number, y: number) {
-    return this.getWorldZ(x, y) + y;
+  // get the real 2d y coordinate of a position, higher Z are actually lower than they look on screen
+  getUntiltedY(x: number, y: number) {
+    return y + this.getGroundZ(x, y) * TILT_FACTOR;
+  }
+
+  // get the y position of a 3d coordinate, higher Z moves up screen visually
+  getTiltedY(x: number, y: number, z: number) {
+    return y - z * TILT_FACTOR;
   }
 
   preload() {

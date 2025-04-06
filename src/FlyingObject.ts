@@ -1,9 +1,5 @@
 import * as Phaser from "phaser";
-import {
-  PIXELS_PER_METER,
-  SHADOW_SPRITE,
-  SMALL_WORLD_FACTOR,
-} from "./constants";
+import { PIXELS_PER_METER, SHADOW_SPRITE } from "./constants";
 import { GameScene } from "./GameScene";
 
 const GRAVITY = 9.81 * PIXELS_PER_METER;
@@ -42,8 +38,8 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
     scene.add.existing(this);
     this.world = scene;
     this.worldX = x;
-    this.worldY = scene.getWorldY(x, y);
-    this.worldZ = z + scene.getWorldZ(x, y); // Adjust Z to ground height
+    this.worldY = y;
+    this.worldZ = z;
     this.vx = vx;
     this.vy = vy;
     this.vz = vz;
@@ -61,7 +57,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
   }
 
   elevation(): number {
-    return this.worldZ - this.world.getWorldZ(this.worldX, this.worldY);
+    return this.worldZ - this.world.getGroundZ(this.worldX, this.worldY);
   }
 
   speed(): number {
@@ -78,7 +74,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
     let ay_drag = 0;
     let az_drag = 0;
     const speed = this.speed();
-    console.log({ speed });
+
     if (speed > 0.01) {
       // Avoid division by zero and apply drag only if moving
       // Drag force magnitude = k * speed^2 (simplified from |v|*v)
@@ -109,7 +105,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
     this.worldZ += this.vz * SECONDS;
 
     const speedInMetersPerSecond = speed / PIXELS_PER_METER;
-    const groundZ = this.world.getWorldZ(this.worldX, this.worldY);
+    const groundZ = this.world.getGroundZ(this.worldX, this.worldY);
     // Stop if slow and at ground
     if (speedInMetersPerSecond < 10 && this.worldZ <= groundZ) {
       this.destroy();
@@ -133,18 +129,27 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
   }
 
   updateVisuals(): void {
-    const groundZ = this.world.getWorldZ(this.worldX, this.worldY);
+    const groundZ = this.world.getGroundZ(this.worldX, this.worldY);
 
     // Calculate screen position based on world coords and Z-height offset
     const screenX = this.worldX;
-    const screenY = this.worldY - this.worldZ; // Higher Z moves it up screen
+    const screenY = this.world.getTiltedY(
+      this.worldX,
+      this.worldY,
+      this.worldZ
+    );
 
     // Apply position and scale to the main sprite
     this.setPosition(screenX, screenY).setScale(1 + this.worldZ * 0.005); // 1 when Z=0, scales up with Z
 
     // Update Shadow Position (Projected onto ground plane visually)
     // Shadow's Y also needs the tilt offset, but based on the ground's Z
-    const shadowScreenY = this.worldY - groundZ;
+    const shadowScreenY = this.world.getTiltedY(
+      this.worldX,
+      this.worldY,
+      groundZ
+    );
+
     // Update shadow visual properties based on bullet's height (worldZ)
     this.shadowSprite
       .setPosition(this.worldX, shadowScreenY)

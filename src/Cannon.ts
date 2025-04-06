@@ -3,6 +3,7 @@ import {
   CANNON_SPRITE,
   PIXELS_PER_METER,
   SMALL_WORLD_FACTOR,
+  TILT_FACTOR,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
@@ -26,9 +27,9 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   ) {
     const angleRad = Phaser.Math.Angle.Between(
       this.x,
-      this.gameScene.getWorldY(this.x, this.y),
+      this.gameScene.getUntiltedY(this.x, this.y),
       position.worldX,
-      this.gameScene.getWorldY(position.worldX, position.worldY)
+      this.gameScene.getUntiltedY(position.worldX, position.worldY)
     );
     const horizontalSpeed =
       INITIAL_SPEED_METERS_PER_SECOND *
@@ -47,8 +48,16 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   // Shoots towards a target X/Y point on the ground plane
   shoot(position: { worldX: number; worldY: number }): Bullet {
     const { x, y, z } = this.shootingVector(position, this.tempVelocityVector);
-
-    return new Bullet(this.gameScene, this.x, this.y, 0, x, y, z);
+    return new Bullet(
+      this.gameScene,
+      // send 3d coordinates of the cannon's center
+      this.x,
+      this.gameScene.getUntiltedY(this.x, this.y),
+      this.gameScene.getGroundZ(this.x, this.y),
+      x,
+      y,
+      z
+    );
   }
 
   preUpdate(time: number, delta: number) {
@@ -61,6 +70,9 @@ export class Cannon extends Phaser.GameObjects.Sprite {
       this.tempVelocityVector
     );
 
-    this.rotation += Math.atan2(y - z, x);
+    const realX = x;
+    const realY = this.gameScene.getTiltedY(x, y, z);
+
+    this.rotation += Math.atan2(realY, realX);
   }
 }
