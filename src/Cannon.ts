@@ -1,55 +1,66 @@
 import { Bullet } from "./Bullet";
-import { CANNON_SPRITE, PIXELS_PER_METER } from "./constants";
+import {
+  CANNON_SPRITE,
+  PIXELS_PER_METER,
+  SMALL_WORLD_FACTOR,
+} from "./constants";
 import { GameScene } from "./GameScene";
 
-const INITIAL_SPEED_M_PER_S = 35; // Initial speed of the bullet in m/s
-const CANNON_ELEVATION_ANGLE = Phaser.Math.DegToRad(20); // Angle above horizontal plane
-const MUZZLE_HEIGHT_METERS = 0.5; // Height of the cannon muzzle above ground in meters
+const CANNON_ELEVATION_ANGLE = Phaser.Math.DegToRad(15); // Angle above horizontal plane
+const INITIAL_SPEED_METERS_PER_SECOND = 440 / SMALL_WORLD_FACTOR;
 
-export class Cannon extends Phaser.Physics.Arcade.Image {
-  world: GameScene;
+export class Cannon extends Phaser.GameObjects.Sprite {
+  gameScene: GameScene;
+  private tempVelocityVector: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
 
-  constructor(world: GameScene, x: number, y: number) {
-    super(world, x, y, CANNON_SPRITE);
-    this.world = world;
-    world.add.existing(this);
-    this.setOrigin(0.5, 1); // Origin at bottom center
-    this.setDepth(y * 10); // Basic depth based on Y
+  constructor(gameScene: GameScene, x: number, y: number) {
+    super(gameScene, x, y, CANNON_SPRITE);
+    this.gameScene = gameScene;
+    gameScene.add.existing(this);
+    this.setDepth(10000); // todo just over bullets
+  }
+
+  shootingVector(
+    position: { worldX: number; worldY: number },
+    out: Phaser.Math.Vector3
+  ) {
+    const angleRad = Phaser.Math.Angle.Between(
+      this.x,
+      this.gameScene.getWorldY(this.x, this.y),
+      position.worldX,
+      this.gameScene.getWorldY(position.worldX, position.worldY)
+    );
+    const horizontalSpeed =
+      INITIAL_SPEED_METERS_PER_SECOND *
+      PIXELS_PER_METER *
+      Math.cos(CANNON_ELEVATION_ANGLE);
+    const vx = horizontalSpeed * Math.cos(angleRad); // X component of horizontal speed
+    const vy = horizontalSpeed * Math.sin(angleRad); // Y component of horizontal speed
+    const vz =
+      PIXELS_PER_METER *
+      INITIAL_SPEED_METERS_PER_SECOND *
+      Math.sin(CANNON_ELEVATION_ANGLE); // Vertical component
+
+    return out.set(vx, vy, vz);
   }
 
   // Shoots towards a target X/Y point on the ground plane
-  shoot(targetX: number, targetY: number): Bullet {
-    // Calculate horizontal angle from cannon to target
-    const angleRad = Phaser.Math.Angle.Between(
-      this.x,
-      this.y,
-      targetX,
-      targetY
+  shoot(position: { worldX: number; worldY: number }): Bullet {
+    const { x, y, z } = this.shootingVector(position, this.tempVelocityVector);
+
+    return new Bullet(this.gameScene, this.x, this.y, 0, x, y, z);
+  }
+
+  preUpdate(time: number, delta: number) {
+    super.preUpdate(time, delta);
+    this.rotation = Math.PI / 2;
+
+    // Rotate cannon towards mouse
+    const { x, y, z } = this.shootingVector(
+      this.gameScene.input.activePointer,
+      this.tempVelocityVector
     );
 
-    // Calculate initial velocity components based on total speed and elevation
-    const horizontalSpeed =
-      INITIAL_SPEED_M_PER_S *
-      PIXELS_PER_METER *
-      Math.cos(CANNON_ELEVATION_ANGLE);
-
-    const initialVX = horizontalSpeed * Math.cos(angleRad); // X component of horizontal speed
-    const initialVY = horizontalSpeed * Math.sin(angleRad); // Y component of horizontal speed
-    const initialVZ =
-      PIXELS_PER_METER *
-      INITIAL_SPEED_M_PER_S *
-      Math.sin(CANNON_ELEVATION_ANGLE); // Vertical component
-
-    // Create the bullet instance (assuming cannon shoots from slightly above ground z=0)
-    const bullet = new Bullet(
-      this.world,
-      this.x,
-      this.y,
-      MUZZLE_HEIGHT_METERS * PIXELS_PER_METER, // Start position
-      initialVX,
-      initialVY,
-      initialVZ
-    );
-    return bullet;
+    this.rotation += Math.atan2(y - z, x);
   }
 }

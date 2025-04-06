@@ -37,7 +37,6 @@ export function createEnemyContainer(
   return enemies;
 }
 
-export const ENEMY_HEIGHT_METERS = 1.5;
 export class Enemy extends Phaser.GameObjects.Sprite {
   constructor(scene: GameScene, x: number, y: number) {
     super(scene, x, y, ENEMY_SPRITE);

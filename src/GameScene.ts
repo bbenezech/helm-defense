@@ -4,10 +4,10 @@ import {
   BULLET_SPRITE,
   CANNON_SPRITE,
   ENEMY_SPRITE,
-  PIXELS_PER_METER,
   SHADOW_SPRITE,
+  TILE_HEIGHT_PX,
 } from "./constants";
-import { createEnemyContainer, ENEMY_HEIGHT_METERS } from "./Enemy";
+import { createEnemyContainer, Enemy } from "./Enemy";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -23,6 +23,7 @@ export class GameScene extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
   score: number;
+  cannon!: Cannon;
 
   constructor() {
     super({ key: "GameScene" });
@@ -30,9 +31,13 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
   }
 
-  getGroundHeight(x: number, y: number): number {
+  getWorldZ(x: number, y: number): number {
     const buildingTile = this.map.getTileAtWorldXY(x, y, false, undefined, 1);
-    return buildingTile ? 20 : 0;
+    return buildingTile ? 2 * TILE_HEIGHT_PX : 0; // top of building is 2 tiles high
+  }
+
+  getWorldY(x: number, y: number) {
+    return this.getWorldZ(x, y) + y;
   }
 
   preload() {
@@ -59,7 +64,14 @@ export class GameScene extends Phaser.Scene {
       const graphics = this.make.graphics({ x: 0, y: 0 }, false);
       graphics.fillStyle(color, 1);
       if (type === "rect") {
-        graphics.fillRect(0, 0, size, size * 1.5); // Cannon shape
+        // Center the rectangle within the texture area
+        const textureWidth = size;
+        const textureHeight = size * 1;
+        const rectWidth = size / 2;
+        const rectHeight = size;
+        const x = (textureWidth - rectWidth) / 2;
+        const y = (textureHeight - rectHeight) / 2;
+        graphics.fillRect(x, y, rectWidth, rectHeight); // Centered Cannon shape
       } else {
         graphics.fillCircle(size / 2, size / 2, size / 2);
       }
@@ -138,13 +150,13 @@ export class GameScene extends Phaser.Scene {
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
-    const cannon = new Cannon(this, ...this.tileToWorld(34, 75));
+    this.cannon = new Cannon(this, ...this.tileToWorld(34, 75));
     const bulletGroup = this.physics.add.group();
     const enemyGroup = this.physics.add.group(enemies.list);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      const bullet = cannon.shoot(pointer.worldX, pointer.worldY);
+      const bullet = this.cannon.shoot(pointer);
       bulletGroup.add(bullet);
     });
 
@@ -152,12 +164,7 @@ export class GameScene extends Phaser.Scene {
       bulletGroup,
       enemyGroup,
       (bullet, enemy) => {
-        // Check if the bullet is within the Z-range of the enemy
-        // Bullet too high to hit
-        if (
-          (bullet as Bullet).elevation() / PIXELS_PER_METER >
-          ENEMY_HEIGHT_METERS
-        )
+        if ((bullet as Bullet).elevation() > (enemy as Enemy).displayHeight)
           return;
 
         this.score += 1; // Increment score
@@ -205,6 +212,9 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.controls.update(delta);
+
+    // Update the cannon (handles its own rotation)
+    this.cannon.update();
 
     // Get mouse position relative to the game canvas
     const mouseX = this.input.x;
