@@ -6,7 +6,6 @@ import {
   ENEMY_SPRITE,
   SHADOW_SPRITE,
   TILE_HEIGHT_PX,
-  TILT_FACTOR,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 
@@ -15,6 +14,7 @@ const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "kenney-tiny-town";
 const DUNGEON_SPRITE = "kenney-tiny-dungeon";
 const TILE_MAP = "map";
+const TILT_FACTOR = 1;
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
@@ -23,26 +23,25 @@ const TILE_MAP = "map";
 export class GameScene extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
-  score: number;
   cannon!: Cannon;
+  score = 0;
 
   constructor() {
     super({ key: "GameScene" });
-
-    this.score = 0;
   }
 
+  // get z elevation at 2d coordinates through tiles
   getGroundZ(x: number, y: number): number {
     const buildingTile = this.map.getTileAtWorldXY(x, y, false, undefined, 1);
     return buildingTile ? 2 * TILE_HEIGHT_PX : 0; // top of building is 2 tiles high
   }
 
-  // get the real 2d y coordinate of a position, higher Z are actually lower than they look on screen
+  // get the 3d y coordinate of a 2d position
   getUntiltedY(x: number, y: number) {
     return y + this.getGroundZ(x, y) * TILT_FACTOR;
   }
 
-  // get the y position of a 3d coordinate, higher Z moves up screen visually
+  // get the 2d y of a 3d coordinate
   getTiltedY(x: number, y: number, z: number) {
     return y - z * TILT_FACTOR;
   }
@@ -164,7 +163,7 @@ export class GameScene extends Phaser.Scene {
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       const bullet = this.cannon.shoot(pointer);
-      bulletGroup.add(bullet);
+      if (bullet) bulletGroup.add(bullet);
     });
 
     this.physics.add.overlap(
