@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { PIXELS_PER_METER, SHADOW_SPRITE } from "./constants";
+import { BULLET_SHADOW_SPRITE, PIXELS_PER_METER } from "./constants";
 import { GameScene } from "./GameScene";
 
 const GRAVITY = 9.81 * PIXELS_PER_METER;
@@ -52,7 +52,9 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
         BULLET_RADIUS_METERS) /
       PIXELS_PER_METER;
 
-    this.shadowSprite = scene.add.sprite(x, y, SHADOW_SPRITE).setAlpha(0.5); // Initial alpha
+    this.shadowSprite = scene.add
+      .sprite(x, y, BULLET_SHADOW_SPRITE)
+      .setAlpha(0.5); // Initial alpha
     this.updateVisuals();
   }
 
@@ -140,7 +142,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
     );
 
     // Apply position and scale to the main sprite
-    this.setPosition(screenX, screenY).setScale(1 + this.worldZ * 0.005); // 1 when Z=0, scales up with Z
+    this.setPosition(screenX, screenY).setScale(1 + this.worldZ * 0.004); // 1 when Z=0, scales up with Z
 
     // Update Shadow Position (Projected onto ground plane visually)
     // Shadow's Y also needs the tilt offset, but based on the ground's Z
@@ -158,7 +160,7 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
 
     // Depth sorting (simple version based on screenY)
     // Multiply by a factor to spread out depth values
-    this.setDepth(Math.round(screenY));
+    this.setDepth(Math.round(screenY) * 100000);
     // Ensure shadow is directly below the sprite it belongs to visually
     this.shadowSprite.setDepth(Math.round(screenY) - 1);
   }

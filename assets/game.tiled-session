@@ -3,17 +3,22 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "map.json",
+    "activeFile": "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx",
     "expandedProjectPaths": [
         "kenney_tiny-dungeon/Tiled",
-        "kenney_tiny-dungeon",
+        ".",
         "kenney_tiny-town",
-        "."
+        "kenney_tiny-dungeon"
     ],
     "file.lastUsedOpenFilter": "Tous les Fichiers (*)",
     "fileStates": {
         "": {
             "scaleInDock": 1
+        },
+        "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
         },
         "kenney_tiny-dungeon/Tiled/sampleMap.tmx": {
             "scale": 0.87578125,
@@ -37,10 +42,10 @@
         },
         "map.json": {
             "scale": 1.2958,
-            "selectedLayer": 0,
+            "selectedLayer": 3,
             "viewCenter": {
-                "x": 542.9078561506406,
-                "y": 633.5854298502855
+                "x": 518.984411174564,
+                "y": 1105.1088130884395
             }
         },
         "map.json#kenney-tiny-dungeon": {
@@ -58,12 +63,14 @@
     "map.tileWidth": 16,
     "map.width": 100,
     "openFiles": [
-        "map.json"
+        "map.json",
+        "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx"
     ],
     "project": "game.tiled-project",
     "property.type": "int",
     "recentFiles": [
         "map.json",
+        "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx",
         "kenney_tiny-town/kenney-tiny-town.tsx",
         "kenney_tiny-dungeon/Tiled/sampleSheet.tsx",
         "kenney_tiny-dungeon/Tiled/sampleMap.tmx",
