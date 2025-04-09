@@ -8,9 +8,7 @@ const BOUNCE_FACTOR = 0.5; // Multiplier for vertical velocity on bounce (0 = no
 // canon de 12 livres
 const BULLET_MASS_KG = 6;
 const BULLET_RADIUS_METERS = 0.06;
-const CANNON_LENGTH_METERS = 2.43;
 const C_d = 0.5;
-const A = Math.PI * BULLET_RADIUS_METERS * BULLET_RADIUS_METERS; // Cross Sectional Area
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
 
 export class FlyingObject extends Phaser.GameObjects.Sprite {
@@ -106,10 +104,9 @@ export class FlyingObject extends Phaser.GameObjects.Sprite {
     this.worldY += this.vy * SECONDS;
     this.worldZ += this.vz * SECONDS;
 
-    const speedInMetersPerSecond = speed / PIXELS_PER_METER;
     const groundZ = this.world.getGroundZ(this.worldX, this.worldY);
     // Stop if slow and at ground
-    if (speedInMetersPerSecond < 10 && this.worldZ <= groundZ) {
+    if (speed < 10 && this.worldZ <= groundZ) {
       this.destroy();
       return;
     }

@@ -20,12 +20,13 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   private muzzleVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private recoilTween: Phaser.Tweens.TweenChain | null = null;
   shadowSprite: Phaser.GameObjects.Image;
-  elevation = Phaser.Math.DegToRad(15); // Muzzle elevation in radians
+  elevation = Phaser.Math.DegToRad(25); // Muzzle elevation in radians
   initialX: number;
   initialY: number;
   cannonLength: number;
   cannonDiameter: number;
   barrelLength: number;
+  emitter: Phaser.GameObjects.Particles.ParticleEmitter;
 
   constructor(gameScene: GameScene, x: number, y: number) {
     super(gameScene, x, y, CANNON_SPRITE);
@@ -49,6 +50,26 @@ export class Cannon extends Phaser.GameObjects.Sprite {
 
     this.setDepth(this.y);
     this.shadowSprite.setDepth(this.y - 1);
+
+    const graphics = this.gameScene.make.graphics();
+    graphics.fillStyle(0xffff00, 1); // White color, full alpha
+    graphics.fillRect(0, 0, 3, 3); // Draw a small 4x4 square
+    graphics.generateTexture("particle", 3, 3);
+    graphics.destroy();
+
+    this.emitter = this.gameScene.add.particles(this.x, this.y, "particle", {
+      speed: {
+        min: INITIAL_SPEED_METERS_PER_SECOND * PIXELS_PER_METER * 0.5,
+        max: INITIAL_SPEED_METERS_PER_SECOND * PIXELS_PER_METER * 1.5,
+      }, // Pixels per second
+      lifespan: { min: 800, max: 2000 }, // Milliseconds (adjust for desired fade distance)
+      scale: { start: 1, end: 0.5 }, // Shrink to nothing
+      alpha: { start: 0.8, end: 0.3 }, // Fade out
+      blendMode: "ADD", // 'ADD' blend mode often looks good
+      angle: { min: -7, max: 7 },
+      frequency: -1,
+      quantity: 70,
+    });
   }
 
   // Calculates the 3D muzzle velocity vector based on a target direction
@@ -81,7 +102,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   }
 
   // Calculates the muzzle offset and spawn position based on current cannon state
-  private calculateMuzzleSpawnPosition() {
+  calculateMuzzleSpawnPosition() {
     const cosElev = Math.cos(this.elevation);
     const sinElev = Math.sin(this.elevation);
     const cosAzim = Math.cos(this.shadowSprite.rotation); // Azimuth based on shadow
@@ -91,19 +112,19 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     const muzzleOffsetY = this.barrelLength * cosElev * sinAzim;
     const muzzleOffsetZ = this.barrelLength * sinElev;
 
-    const spawnX = this.initialX + muzzleOffsetX;
-    const spawnY =
+    const x = this.initialX + muzzleOffsetX;
+    const y =
       this.gameScene.getUntiltedY(this.initialX, this.initialY) + muzzleOffsetY;
-    const spawnZ =
+    const z =
       this.gameScene.getGroundZ(this.initialX, this.initialY) + muzzleOffsetZ;
 
     return {
       muzzleOffsetX,
       muzzleOffsetY,
       muzzleOffsetZ,
-      spawnX,
-      spawnY,
-      spawnZ,
+      x,
+      y,
+      z,
     };
   }
 
@@ -153,7 +174,21 @@ export class Cannon extends Phaser.GameObjects.Sprite {
       });
     }
 
-    const { spawnX, spawnY, spawnZ } = this.calculateMuzzleSpawnPosition();
+    const {
+      x: spawnX,
+      y: spawnY,
+      z: spawnZ,
+    } = this.calculateMuzzleSpawnPosition();
+    const screenX = spawnX;
+    const screenY = this.gameScene.getTiltedY(spawnX, spawnY, spawnZ);
+    const gravityX = 0;
+    const gravityY = 9.8 * PIXELS_PER_METER * Math.cos(this.rotation);
+    this.emitter
+      .setParticleGravity(gravityX, gravityY)
+      .setPosition(screenX, screenY)
+      .setRotation(this.rotation)
+      .explode();
+    this.gameScene.cameras.main.shake(50, 0.002);
 
     return new Bullet(
       this.gameScene,
@@ -190,7 +225,11 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.shadowSprite.rotation = Math.atan2(targetVelocityY, targetVelocityX);
 
     // Calculate spawn position for visual scaling
-    const { spawnX, spawnY, spawnZ } = this.calculateMuzzleSpawnPosition();
+    const {
+      x: spawnX,
+      y: spawnY,
+      z: spawnZ,
+    } = this.calculateMuzzleSpawnPosition();
 
     const tiltedSpawnX = spawnX;
     const tiltedSpawnY = this.gameScene.getTiltedY(spawnX, spawnY, spawnZ);
