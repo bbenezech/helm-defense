@@ -6,3 +6,5 @@ export const CANNON_SPRITE = "cannon"; // Cannon sprite key
 export const BULLET_SPRITE = "bullet"; // Bullet sprite key
 export const CANNON_SHADOW_SPRITE = "cannon-shadow";
 export const BULLET_SHADOW_SPRITE = "bullet-shadow";
+export const EXPLOSION_SOUND = "explosion-sound";
+export const PARTICLE_SPRITE = "particle";

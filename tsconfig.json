@@ -9,8 +9,8 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "outDir": "dist",
-    "resolveJsonModule": true, // Allows importing JSON if needed later
-    "lib": ["es6", "dom"] // Add DOM library
+    "resolveJsonModule": true,
+    "lib": ["es6", "dom"]
   },
   "include": ["src/**/*"]
 }
