@@ -1,11 +1,12 @@
 import { Bullet } from "./Bullet";
 import {
-  CANNON_SPRITE,
+  PIXEL_CANNON_SPRITE,
   PIXELS_PER_METER,
   SMALL_WORLD_FACTOR,
   CANNON_SHADOW_SPRITE,
   EXPLOSION_SOUND,
   PARTICLE_SPRITE,
+  CANNON_SPRITE,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
@@ -14,6 +15,7 @@ const RECOIL_DURATION_MS = 50;
 const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
+const HEIGHT_ABOVE_GROUND = 1 * PIXELS_PER_METER;
 
 const INITIAL_SPEED_METERS_PER_SECOND = 440 / SMALL_WORLD_FACTOR;
 
@@ -21,20 +23,28 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   gameScene: GameScene;
   muzzleVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   recoilTween: Phaser.Tweens.TweenChain | null = null;
+  shadowRecoilTween: Phaser.Tweens.TweenChain | null = null;
   shadowSprite: Phaser.GameObjects.Image;
   muzzleParticleEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
-  elevation = Phaser.Math.DegToRad(25); // Muzzle elevation in radians
+  elevation = Phaser.Math.DegToRad(20); // Muzzle elevation in radians
   initialX: number;
   initialY: number;
+  initialYWithElevation: number;
   cannonLength: number;
   cannonDiameter: number;
   barrelLength: number;
 
   constructor(gameScene: GameScene, x: number, y: number) {
-    super(gameScene, x, y, CANNON_SPRITE);
+    const initialYWithElevation = gameScene.getTiltedY(
+      x,
+      y,
+      HEIGHT_ABOVE_GROUND
+    );
+    super(gameScene, x, initialYWithElevation, CANNON_SPRITE);
     this.gameScene = gameScene;
     this.initialX = x;
     this.initialY = y;
+    this.initialYWithElevation = initialYWithElevation;
     const originX = this.displayHeight / (2 * this.displayWidth);
     const originY = 0.5;
     this.setOrigin(originX, originY);
@@ -113,9 +123,11 @@ export class Cannon extends Phaser.GameObjects.Sprite {
 
     const x = this.initialX + muzzleOffsetX;
     const y =
-      this.gameScene.getUntiltedY(this.initialX, this.initialY) + muzzleOffsetY;
+      this.gameScene.getUntiltedY(this.initialX, this.initialYWithElevation) +
+      muzzleOffsetY;
     const z =
-      this.gameScene.getGroundZ(this.initialX, this.initialY) + muzzleOffsetZ;
+      this.gameScene.getGroundZ(this.initialX, this.initialYWithElevation) +
+      muzzleOffsetZ;
 
     return {
       muzzleOffsetX,
@@ -141,17 +153,15 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     const recoilAngle = muzzleAngle + Math.PI;
 
     const recoilDistance = this.cannonLength * RECOIL_FACTOR;
-    const recoilX = this.initialX + recoilDistance * Math.cos(recoilAngle);
-    const recoilY = this.initialY + recoilDistance * Math.sin(recoilAngle);
 
     if (DO_RECOIL) {
-      this.recoilTween = this.gameScene.tweens.chain({
-        targets: [this, this.shadowSprite],
+      this.shadowRecoilTween = this.gameScene.tweens.chain({
+        targets: this.shadowSprite,
         tweens: [
           {
             delay: PRE_RECOIL_DURATION_MS,
-            x: recoilX,
-            y: recoilY,
+            x: this.initialX + recoilDistance * Math.cos(recoilAngle),
+            y: this.initialY + recoilDistance * Math.sin(recoilAngle),
             duration: RECOIL_DURATION_MS,
             ease: "Sine.easeOut",
           },
@@ -163,12 +173,39 @@ export class Cannon extends Phaser.GameObjects.Sprite {
           },
         ],
         onComplete: () => {
+          this.shadowRecoilTween = null;
+        },
+        onStop: () => {
+          this.shadowRecoilTween = null;
+          this.shadowSprite.setPosition(this.initialX, this.initialY);
+        },
+      });
+
+      this.recoilTween = this.gameScene.tweens.chain({
+        targets: this,
+        tweens: [
+          {
+            delay: PRE_RECOIL_DURATION_MS,
+            x: this.initialX + recoilDistance * Math.cos(recoilAngle),
+            y:
+              this.initialYWithElevation +
+              recoilDistance * Math.sin(recoilAngle),
+            duration: RECOIL_DURATION_MS,
+            ease: "Sine.easeOut",
+          },
+          {
+            x: this.initialX,
+            y: this.initialYWithElevation,
+            duration: RECOIL_RETURN_DURATION_MS,
+            ease: "Sine.easeIn",
+          },
+        ],
+        onComplete: () => {
           this.recoilTween = null;
         },
         onStop: () => {
           this.recoilTween = null;
-          this.setPosition(this.initialX, this.initialY);
-          this.shadowSprite.setPosition(this.initialX, this.initialY);
+          this.setPosition(this.initialX, this.initialYWithElevation);
         },
       });
     }
@@ -235,7 +272,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     const tiltedSpawnY = this.gameScene.getTiltedY(spawnX, spawnY, spawnZ);
 
     const originToMuzzleX = tiltedSpawnX - this.initialX;
-    const originToMuzzleY = tiltedSpawnY - this.initialY;
+    const originToMuzzleY = tiltedSpawnY - this.initialYWithElevation;
 
     // Scale the cannon sprite visually based on the projected barrel length
     const visualBarrelLength = Math.sqrt(

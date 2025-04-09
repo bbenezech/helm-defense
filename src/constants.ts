@@ -8,3 +8,4 @@ export const CANNON_SHADOW_SPRITE = "cannon-shadow";
 export const BULLET_SHADOW_SPRITE = "bullet-shadow";
 export const EXPLOSION_SOUND = "explosion-sound";
 export const PARTICLE_SPRITE = "particle";
+export const PIXEL_CANNON_SPRITE = "pixel-cannon";

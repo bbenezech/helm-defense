@@ -9,10 +9,16 @@ import {
   TILE_HEIGHT_PX,
   EXPLOSION_SOUND,
   PARTICLE_SPRITE,
+  PIXEL_CANNON_SPRITE,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
-import { createCannonShape } from "./lib/createCannonShape";
-import { createCircleShape } from "./lib/createCircleShape";
+import { createCannonTexture } from "./lib/createCannonTexture";
+import { createCircleTexture } from "./lib/createCircleTexture";
+import { createParticleTexture } from "./lib/createParticleTexture";
+import {
+  createPixelCannonTexture,
+  PixelCannonColors,
+} from "./lib/createPixelCannonTexture";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -67,16 +73,19 @@ export class GameScene extends Phaser.Scene {
       "assets/kenney_tiny-dungeon/Tiles/tile_0100.png"
     );
     this.load.audio(EXPLOSION_SOUND, "assets/cannon.mp3");
-    const graphics = this.make.graphics();
-    graphics.fillStyle(0xffff00, 1); // White color, full alpha
-    graphics.fillRect(0, 0, 3, 3); // Draw a small 4x4 square
-    graphics.generateTexture(PARTICLE_SPRITE, 3, 3);
-    graphics.destroy();
 
-    createCannonShape(this, CANNON_SPRITE, 0xaaaaaa, 30, 10);
-    createCannonShape(this, CANNON_SHADOW_SPRITE, 0x000000, 30, 10);
-    createCircleShape(this, BULLET_SPRITE, 0xff0000, 10);
-    createCircleShape(this, BULLET_SHADOW_SPRITE, 0x000000, 8);
+    const cannonColors: PixelCannonColors = {
+      base: 0x444444, // Medium Grey
+      shadow: 0x444444, // Dark Grey
+      highlight: 0xcccccc, // Light Grey
+    };
+
+    createParticleTexture(this, PARTICLE_SPRITE);
+    createPixelCannonTexture(this, PIXEL_CANNON_SPRITE, cannonColors, 30, 10);
+    createCannonTexture(this, CANNON_SPRITE, 0x444444, 30, 10);
+    createCannonTexture(this, CANNON_SHADOW_SPRITE, 0x000000, 30, 10);
+    createCircleTexture(this, BULLET_SPRITE, 0xff0000, 10);
+    createCircleTexture(this, BULLET_SHADOW_SPRITE, 0x000000, 8);
   }
 
   tileToWorld(tileX: number, tileY: number) {

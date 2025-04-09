@@ -1,6 +1,6 @@
 import { GameScene } from "../GameScene";
 
-export function createCircleShape(
+export function createCircleTexture(
   gameScene: GameScene,
   key: string,
   color: number,
