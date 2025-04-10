@@ -12,6 +12,7 @@ import {
 import { GameScene } from "./GameScene";
 
 const PRE_RECOIL_DURATION_MS = 30;
+const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 50;
 const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
@@ -25,6 +26,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   muzzleVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   recoilTween: Phaser.Tweens.TweenChain | null = null;
   shadowRecoilTween: Phaser.Tweens.TweenChain | null = null;
+  wheelsRecoilTween: Phaser.Tweens.TweenChain | null = null;
   shadow: Phaser.GameObjects.Image;
   muzzleParticleEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   muzzleFlashEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -48,7 +50,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.initialX = x;
     this.initialY = y;
     this.initialYWithElevation = initialYWithElevation;
-    this.elevation = Phaser.Math.DegToRad(5);
+    this.elevation = Phaser.Math.DegToRad(15);
     const originX = this.displayHeight / (2 * this.displayWidth);
     const originY = 0.5;
     this.setOrigin(originX, originY);
@@ -66,8 +68,9 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.shadow.setOrigin(originX, originY);
     this.shadow.setDepth(this.y - 1);
 
-    this.wheels = this.gameScene.add.sprite(x, y - 10, CANNON_WHEELS_SPRITE);
+    this.wheels = this.gameScene.add.sprite(x, y, CANNON_WHEELS_SPRITE);
     this.wheels.scale = 3;
+    this.wheels.setOrigin(0.5, 0.5);
     this.wheels.setDepth(this.y - 2);
 
     this.muzzleParticleEmitter = this.gameScene.add.particles(
@@ -180,8 +183,34 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     const recoilAngle = muzzleAngle + Math.PI;
 
     const recoilDistance = this.cannonLength * RECOIL_FACTOR;
+    const wheelsRecoilDistance = this.cannonLength * RECOIL_FACTOR * 0.5;
 
     if (DO_RECOIL) {
+      this.wheelsRecoilTween = this.gameScene.tweens.chain({
+        targets: this.wheels,
+        tweens: [
+          {
+            delay: PRE_RECOIL_DURATION_MS + PRE_WHEELS_RECOIL_DURATION_MS,
+            x: this.initialX + wheelsRecoilDistance * Math.cos(recoilAngle),
+            y: this.initialY + wheelsRecoilDistance * Math.sin(recoilAngle),
+            duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
+            ease: "Sine.easeOut",
+          },
+          {
+            x: this.initialX,
+            y: this.initialY,
+            duration: RECOIL_RETURN_DURATION_MS,
+            ease: "Sine.easeIn",
+          },
+        ],
+        onComplete: () => {
+          this.shadowRecoilTween = null;
+        },
+        onStop: () => {
+          this.shadowRecoilTween = null;
+          this.shadow.setPosition(this.initialX, this.initialY);
+        },
+      });
       this.shadowRecoilTween = this.gameScene.tweens.chain({
         targets: this.shadow,
         tweens: [
@@ -295,7 +324,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
 
     // Shadow rotation represents the actual horizontal aim (azimuth)
     this.shadow.rotation = Math.atan2(targetVelocityY, targetVelocityX);
-    this.wheels.rotation = Math.PI / 2 + this.rotation;
+    this.wheels.rotation = Math.PI * 1.5 + this.shadow.rotation;
 
     // Calculate spawn position for visual scaling
     const {
