@@ -7,6 +7,7 @@ import {
   PARTICLE_SPRITE,
   CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
+  FLARES,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
@@ -26,6 +27,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   shadowRecoilTween: Phaser.Tweens.TweenChain | null = null;
   shadow: Phaser.GameObjects.Image;
   muzzleParticleEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+  muzzleFlashEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   elevation: number;
   initialX: number;
   initialY: number;
@@ -84,6 +86,24 @@ export class Cannon extends Phaser.GameObjects.Sprite {
         angle: { min: -7, max: 7 },
         frequency: -1,
         quantity: 70,
+      }
+    );
+
+    this.muzzleFlashEmitter = this.gameScene.add.particles(
+      this.x,
+      this.y,
+      FLARES,
+      {
+        frame: "black",
+        color: [0xfacc22, 0xf89800, 0xf83600, 0x040404],
+        colorEase: "quart.out",
+        scale: 0.2,
+        lifespan: { min: 0, max: 1500 },
+        angle: { min: -20, max: 20 },
+        speed: { min: 10, max: 150 },
+        blendMode: "ADD",
+        frequency: -1,
+        quantity: 20,
       }
     );
   }
@@ -231,6 +251,12 @@ export class Cannon extends Phaser.GameObjects.Sprite {
       .setPosition(screenX, screenY)
       .setRotation(this.rotation)
       .explode();
+
+    this.muzzleFlashEmitter
+      .setPosition(screenX, screenY)
+      .setRotation(this.rotation)
+      .explode();
+
     this.gameScene.cameras.main.shake(50, 0.002);
 
     const blast = Math.ceil(Math.random() * 5);
