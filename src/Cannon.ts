@@ -4,9 +4,9 @@ import {
   PIXELS_PER_METER,
   SMALL_WORLD_FACTOR,
   CANNON_SHADOW_SPRITE,
-  EXPLOSION_SOUND,
   PARTICLE_SPRITE,
   CANNON_SPRITE,
+  CANNON_WHEELS_SPRITE,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
@@ -15,7 +15,7 @@ const RECOIL_DURATION_MS = 50;
 const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
-const HEIGHT_ABOVE_GROUND = 1 * PIXELS_PER_METER;
+const HEIGHT_ABOVE_GROUND = 0.5 * PIXELS_PER_METER;
 
 const INITIAL_SPEED_METERS_PER_SECOND = 440 / SMALL_WORLD_FACTOR;
 
@@ -24,15 +24,16 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   muzzleVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   recoilTween: Phaser.Tweens.TweenChain | null = null;
   shadowRecoilTween: Phaser.Tweens.TweenChain | null = null;
-  shadowSprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Image;
   muzzleParticleEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
-  elevation = Phaser.Math.DegToRad(20); // Muzzle elevation in radians
+  elevation: number;
   initialX: number;
   initialY: number;
   initialYWithElevation: number;
   cannonLength: number;
   cannonDiameter: number;
   barrelLength: number;
+  wheels: Phaser.GameObjects.Image;
 
   constructor(gameScene: GameScene, x: number, y: number) {
     const initialYWithElevation = gameScene.getTiltedY(
@@ -45,6 +46,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.initialX = x;
     this.initialY = y;
     this.initialYWithElevation = initialYWithElevation;
+    this.elevation = Phaser.Math.DegToRad(5);
     const originX = this.displayHeight / (2 * this.displayWidth);
     const originY = 0.5;
     this.setOrigin(originX, originY);
@@ -52,14 +54,19 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.cannonLength = this.displayWidth;
     this.cannonDiameter = this.displayHeight;
     this.barrelLength = this.cannonLength * (1 - this.originX);
+    this.setDepth(this.y);
 
     this.gameScene.add.existing(this);
-    this.shadowSprite = this.gameScene.add
+
+    this.shadow = this.gameScene.add
       .sprite(x, y, CANNON_SHADOW_SPRITE)
       .setAlpha(0.3);
-    this.shadowSprite.setOrigin(originX, originY);
-    this.setDepth(this.y);
-    this.shadowSprite.setDepth(this.y - 1);
+    this.shadow.setOrigin(originX, originY);
+    this.shadow.setDepth(this.y - 1);
+
+    this.wheels = this.gameScene.add.sprite(x, y - 10, CANNON_WHEELS_SPRITE);
+    this.wheels.scale = 3;
+    this.wheels.setDepth(this.y - 2);
 
     this.muzzleParticleEmitter = this.gameScene.add.particles(
       this.x,
@@ -114,8 +121,8 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   calculateMuzzleSpawnPosition() {
     const cosElev = Math.cos(this.elevation);
     const sinElev = Math.sin(this.elevation);
-    const cosAzim = Math.cos(this.shadowSprite.rotation); // Azimuth based on shadow
-    const sinAzim = Math.sin(this.shadowSprite.rotation);
+    const cosAzim = Math.cos(this.shadow.rotation); // Azimuth based on shadow
+    const sinAzim = Math.sin(this.shadow.rotation);
 
     const muzzleOffsetX = this.barrelLength * cosElev * cosAzim;
     const muzzleOffsetY = this.barrelLength * cosElev * sinAzim;
@@ -156,7 +163,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
 
     if (DO_RECOIL) {
       this.shadowRecoilTween = this.gameScene.tweens.chain({
-        targets: this.shadowSprite,
+        targets: this.shadow,
         tweens: [
           {
             delay: PRE_RECOIL_DURATION_MS,
@@ -177,7 +184,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
         },
         onStop: () => {
           this.shadowRecoilTween = null;
-          this.shadowSprite.setPosition(this.initialX, this.initialY);
+          this.shadow.setPosition(this.initialX, this.initialY);
         },
       });
 
@@ -225,7 +232,9 @@ export class Cannon extends Phaser.GameObjects.Sprite {
       .setRotation(this.rotation)
       .explode();
     this.gameScene.cameras.main.shake(50, 0.002);
-    this.gameScene.sound.play(EXPLOSION_SOUND, { volume: 0.5 });
+
+    const blast = Math.ceil(Math.random() * 5);
+    this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });
 
     return new Bullet(
       this.gameScene,
@@ -259,7 +268,8 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     this.rotation = Math.atan2(visualTargetY, visualTargetX);
 
     // Shadow rotation represents the actual horizontal aim (azimuth)
-    this.shadowSprite.rotation = Math.atan2(targetVelocityY, targetVelocityX);
+    this.shadow.rotation = Math.atan2(targetVelocityY, targetVelocityX);
+    this.wheels.rotation = Math.PI / 2 + this.rotation;
 
     // Calculate spawn position for visual scaling
     const {

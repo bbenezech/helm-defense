@@ -7,9 +7,10 @@ import {
   CANNON_SHADOW_SPRITE,
   BULLET_SHADOW_SPRITE,
   TILE_HEIGHT_PX,
-  EXPLOSION_SOUND,
   PARTICLE_SPRITE,
   PIXEL_CANNON_SPRITE,
+  CANNON_WHEELS_SPRITE,
+  FLARES,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 import { createCannonTexture } from "./lib/createCannonTexture";
@@ -72,7 +73,17 @@ export class GameScene extends Phaser.Scene {
       ENEMY_SPRITE,
       "assets/kenney_tiny-dungeon/Tiles/tile_0100.png"
     );
-    this.load.audio(EXPLOSION_SOUND, "assets/cannon.mp3");
+    this.load.image(
+      CANNON_WHEELS_SPRITE,
+      "assets/kenney_tiny-dungeon/Tiles/tile_0073.png"
+    );
+    this.load.atlas(FLARES, "assets/flares.png", "assets/flares.json");
+
+    this.load.audio("cannon_blast_1", "assets/cannon_blast_1.mp3");
+    this.load.audio("cannon_blast_2", "assets/cannon_blast_2.mp3");
+    this.load.audio("cannon_blast_3", "assets/cannon_blast_3.mp3");
+    this.load.audio("cannon_blast_4", "assets/cannon_blast_4.mp3");
+    this.load.audio("cannon_blast_5", "assets/cannon_blast_5.mp3");
 
     const cannonColors: PixelCannonColors = {
       base: 0x444444, // Medium Grey
