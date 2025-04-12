@@ -4,7 +4,9 @@ import { UIScene } from "./UIScene";
 
 new Phaser.Game({
   type: Phaser.WEBGL,
+  // @ts-expect-error
   width: window.innerWidth,
+  // @ts-expect-error
   height: window.innerHeight,
   backgroundColor: "#2d2d2d",
   parent: "phaser",

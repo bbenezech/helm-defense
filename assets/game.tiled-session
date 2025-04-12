@@ -3,7 +3,7 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx",
+    "activeFile": "map.json",
     "expandedProjectPaths": [
         "kenney_tiny-dungeon/Tiled",
         ".",
@@ -44,15 +44,15 @@
             "scale": 1.2958,
             "selectedLayer": 3,
             "viewCenter": {
-                "x": 518.984411174564,
-                "y": 1105.1088130884395
+                "x": 529.0168235838864,
+                "y": 1215.4653495909863
             }
         },
         "map.json#kenney-tiny-dungeon": {
-            "scaleInDock": 1
+            "scaleInDock": 2.3066
         },
         "map.json#kenney-tiny-town": {
-            "scaleInDock": 1
+            "scaleInDock": 2.2532
         }
     },
     "last.exportedFilePath": "/Users/ben/code/cannon-defense-phaser/assets",
@@ -69,8 +69,8 @@
     "project": "game.tiled-project",
     "property.type": "int",
     "recentFiles": [
-        "map.json",
         "/Users/ben/Downloads/Library Pack (2.1)/Samples/Tiled Sample/Sample.tsx",
+        "map.json",
         "kenney_tiny-town/kenney-tiny-town.tsx",
         "kenney_tiny-dungeon/Tiled/sampleSheet.tsx",
         "kenney_tiny-dungeon/Tiled/sampleMap.tmx",
