@@ -33,6 +33,7 @@ const TILT_FACTOR = 1;
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
 
 export class GameScene extends Phaser.Scene {
+  private _vector2: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
   cannon!: Cannon;
@@ -43,51 +44,67 @@ export class GameScene extends Phaser.Scene {
     super({ key: "GameScene" });
   }
 
-  tileToWorld(tileX: number, tileY: number) {
-    const world = new Phaser.Math.Vector3();
-    world.x = this.map.tileToWorldX(tileX)!;
-    world.y = this.map.tileToWorldY(tileY)!;
+  // Convert tile coordinates to world position
+  tileToWorldPosition(tileX: number, tileY: number) {
+    const screen = new Phaser.Math.Vector2();
+    screen.x = this.map.tileToWorldX(tileX)!;
+    screen.y = this.map.tileToWorldY(tileY)!;
 
-    if (world.x === null || world.y === null)
+    if (screen.x === null || screen.y === null)
       throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
-    world.z = this.getGroundZ(world);
 
-    return world;
+    return this.getSurfaceWorldPosition(screen, new Phaser.Math.Vector3());
   }
 
-  getBuildingTile(coordinates: Phaser.Types.Math.Vector2Like) {
-    return this.map.getTileAtWorldXY(
-      coordinates.x,
-      coordinates.y,
-      false,
-      undefined,
-      1
+  // Get the building tile at the given screen position
+  getBuildingTileFromScreenPosition(screen: Phaser.Types.Math.Vector2Like) {
+    // Caution, Phaser uses "worldXY" for the screen position in our naming convention
+    return this.map.getTileAtWorldXY(screen.x, screen.y, false, undefined, 1);
+  }
+
+  // Get the building tile at the given world position
+  // This one is not simple
+  // We need to check for occlusion by buildings (this is a naive approach)
+  // We get 2 heights:
+  // - the surface height of the tile at the world position (surfaceZ)
+  // - the surface height at the projected screen position of the surfaceZ (projectedSurfaceZ)
+  // If they are the same, surface is on a building
+  // If they are different, surface is occluded by a building, return null
+  // null really means world(x,y) is visually behind a building, caller can assume 0 if it makes sense
+  getSurfaceZFromWorldPosition(world: Phaser.Math.Vector3): number | null {
+    const surfaceZ = this.getSurfaceZFromScreenPosition(world);
+    if (surfaceZ === 0) return surfaceZ; // nothing can occlude a ground surface at minimum z in a top down view, early return
+    const oldWorldZ = world.z; // save the original world z, we are going to mutate it for perf
+    world.z = surfaceZ;
+    const projectedSurfaceZ = this.getSurfaceZFromScreenPosition(
+      this.getScreenPosition(world, this._vector2)
     );
+    world.z = oldWorldZ; // fix the mutated input world
+    return projectedSurfaceZ === surfaceZ ? surfaceZ : null;
   }
 
-  getGroundZ(coordinates: Phaser.Types.Math.Vector2Like): number {
-    const buildingTile = this.getBuildingTile(coordinates);
+  // Get the surface height at the given screen position
+  getSurfaceZFromScreenPosition(screen: Phaser.Types.Math.Vector2Like): number {
+    const buildingTile = this.getBuildingTileFromScreenPosition(screen);
     return buildingTile ? 2 * TILE_HEIGHT_PX : 0; // top of building is 2 tiles high
   }
 
-  getTiltedY(x: number, y: number, z: number) {
-    return y - z * TILT_FACTOR;
-  }
-
-  getScreen(world: Phaser.Math.Vector3, output: Phaser.Math.Vector2) {
+  // Get the screen position of the given world position
+  getScreenPosition(world: Phaser.Math.Vector3, output: Phaser.Math.Vector2) {
     output.x = world.x;
     output.y = world.y - world.z * TILT_FACTOR;
     return output;
   }
 
-  getWorldAtGround(
+  // Get the world position of the given screen position
+  getSurfaceWorldPosition(
     screen: Phaser.Types.Math.Vector2Like,
     output: Phaser.Math.Vector3
   ) {
-    const groundZ = this.getGroundZ(screen);
+    const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
     output.x = screen.x;
-    output.y = screen.y + groundZ * TILT_FACTOR;
-    output.z = groundZ;
+    output.y = screen.y + surfaceZ * TILT_FACTOR;
+    output.z = surfaceZ;
     return output;
   }
 
@@ -188,7 +205,7 @@ export class GameScene extends Phaser.Scene {
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
-    this.cannon = new Cannon(this, this.tileToWorld(34, 75));
+    this.cannon = new Cannon(this, this.tileToWorldPosition(34, 75));
     const bulletGroup = this.physics.add.group();
     const enemyGroup = this.physics.add.group(enemies.list);
 
@@ -243,24 +260,16 @@ export class GameScene extends Phaser.Scene {
     const mouseX = this.input.x;
     const mouseY = this.input.y;
 
-    if (this.input.isOver) {
+    if (this.input.isOver && mouseX && mouseY) {
       const cam = this.cameras.main;
-
-      if (mouseX < SCROLL_BOUNDARY && mouseX > 0 && this.input.isOver) {
+      if (mouseX < SCROLL_BOUNDARY) {
         cam.scrollX -= SCROLL_SPEED;
-      } else if (
-        mouseX > this.game.canvas.width - SCROLL_BOUNDARY &&
-        mouseX < this.game.canvas.width
-      ) {
+      } else if (mouseX > this.game.canvas.width - SCROLL_BOUNDARY) {
         cam.scrollX += SCROLL_SPEED;
       }
-
-      if (mouseY < SCROLL_BOUNDARY && mouseY > 0 && this.input.isOver) {
+      if (mouseY < SCROLL_BOUNDARY) {
         cam.scrollY -= SCROLL_SPEED;
-      } else if (
-        mouseY > this.game.canvas.height - SCROLL_BOUNDARY &&
-        mouseY < this.game.canvas.height
-      ) {
+      } else if (mouseY > this.game.canvas.height - SCROLL_BOUNDARY) {
         cam.scrollY += SCROLL_SPEED;
       }
     }

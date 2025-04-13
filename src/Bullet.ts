@@ -32,9 +32,8 @@ export class Bullet extends Phaser.GameObjects.Sprite {
     velocity: Phaser.Math.Vector3
   ) {
     super(gameScene, 0, 0, BULLET_SPRITE);
-    gameScene.add.existing(this);
-    this.world = world;
-    this.velocity = velocity;
+    this.world = world.clone();
+    this.velocity = velocity.clone();
     this.gameScene = gameScene;
     this.dragFactor =
       (0.5 *
@@ -45,30 +44,36 @@ export class Bullet extends Phaser.GameObjects.Sprite {
         BULLET_RADIUS_METERS) /
       PIXELS_PER_METER;
 
-    this.shadowSprite = gameScene.add
-      .sprite(0, 0, BULLET_SHADOW_SPRITE)
-      .setAlpha(0.5); // Initial alpha
-    this.updateVisuals();
+    this.gameScene.add.existing(this);
+    this.shadowSprite = gameScene.add.sprite(0, 0, BULLET_SHADOW_SPRITE);
   }
 
   groundElevation(): number {
-    return this.world.z - this.gameScene.getGroundZ(this.world);
+    const surfaceZ =
+      this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
+    return this.world.z - surfaceZ;
   }
 
-  getScreen(): Phaser.Math.Vector2 {
-    return this.gameScene.getScreen(this.world, this._screen);
-  }
-
-  getShadowWorld(): Phaser.Math.Vector3 {
+  getShadowWorld(): Phaser.Math.Vector3 | null {
     this._shadowWorld.x = this.world.x;
     this._shadowWorld.y = this.world.y;
-    this._shadowWorld.z = this.gameScene.getGroundZ(this.world);
+    const surfaceZ = this.gameScene.getSurfaceZFromWorldPosition(this.world);
+
+    this._shadowWorld.y = this.world.y;
+    if (surfaceZ === null) {
+      return null; // No surface, return null
+    } else {
+      this._shadowWorld.z = surfaceZ;
+    }
 
     return this._shadowWorld;
   }
 
-  getShadowScreen(): Phaser.Math.Vector2 {
-    return this.gameScene.getScreen(this.getShadowWorld(), this._shadowScreen);
+  getShadowScreen(): Phaser.Math.Vector2 | null {
+    const shadowWorld = this.getShadowWorld();
+    if (shadowWorld === null) return null; // No surface, return null
+
+    return this.gameScene.getScreenPosition(shadowWorld, this._shadowScreen);
   }
 
   preUpdate(time: number, delta: number) {
@@ -111,17 +116,18 @@ export class Bullet extends Phaser.GameObjects.Sprite {
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
 
-    const groundZ = this.gameScene.getGroundZ(this.world);
+    const surfaceZ =
+      this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0; // null means the ground is behind a building, let's assume 0 for now
     // Stop if slow and at ground
-    if (speed < 10 && this.world.z <= groundZ) {
+    if (speed < 10 && this.world.z <= surfaceZ) {
       this.destroy();
       return;
     }
 
-    if (this.world.z <= groundZ && this.velocity.z < 0) {
+    if (this.world.z <= surfaceZ && this.velocity.z < 0) {
       // Moving down and at/below ground
       // Correct position
-      this.world.z = groundZ;
+      this.world.z = surfaceZ;
 
       // Bounce: Reverse and dampen vertical velocity
       this.velocity.z *= -BOUNCE_FACTOR;
@@ -131,21 +137,20 @@ export class Bullet extends Phaser.GameObjects.Sprite {
       this.velocity.y *= GROUND_FACTOR;
     }
 
-    this.updateVisuals();
-  }
-
-  updateVisuals(): void {
-    const screen = this.getScreen();
+    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
     this.setPosition(screen.x, screen.y)
-      .setScale(1 + this.world.z * 0.004)
+      .setScale(1 + this.world.z * 0.003)
       .setDepth(screen.y);
 
     const shadowScreen = this.getShadowScreen();
-    this.shadowSprite
-      .setPosition(shadowScreen.x, shadowScreen.y)
-      .setScale(1 + this.world.z * 0.006)
-      .setAlpha(Math.max(0.1, 0.5 - this.world.z * 0.003))
-      .setDepth(Math.round(screen.y) - 1);
+    if (shadowScreen === null) {
+      this.shadowSprite.setAlpha(0);
+    } else
+      this.shadowSprite
+        .setPosition(shadowScreen.x, shadowScreen.y)
+        .setScale(1 + this.world.z * 0.005)
+        .setAlpha(Math.max(0.1, 0.5 - this.world.z * 0.003))
+        .setDepth(Math.round(screen.y) - 1);
   }
 
   destroy(): void {

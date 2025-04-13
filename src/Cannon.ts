@@ -32,7 +32,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   private _muzzleWorldOffset: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private _targetWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
-  private _targetScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private _pointerScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
 
   gameScene: GameScene;
   // base position of the shadow sprite and wheel sprite
@@ -59,11 +59,11 @@ export class Cannon extends Phaser.GameObjects.Sprite {
 
     this.gameScene = gameScene;
     this.world = world;
-    this.screen = gameScene.getScreen(world, new Phaser.Math.Vector2());
+    this.screen = gameScene.getScreenPosition(world, new Phaser.Math.Vector2());
     const cannonWorld = world.clone();
     cannonWorld.z += CANNON_GROUND_CLEARANCE;
     this.cannonWorld = cannonWorld;
-    this.cannonScreen = gameScene.getScreen(
+    this.cannonScreen = gameScene.getScreenPosition(
       cannonWorld,
       new Phaser.Math.Vector2()
     );
@@ -134,7 +134,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
   }
 
   getBulletVelocityTo(targetScreen: Phaser.Types.Math.Vector2Like) {
-    const targetWorld = this.gameScene.getWorldAtGround(
+    const targetWorld = this.gameScene.getSurfaceWorldPosition(
       targetScreen,
       this._targetWorld
     );
@@ -260,7 +260,7 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     }
 
     const muzzleWorld = this.getMuzzleWorld();
-    const muzzleScreen = this.gameScene.getScreen(
+    const muzzleScreen = this.gameScene.getScreenPosition(
       muzzleWorld,
       this._muzzleScreen
     );
@@ -282,43 +282,42 @@ export class Cannon extends Phaser.GameObjects.Sprite {
     if (PLAY_SOUNDS)
       this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });
 
-    return new Bullet(
-      this.gameScene,
-      muzzleWorld.clone(),
-      bulletVelocity.clone()
-    );
+    return new Bullet(this.gameScene, muzzleWorld, bulletVelocity);
   }
 
   getPointerScreen() {
     const pointer = this.gameScene.input.activePointer;
-    this._targetScreen.x = pointer.worldX;
-    this._targetScreen.y = pointer.worldY;
-    return this._targetScreen;
+    this._pointerScreen.x = pointer.worldX;
+    this._pointerScreen.y = pointer.worldY;
+    return this._pointerScreen;
   }
 
   // Rotates the cannon sprite and shadow towards the mouse pointer
   rotate() {
     const bulletVelocity = this.getBulletVelocityTo(this.getPointerScreen());
-    // Shadow rotation represents the actual horizontal aim (azimuth)
+    // Shadow and wheels rotation is the azimuth (they are flat on the ground)
     this.shadow.rotation = Math.atan2(bulletVelocity.y, bulletVelocity.x);
     this.wheels.rotation = CANNON_WHEELS_SPRITE_ROTATION + this.shadow.rotation;
 
-    // Cannon barrel rotation is the azimuth, plus the elevation angle projected on the screen
-    const screenBulletVelocity = this.gameScene.getScreen(
+    // Cannon barrel rotation is not simply the azimuth
+    // we project the full velocity vector on the screen
+    // to rotate the barrel visually in line
+    // with the initial bullet's screen travel direction
+    const screenBulletVelocity = this.gameScene.getScreenPosition(
       bulletVelocity,
       this._bulletScreenVelocity
     );
     this.rotation = Math.atan2(screenBulletVelocity.y, screenBulletVelocity.x);
 
-    const muzzleScreen = this.gameScene.getScreen(
+    const muzzleScreen = this.gameScene.getScreenPosition(
       this.getMuzzleWorld(),
       this._muzzleScreen
     );
-    const visualBarrelLength = Phaser.Math.Distance.BetweenPoints(
+    const screenBarrelLength = Phaser.Math.Distance.BetweenPoints(
       muzzleScreen,
       this.cannonScreen
     );
-    this.scaleX = visualBarrelLength / this.barrelLength;
+    this.scaleX = screenBarrelLength / this.barrelLength;
   }
 
   preUpdate(time: number, delta: number) {
