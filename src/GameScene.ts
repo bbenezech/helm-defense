@@ -38,6 +38,8 @@ export class GameScene extends Phaser.Scene {
   map!: Phaser.Tilemaps.Tilemap;
   cannon!: Cannon;
   debugGraphics!: Phaser.GameObjects.Graphics;
+  bulletGroup!: Phaser.Physics.Arcade.Group;
+  enemyGroup!: Phaser.Physics.Arcade.Group;
   score = 0;
 
   constructor() {
@@ -206,22 +208,18 @@ export class GameScene extends Phaser.Scene {
 
     // Cannons
     this.cannon = new Cannon(this, this.tileToWorldPosition(34, 75));
-    const bulletGroup = this.physics.add.group();
-    const enemyGroup = this.physics.add.group(enemies.list);
+    this.bulletGroup = this.physics.add.group();
+    this.enemyGroup = this.physics.add.group(enemies.list);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      const targetScreen = new Phaser.Math.Vector2(
-        pointer.worldX,
-        pointer.worldY
-      );
-      const bullet = this.cannon.shoot(targetScreen);
-      if (bullet) bulletGroup.add(bullet);
+      this._vector2.set(pointer.worldX, pointer.worldY);
+      this.cannon.requestShoot(this._vector2);
     });
 
     this.physics.add.overlap(
-      bulletGroup,
-      enemyGroup,
+      this.bulletGroup,
+      this.enemyGroup,
       (bullet, enemy) => {
         if (
           (bullet as Bullet).groundElevation() > (enemy as Enemy).displayHeight

@@ -15,7 +15,7 @@ const BULLET_RADIUS_METERS = 0.06;
 const C_d = 0.5;
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
 
-export class Bullet extends Phaser.GameObjects.Sprite {
+export class Bullet extends Phaser.GameObjects.Image {
   private _screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
   private _shadowScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
   private _shadowWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3(0, 0, 0);
@@ -77,8 +77,6 @@ export class Bullet extends Phaser.GameObjects.Sprite {
   }
 
   preUpdate(time: number, delta: number) {
-    super.preUpdate(time, delta);
-
     const SECONDS = delta / 1000; // Convert ms to seconds for physics
 
     // --- Calculate Drag Acceleration ---

@@ -37,7 +37,7 @@ export function createEnemyContainer(
   return enemies;
 }
 
-export class Enemy extends Phaser.GameObjects.Sprite {
+export class Enemy extends Phaser.GameObjects.Image {
   constructor(scene: GameScene, x: number, y: number) {
     super(scene, x, y, ENEMY_SPRITE);
     scene.add.existing(this);
