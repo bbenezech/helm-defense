@@ -250,13 +250,13 @@ export class GameScene extends Phaser.Scene {
     // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
   }
 
-  inViewport(object: Phaser.GameObjects.Image): boolean {
+  inViewport(object: { world: Phaser.Math.Vector3 }): boolean {
     const bounds = this.cameras.main.worldView;
     return (
-      object.x >= bounds.x - 200 &&
-      object.x <= bounds.right + 200 &&
-      object.y >= bounds.y - 200 &&
-      object.y <= bounds.bottom + 200
+      object.world.x >= bounds.x - 200 &&
+      object.world.x <= bounds.right + 200 &&
+      object.world.y >= bounds.y - 200 &&
+      object.world.y <= bounds.bottom + 200
     );
   }
 

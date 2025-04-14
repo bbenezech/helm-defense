@@ -121,7 +121,7 @@ export class Cannon extends Phaser.GameObjects.Image {
         frequency: -1,
         quantity: 70,
       })
-      .setDepth(this.y - 1);
+      .setDepth(this.y);
 
     this.muzzleFlashEmitter = this.gameScene.add
       .particles(this.x, this.y, FLARES, {
@@ -135,7 +135,7 @@ export class Cannon extends Phaser.GameObjects.Image {
         frequency: -1,
         quantity: 20,
       })
-      .setDepth(this.y - 1);
+      .setDepth(this.y);
 
     this.updateVisuals();
   }

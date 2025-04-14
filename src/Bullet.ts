@@ -150,23 +150,28 @@ export class Bullet extends Phaser.GameObjects.Image {
       this.velocity.x *= GROUND_FACTOR;
       this.velocity.y *= GROUND_FACTOR;
     }
+
+    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
+    this.x = screen.x;
+    this.y = screen.y;
   }
 
   updateVisuals() {
-    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
-    this.setPosition(screen.x, screen.y);
-
+    this.setDepth(this.y);
     const shadowScreen = this.getShadowScreen();
     if (shadowScreen === null) {
       this.shadowSprite.setVisible(false);
     } else {
       if (this.shadowSprite.visible === false)
         this.shadowSprite.setVisible(true);
-      this.shadowSprite.setPosition(shadowScreen.x, shadowScreen.y);
+      this.shadowSprite
+        .setPosition(shadowScreen.x, shadowScreen.y)
+        .setDepth(this.y - 1);
     }
   }
 
   preUpdate(time: number, delta: number) {
+    if (this.active === false) return;
     const visible = this.gameScene.inViewport(this);
     const timerInterval = visible
       ? VISIBLE_UPDATE_INTERVAL
@@ -174,8 +179,7 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {
       this.move(this.moveTimer);
-      // Update visuals only if still visible and active
-      if (this.active && visible) this.updateVisuals();
+      if (visible) this.updateVisuals();
       this.moveTimer = 0;
     }
   }
