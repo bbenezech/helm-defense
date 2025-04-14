@@ -8,6 +8,8 @@ import {
   FLARES,
   PLAY_SOUNDS,
   CANNON_WHEELS_SPRITE_ROTATION,
+  INVISIBLE_UPDATE_INTERVAL,
+  VISIBLE_UPDATE_INTERVAL,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
@@ -19,8 +21,8 @@ const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
 const CANNON_GROUND_CLEARANCE = 0.5 * PIXELS_PER_METER;
 const INITIAL_SPEED_METERS_PER_SECOND = 440 / SMALL_WORLD_FACTOR;
-const ELEVATION_ANGLE = 15; // degrees
-const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90); // Degrees per second turn rate (adjust as needed)
+const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
+const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 
 export class Cannon extends Phaser.GameObjects.Image {
   // cache vectors to avoid creating new ones every frame, do not use directly, use getters
@@ -39,9 +41,10 @@ export class Cannon extends Phaser.GameObjects.Image {
   cannonScreen: Phaser.Math.Vector2;
   cannonWorld: Phaser.Math.Vector3;
 
-  requestedRotation: number; // requested velocity on click
-  elevationRotation: number; // vertical world elevation angle of the muzzle in radians
-  shootRequested: boolean = false; // if true, shoot when ready
+  requestedAzymuth: number; // requested rotation
+  azymuth: number; // current rotation of the cannon
+  altitude: number; // elevation angle of the muzzle in radians
+  shootRequested: boolean; // if true, shoot when ready
 
   muzzleSpeed: number;
   recoilTween: Phaser.Tweens.TweenChain | null = null;
@@ -55,19 +58,27 @@ export class Cannon extends Phaser.GameObjects.Image {
   barrelLength: number; // barrel length is the length of the cannon minus the round part at the back, which actually is the length from origin of rotation to muzzle's end
   wheels: Phaser.GameObjects.Image; // wheels sprite
 
-  constructor(gameScene: GameScene, world: Phaser.Math.Vector3) {
-    super(gameScene, 0, 0, CANNON_SPRITE);
+  private moveTimer: number = 0; // Timer to accumulate delta time for move updates
+
+  constructor(
+    gameScene: GameScene,
+    world: Phaser.Math.Vector3,
+    rotationDeg: number
+  ) {
+    const cannonWorld = world.clone();
+    cannonWorld.z += CANNON_GROUND_CLEARANCE;
+    const cannonScreen = gameScene.getScreenPosition(
+      cannonWorld,
+      new Phaser.Math.Vector2()
+    );
+
+    super(gameScene, cannonScreen.x, cannonScreen.y, CANNON_SPRITE);
 
     this.gameScene = gameScene;
     this.world = world;
     this.screen = gameScene.getScreenPosition(world, new Phaser.Math.Vector2());
-    const cannonWorld = world.clone();
-    cannonWorld.z += CANNON_GROUND_CLEARANCE;
     this.cannonWorld = cannonWorld;
-    this.cannonScreen = gameScene.getScreenPosition(
-      cannonWorld,
-      new Phaser.Math.Vector2()
-    );
+    this.cannonScreen = cannonScreen;
     this.cannonRadius = this.displayHeight / 2;
     this.cannonLength = this.displayWidth;
 
@@ -75,9 +86,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     const originY = 0.5;
 
     this.gameScene.add.existing(
-      this.setPosition(this.cannonScreen.x, this.cannonScreen.y)
-        .setOrigin(originX, originY)
-        .setDepth(this.y)
+      this.setOrigin(originX, originY).setDepth(this.y).disableInteractive()
     );
 
     this.shadow = this.gameScene.add
@@ -85,24 +94,24 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setTint(0x000000)
       .setAlpha(0.3)
       .setOrigin(originX, originY)
-      .setDepth(this.y - 1);
+      .setDepth(this.y - 1)
+      .disableInteractive();
 
     this.wheels = this.gameScene.add
       .sprite(this.screen.x, this.screen.y, CANNON_WHEELS_SPRITE)
       .setScale(3)
       .setOrigin(0.5, 0.5)
-      .setDepth(this.y - 2);
+      .setDepth(this.y - 2)
+      .disableInteractive();
 
     this.barrelLength = this.cannonLength * (1 - originX);
     this.muzzleSpeed = INITIAL_SPEED_METERS_PER_SECOND * PIXELS_PER_METER;
-    this.elevationRotation = Phaser.Math.DegToRad(ELEVATION_ANGLE);
-    this.requestedRotation = this.shadow.rotation;
+    this.altitude = INITIAL_ALTITUDE;
+    this.requestedAzymuth = this.azymuth = Phaser.Math.DegToRad(rotationDeg); // Pointing to the top
+    this.shootRequested = false;
 
-    this.muzzleParticleEmitter = this.gameScene.add.particles(
-      this.x,
-      this.y,
-      PARTICLE_SPRITE,
-      {
+    this.muzzleParticleEmitter = this.gameScene.add
+      .particles(this.x, this.y, PARTICLE_SPRITE, {
         speed: {
           min: this.muzzleSpeed * 0.5,
           max: this.muzzleSpeed * 1.5,
@@ -113,14 +122,11 @@ export class Cannon extends Phaser.GameObjects.Image {
         angle: { min: -7, max: 7 },
         frequency: -1,
         quantity: 70,
-      }
-    );
+      })
+      .setDepth(this.y - 1);
 
-    this.muzzleFlashEmitter = this.gameScene.add.particles(
-      this.x,
-      this.y,
-      FLARES,
-      {
+    this.muzzleFlashEmitter = this.gameScene.add
+      .particles(this.x, this.y, FLARES, {
         color: [0xfacc22, 0xf89800, 0xf83600, 0x040404],
         colorEase: "quart.out",
         scale: 0.2,
@@ -130,29 +136,29 @@ export class Cannon extends Phaser.GameObjects.Image {
         blendMode: "ADD",
         frequency: -1,
         quantity: 20,
-      }
-    );
+      })
+      .setDepth(this.y - 1);
 
-    this.move(0);
+    this.updateVisuals();
   }
 
-  setRequestedRotationToward(targetScreen: Phaser.Types.Math.Vector2Like) {
+  setRequestedAzymuth(targetScreen: Phaser.Types.Math.Vector2Like) {
     const targetWorld = this.gameScene.getSurfaceWorldPosition(
       targetScreen,
       this._targetWorld
     );
 
-    this.requestedRotation = Phaser.Math.Angle.BetweenPoints(
+    this.requestedAzymuth = Phaser.Math.Angle.BetweenPoints(
       this.cannonWorld,
       targetWorld
     );
   }
 
   getMuzzleWorld() {
-    const cosElev = Math.cos(this.elevationRotation);
-    const sinElev = Math.sin(this.elevationRotation);
-    const cosAzim = Math.cos(this.shadow.rotation); // Azimuth based on shadow
-    const sinAzim = Math.sin(this.shadow.rotation);
+    const cosElev = Math.cos(this.altitude);
+    const sinElev = Math.sin(this.altitude);
+    const cosAzim = Math.cos(this.azymuth);
+    const sinAzim = Math.sin(this.azymuth);
 
     this._muzzleWorldOffset.x = this.barrelLength * cosElev * cosAzim;
     this._muzzleWorldOffset.y = this.barrelLength * cosElev * sinAzim;
@@ -165,165 +171,172 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   readyToShoot() {
     return (
-      Math.abs(this.shadow.rotation - this.requestedRotation) < 0.01 &&
+      Math.abs(this.azymuth - this.requestedAzymuth) < 0.01 &&
       this.recoilTween === null
     );
   }
 
   getVelocity() {
-    const horizontalSpeed = this.muzzleSpeed * Math.cos(this.elevationRotation);
-    const verticalSpeed = this.muzzleSpeed * Math.sin(this.elevationRotation);
+    const horizontalSpeed = this.muzzleSpeed * Math.cos(this.altitude);
+    const verticalSpeed = this.muzzleSpeed * Math.sin(this.altitude);
 
     this._velocity.set(
-      horizontalSpeed * Math.cos(this.shadow.rotation),
-      horizontalSpeed * Math.sin(this.shadow.rotation),
+      horizontalSpeed * Math.cos(this.azymuth),
+      horizontalSpeed * Math.sin(this.azymuth),
       verticalSpeed
     );
 
     return this._velocity;
   }
 
-  shoot() {
-    const recoilRotation = this.shadow.rotation + Math.PI; // 180 degrees rotation to the back
-    const recoilDistance = this.cannonLength * RECOIL_FACTOR;
-    const wheelsRecoilDistance = recoilDistance * 0.5;
-
-    if (DO_RECOIL) {
-      this.wheelsRecoilTween = this.gameScene.tweens.chain({
-        targets: this.wheels,
-        tweens: [
-          {
-            delay: PRE_RECOIL_DURATION_MS + PRE_WHEELS_RECOIL_DURATION_MS,
-            x: this.screen.x + wheelsRecoilDistance * Math.cos(recoilRotation),
-            y: this.screen.y + wheelsRecoilDistance * Math.sin(recoilRotation),
-            duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
-            ease: "Sine.easeOut",
-          },
-          {
-            x: this.screen.x,
-            y: this.screen.y,
-            duration: RECOIL_RETURN_DURATION_MS,
-            ease: "Sine.easeIn",
-          },
-        ],
-        onComplete: () => {
-          this.shadowRecoilTween = null;
-        },
-        onStop: () => {
-          this.shadowRecoilTween = null;
-          this.shadow.setPosition(this.screen.x, this.screen.y);
-        },
-      });
-      this.shadowRecoilTween = this.gameScene.tweens.chain({
-        targets: this.shadow,
-        tweens: [
-          {
-            delay: PRE_RECOIL_DURATION_MS,
-            x: this.screen.x + recoilDistance * Math.cos(recoilRotation),
-            y: this.screen.y + recoilDistance * Math.sin(recoilRotation),
-            duration: RECOIL_DURATION_MS,
-            ease: "Sine.easeOut",
-          },
-          {
-            x: this.screen.x,
-            y: this.screen.y,
-            duration: RECOIL_RETURN_DURATION_MS,
-            ease: "Sine.easeIn",
-          },
-        ],
-        onComplete: () => {
-          this.shadowRecoilTween = null;
-        },
-        onStop: () => {
-          this.shadowRecoilTween = null;
-          this.shadow.setPosition(this.screen.x, this.screen.y);
-        },
-      });
-
-      this.recoilTween = this.gameScene.tweens.chain({
-        targets: this,
-        tweens: [
-          {
-            delay: PRE_RECOIL_DURATION_MS,
-            x: this.cannonScreen.x + recoilDistance * Math.cos(recoilRotation),
-            y: this.cannonScreen.y + recoilDistance * Math.sin(recoilRotation),
-            duration: RECOIL_DURATION_MS,
-            ease: "Sine.easeOut",
-          },
-          {
-            x: this.cannonScreen.x,
-            y: this.cannonScreen.y,
-            duration: RECOIL_RETURN_DURATION_MS,
-            ease: "Sine.easeIn",
-          },
-        ],
-        onComplete: () => {
-          this.recoilTween = null;
-        },
-        onStop: () => {
-          this.recoilTween = null;
-          this.setPosition(this.cannonScreen.x, this.cannonScreen.y);
-        },
-      });
-    }
-
+  shoot(visible: boolean) {
     const muzzleWorld = this.getMuzzleWorld();
-    const muzzleScreen = this.gameScene.getScreenPosition(
-      muzzleWorld,
-      this._muzzleScreen
-    );
-
-    this.muzzleParticleEmitter
-      .setParticleGravity(0, 9.8 * PIXELS_PER_METER * Math.cos(this.rotation))
-      .setPosition(muzzleScreen.x, muzzleScreen.y)
-      .setRotation(this.rotation)
-      .explode();
-
-    this.muzzleFlashEmitter
-      .setPosition(muzzleScreen.x, muzzleScreen.y)
-      .setRotation(this.rotation)
-      .explode();
-
-    this.gameScene.cameras.main.shake(50, 0.002);
-
-    const blast = Math.ceil(Math.random() * 5);
-    if (PLAY_SOUNDS)
-      this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });
-
     const bullet = new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
 
     this.gameScene.bulletGroup.add(bullet);
+
+    if (PLAY_SOUNDS) {
+      const blast = Math.ceil(Math.random() * 5);
+      this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });
+    }
+
+    if (visible) {
+      if (DO_RECOIL) {
+        const recoilRotation = this.azymuth + Math.PI; // 180 degrees rotation
+        const recoilDistance = this.cannonLength * RECOIL_FACTOR;
+        const wheelsRecoilDistance = recoilDistance * 0.5;
+
+        this.wheelsRecoilTween = this.gameScene.tweens.chain({
+          targets: this.wheels,
+          tweens: [
+            {
+              delay: PRE_RECOIL_DURATION_MS + PRE_WHEELS_RECOIL_DURATION_MS,
+              x:
+                this.screen.x + wheelsRecoilDistance * Math.cos(recoilRotation),
+              y:
+                this.screen.y + wheelsRecoilDistance * Math.sin(recoilRotation),
+              duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
+              ease: "Sine.easeOut",
+            },
+            {
+              x: this.screen.x,
+              y: this.screen.y,
+              duration: RECOIL_RETURN_DURATION_MS,
+              ease: "Sine.easeIn",
+            },
+          ],
+          onComplete: () => {
+            this.shadowRecoilTween = null;
+          },
+          onStop: () => {
+            this.shadowRecoilTween = null;
+            this.shadow.setPosition(this.screen.x, this.screen.y);
+          },
+        });
+        this.shadowRecoilTween = this.gameScene.tweens.chain({
+          targets: this.shadow,
+          tweens: [
+            {
+              delay: PRE_RECOIL_DURATION_MS,
+              x: this.screen.x + recoilDistance * Math.cos(recoilRotation),
+              y: this.screen.y + recoilDistance * Math.sin(recoilRotation),
+              duration: RECOIL_DURATION_MS,
+              ease: "Sine.easeOut",
+            },
+            {
+              x: this.screen.x,
+              y: this.screen.y,
+              duration: RECOIL_RETURN_DURATION_MS,
+              ease: "Sine.easeIn",
+            },
+          ],
+          onComplete: () => {
+            this.shadowRecoilTween = null;
+          },
+          onStop: () => {
+            this.shadowRecoilTween = null;
+            this.shadow.setPosition(this.screen.x, this.screen.y);
+          },
+        });
+
+        this.recoilTween = this.gameScene.tweens.chain({
+          targets: this,
+          tweens: [
+            {
+              delay: PRE_RECOIL_DURATION_MS,
+              x:
+                this.cannonScreen.x + recoilDistance * Math.cos(recoilRotation),
+              y:
+                this.cannonScreen.y + recoilDistance * Math.sin(recoilRotation),
+              duration: RECOIL_DURATION_MS,
+              ease: "Sine.easeOut",
+            },
+            {
+              x: this.cannonScreen.x,
+              y: this.cannonScreen.y,
+              duration: RECOIL_RETURN_DURATION_MS,
+              ease: "Sine.easeIn",
+            },
+          ],
+          onComplete: () => {
+            this.recoilTween = null;
+          },
+          onStop: () => {
+            this.recoilTween = null;
+            this.setPosition(this.cannonScreen.x, this.cannonScreen.y);
+          },
+        });
+      }
+
+      const muzzleScreen = this.gameScene.getScreenPosition(
+        muzzleWorld,
+        this._muzzleScreen
+      );
+
+      this.muzzleParticleEmitter
+        .setParticleGravity(0, 9.8 * PIXELS_PER_METER * Math.cos(this.azymuth))
+        .setPosition(muzzleScreen.x, muzzleScreen.y)
+        .setRotation(this.azymuth)
+        .explode();
+
+      this.muzzleFlashEmitter
+        .setPosition(muzzleScreen.x, muzzleScreen.y)
+        .setRotation(this.azymuth)
+        .explode();
+
+      this.gameScene.cameras.main.shake(50, 0.002);
+    }
   }
 
   // Rotates the cannon sprite and shadow towards the mouse pointer
-  move(delta: number) {
+  move(delta: number, visible: boolean) {
     // Calculate max rotation step for this frame
     const maxAngleStep = TURN_RATE_RADIANS_PER_SECOND * (delta / 1000.0);
 
     // Calculate the new azimuth using RotateTo for smooth interpolation
     // This function handles wrapping around -PI/PI and finds the shortest path.
-    const newRotation = Phaser.Math.Angle.RotateTo(
-      this.shadow.rotation,
-      this.requestedRotation,
+    this.azymuth = Phaser.Math.Angle.RotateTo(
+      this.azymuth,
+      this.requestedAzymuth,
       maxAngleStep
     );
 
-    this.shadow.rotation =
-      Math.abs(newRotation - this.requestedRotation) < 0.01
-        ? this.requestedRotation
-        : newRotation;
+    if (visible) this.updateVisuals();
+  }
 
-    this.wheels.rotation = CANNON_WHEELS_SPRITE_ROTATION + this.shadow.rotation;
-
+  updateVisuals() {
+    // Update cannon's rotation
+    const velocity = this.getVelocity();
     const screenVelocity = this.gameScene.getScreenPosition(
-      this.getVelocity(), // Use the reconstructed vector
-      this._screenVelocity // Reuse cache vector for output
+      velocity,
+      this._screenVelocity
     );
 
+    this.shadow.setRotation(this.azymuth);
+    this.wheels.setRotation(CANNON_WHEELS_SPRITE_ROTATION + this.azymuth);
     this.rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
 
     // Update cannon scale based on projected barrel length (perspective effect)
-    // Need to get the muzzle position based on the *new* orientation
     const muzzleWorld = this.getMuzzleWorld();
     const muzzleScreen = this.gameScene.getScreenPosition(
       muzzleWorld,
@@ -339,17 +352,26 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   requestShoot(targetScreen: Phaser.Types.Math.Vector2Like) {
     this.shootRequested = true;
-    this.setRequestedRotationToward(targetScreen);
+    this.setRequestedAzymuth(targetScreen);
   }
 
   preUpdate(time: number, delta: number) {
+    const visible = this.gameScene.inViewport(this);
+    const timerInterval = visible
+      ? VISIBLE_UPDATE_INTERVAL
+      : INVISIBLE_UPDATE_INTERVAL;
+
     if (this.readyToShoot()) {
       if (this.shootRequested) {
         this.shootRequested = false;
-        this.shoot();
+        this.shoot(visible);
       }
     } else {
-      this.move(delta);
+      this.moveTimer += delta;
+      if (this.moveTimer >= timerInterval) {
+        this.move(this.moveTimer, visible);
+        this.moveTimer = 0;
+      }
     }
   }
 }

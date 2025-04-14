@@ -40,6 +40,7 @@ export function createEnemyContainer(
 export class Enemy extends Phaser.GameObjects.Image {
   constructor(scene: GameScene, x: number, y: number) {
     super(scene, x, y, ENEMY_SPRITE);
+    this.disableInteractive();
     scene.add.existing(this);
   }
 

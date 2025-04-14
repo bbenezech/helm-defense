@@ -11,6 +11,8 @@ import {
   PIXEL_CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
+  VISIBLE_UPDATE_INTERVAL,
+  INVISIBLE_UPDATE_INTERVAL,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 import { createCannonTexture } from "./lib/createCannonTexture";
@@ -207,7 +209,7 @@ export class GameScene extends Phaser.Scene {
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
-    this.cannon = new Cannon(this, this.tileToWorldPosition(34, 75));
+    this.cannon = new Cannon(this, this.tileToWorldPosition(34, 75), 270);
     this.bulletGroup = this.physics.add.group();
     this.enemyGroup = this.physics.add.group(enemies.list);
 
@@ -251,6 +253,16 @@ export class GameScene extends Phaser.Scene {
 
     // Re-apply bounds (usually not strictly necessary if map size doesn't change, but safe)
     // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+  }
+
+  inViewport(object: Phaser.GameObjects.Image): boolean {
+    const bounds = this.cameras.main.worldView;
+    return (
+      object.x >= bounds.x - 200 &&
+      object.x <= bounds.right + 200 &&
+      object.y >= bounds.y - 200 &&
+      object.y <= bounds.bottom + 200
+    );
   }
 
   update(time: number, delta: number) {

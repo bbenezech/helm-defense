@@ -12,3 +12,5 @@ export const CANNON_WHEELS_SPRITE = "cannon-wheels";
 export const CANNON_WHEELS_SPRITE_ROTATION = Math.PI * 1.5; // to make it face right
 export const FLARES = "flares";
 export const PLAY_SOUNDS = false;
+export const VISIBLE_UPDATE_INTERVAL = 1; // Target 60 FPS when visible
+export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisible
