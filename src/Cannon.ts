@@ -86,7 +86,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     const originY = 0.5;
 
     this.gameScene.add.existing(
-      this.setOrigin(originX, originY).setDepth(this.y).disableInteractive()
+      this.setOrigin(originX, originY).setDepth(this.y)
     );
 
     this.shadow = this.gameScene.add
@@ -94,15 +94,13 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setTint(0x000000)
       .setAlpha(0.3)
       .setOrigin(originX, originY)
-      .setDepth(this.y - 1)
-      .disableInteractive();
+      .setDepth(this.y - 1);
 
     this.wheels = this.gameScene.add
       .sprite(this.screen.x, this.screen.y, CANNON_WHEELS_SPRITE)
       .setScale(3)
       .setOrigin(0.5, 0.5)
-      .setDepth(this.y - 2)
-      .disableInteractive();
+      .setDepth(this.y - 2);
 
     this.barrelLength = this.cannonLength * (1 - originX);
     this.muzzleSpeed = INITIAL_SPEED_METERS_PER_SECOND * PIXELS_PER_METER;

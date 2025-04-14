@@ -36,7 +36,6 @@ export class Bullet extends Phaser.GameObjects.Image {
     velocity: Phaser.Math.Vector3
   ) {
     super(gameScene, 0, 0, BULLET_SPRITE);
-    this.disableInteractive();
 
     this.world = world.clone();
     this.velocity = velocity.clone();

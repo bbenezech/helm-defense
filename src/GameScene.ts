@@ -11,8 +11,6 @@ import {
   PIXEL_CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
-  VISIBLE_UPDATE_INTERVAL,
-  INVISIBLE_UPDATE_INTERVAL,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 import { createCannonTexture } from "./lib/createCannonTexture";
@@ -113,30 +111,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.tilemapTiledJSON(TILE_MAP, "assets/map.json");
+    this.load.tilemapTiledJSON(TILE_MAP, "map.json");
     this.load.image(
       TOWN_SPRITE,
-      "assets/kenney_tiny-town/Tilemap/tilemap_extruded.png"
+      "kenney_tiny-town/Tilemap/tilemap_extruded.png"
     );
     this.load.image(
       DUNGEON_SPRITE,
-      "assets/kenney_tiny-dungeon/Tilemap/tilemap_extruded.png"
+      "kenney_tiny-dungeon/Tilemap/tilemap_extruded.png"
     );
-    this.load.image(
-      ENEMY_SPRITE,
-      "assets/kenney_tiny-dungeon/Tiles/tile_0100.png"
-    );
+    this.load.image(ENEMY_SPRITE, "kenney_tiny-dungeon/Tiles/tile_0100.png");
     this.load.image(
       CANNON_WHEELS_SPRITE,
-      "assets/kenney_tiny-dungeon/Tiles/tile_0073.png"
+      "kenney_tiny-dungeon/Tiles/tile_0073.png"
     );
-    this.load.atlas(FLARES, "assets/flares.png", "assets/flares.json");
+    this.load.atlas(FLARES, "flares.png", "flares.json");
 
-    this.load.audio("cannon_blast_1", "assets/cannon_blast_1.mp3");
-    this.load.audio("cannon_blast_2", "assets/cannon_blast_2.mp3");
-    this.load.audio("cannon_blast_3", "assets/cannon_blast_3.mp3");
-    this.load.audio("cannon_blast_4", "assets/cannon_blast_4.mp3");
-    this.load.audio("cannon_blast_5", "assets/cannon_blast_5.mp3");
+    this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
+    this.load.audio("cannon_blast_2", "cannon_blast_2.mp3");
+    this.load.audio("cannon_blast_3", "cannon_blast_3.mp3");
+    this.load.audio("cannon_blast_4", "cannon_blast_4.mp3");
+    this.load.audio("cannon_blast_5", "cannon_blast_5.mp3");
 
     const cannonColors: PixelCannonColors = {
       base: 0x444444, // Medium Grey
