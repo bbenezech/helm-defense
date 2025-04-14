@@ -116,6 +116,19 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
 
+    // Destroy if out of map bounds
+    const mapWidth = this.gameScene.map.widthInPixels;
+    const mapHeight = this.gameScene.map.heightInPixels;
+    if (
+      this.world.x < 0 ||
+      this.world.x > mapWidth ||
+      this.world.y < 0 ||
+      this.world.y > mapHeight
+    ) {
+      this.destroy();
+      return; // Exit early if destroyed
+    }
+
     const surfaceZ =
       this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0; // null means the ground is behind a building, let's assume 0 for now
 
@@ -162,7 +175,8 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {
       this.move(this.moveTimer);
-      if (visible) this.updateVisuals();
+      // Update visuals only if still visible and active
+      if (this.active && visible) this.updateVisuals();
       this.moveTimer = 0;
     }
   }
