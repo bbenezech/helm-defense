@@ -6,6 +6,8 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
+    "build:gh": "vite build --mode gh-pages",
+    "preview": "vite preview --port 8080",
     "serve": "vite serve"
   },
   "dependencies": {
