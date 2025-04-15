@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "phaser": "^3.88.2",
+    "serve": "^14.2.4",
     "vite": "^6.2.6"
   }
 }

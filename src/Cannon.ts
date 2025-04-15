@@ -1,6 +1,6 @@
 import { Bullet } from "./Bullet";
 import {
-  PIXELS_PER_METER,
+  WORLD_UNIT_PER_METER,
   SMALL_WORLD_FACTOR,
   PARTICLE_SPRITE,
   CANNON_SPRITE,
@@ -19,8 +19,8 @@ const RECOIL_DURATION_MS = 50;
 const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
-const CANNON_GROUND_CLEARANCE = 0.5 * PIXELS_PER_METER;
-const INITIAL_SPEED_METERS_PER_SECOND = 440 / SMALL_WORLD_FACTOR;
+const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
+const INITIAL_SPEED_METERS_PER_SECOND = 440; // 440 m/s
 const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 
@@ -103,7 +103,9 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setDepth(this.y - 2);
 
     this.barrelLength = this.cannonLength * (1 - originX);
-    this.muzzleSpeed = INITIAL_SPEED_METERS_PER_SECOND * PIXELS_PER_METER;
+    this.muzzleSpeed =
+      (INITIAL_SPEED_METERS_PER_SECOND * WORLD_UNIT_PER_METER) /
+      SMALL_WORLD_FACTOR;
     this.altitude = INITIAL_ALTITUDE;
     this.requestedAzymuth = this.azymuth = Phaser.Math.DegToRad(rotationDeg); // Pointing to the top
     this.shootRequested = false;
@@ -157,10 +159,12 @@ export class Cannon extends Phaser.GameObjects.Image {
     const sinElev = Math.sin(this.altitude);
     const cosAzim = Math.cos(this.azymuth);
     const sinAzim = Math.sin(this.azymuth);
+    const barrelLengthWorld =
+      this.barrelLength * this.gameScene.screenToWorldHorizontal.x; // the barrel length is measured on the X axis in world units
 
-    this._muzzleWorldOffset.x = this.barrelLength * cosElev * cosAzim;
-    this._muzzleWorldOffset.y = this.barrelLength * cosElev * sinAzim;
-    this._muzzleWorldOffset.z = this.barrelLength * sinElev;
+    this._muzzleWorldOffset.x = barrelLengthWorld * cosElev * cosAzim;
+    this._muzzleWorldOffset.y = barrelLengthWorld * cosElev * sinAzim;
+    this._muzzleWorldOffset.z = barrelLengthWorld * sinElev;
 
     this._muzzleWorld.addVectors(this.cannonWorld, this._muzzleWorldOffset);
 
@@ -191,7 +195,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     const muzzleWorld = this.getMuzzleWorld();
     const bullet = new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
 
-    this.gameScene.bulletGroup.add(bullet);
+    this.gameScene.bullets.add(bullet);
 
     if (PLAY_SOUNDS) {
       const blast = Math.ceil(Math.random() * 5);
@@ -292,14 +296,20 @@ export class Cannon extends Phaser.GameObjects.Image {
       );
 
       this.muzzleParticleEmitter
-        .setParticleGravity(0, 9.8 * PIXELS_PER_METER * Math.cos(this.azymuth))
+        .setParticleGravity(
+          0,
+          9.8 *
+            WORLD_UNIT_PER_METER *
+            this.gameScene.worldToScreen.z *
+            Math.cos(this.azymuth)
+        )
         .setPosition(muzzleScreen.x, muzzleScreen.y)
-        .setRotation(this.azymuth)
+        .setRotation(this.rotation)
         .explode();
 
       this.muzzleFlashEmitter
         .setPosition(muzzleScreen.x, muzzleScreen.y)
-        .setRotation(this.azymuth)
+        .setRotation(this.rotation)
         .explode();
 
       this.gameScene.cameras.main.shake(50, 0.002);

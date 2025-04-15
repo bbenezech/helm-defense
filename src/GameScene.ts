@@ -5,12 +5,17 @@ import {
   CANNON_SPRITE,
   ENEMY_SPRITE,
   CANNON_SHADOW_SPRITE,
-  BULLET_SHADOW_SPRITE,
   TILE_HEIGHT_PX,
   PARTICLE_SPRITE,
   PIXEL_CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
+  PERSPECTIVE,
+  AXONOMETRIC,
+  BULLET_RADIUS_METERS,
+  WORLD_UNIT_PER_METER,
+  SMALL_WORLD_FACTOR,
+  BIG_WORLD_FACTOR,
 } from "./constants";
 import { createEnemyContainer, Enemy } from "./Enemy";
 import { createCannonTexture } from "./lib/createCannonTexture";
@@ -26,24 +31,68 @@ const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "kenney-tiny-town";
 const DUNGEON_SPRITE = "kenney-tiny-dungeon";
 const TILE_MAP = "map";
-const TILT_FACTOR = 1;
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
 
 export class GameScene extends Phaser.Scene {
-  private _vector2: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
+  private _pointerScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private _projectedSurfaceZ: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
   cannon!: Cannon;
   debugGraphics!: Phaser.GameObjects.Graphics;
-  bulletGroup!: Phaser.Physics.Arcade.Group;
-  enemyGroup!: Phaser.Physics.Arcade.Group;
+  bullets!: Phaser.Physics.Arcade.Group;
+  enemies!: Phaser.Physics.Arcade.Group;
   score = 0;
+  X_FACTOR = 1;
+  Y_FACTOR: number;
+  Z_FACTOR: number;
+  screenToWorldHorizontal: Phaser.Math.Vector3;
+  screenToWorldVertical: Phaser.Math.Vector3;
+  worldToScreen: Phaser.Math.Vector3;
 
   constructor() {
     super({ key: "GameScene" });
+
+    const verticalCamAngle = PERSPECTIVE;
+    const axonometric = AXONOMETRIC;
+    const camRotation = Phaser.Math.DegToRad(verticalCamAngle);
+
+    const cosCam = Math.cos(camRotation);
+    const sinCam = Math.sin(camRotation);
+    const cotCam = cosCam / sinCam;
+
+    if (axonometric) {
+      this.X_FACTOR = 1;
+      this.Y_FACTOR = sinCam;
+      this.Z_FACTOR = cosCam;
+    } else {
+      // oblique projection
+      this.X_FACTOR = 1;
+      this.Y_FACTOR = 1;
+      this.Z_FACTOR = cotCam;
+    }
+
+    this.screenToWorldHorizontal = new Phaser.Math.Vector3(
+      1,
+      1 / this.Y_FACTOR,
+      0
+    ); // if Z is constant
+    // if Y is constant
+    this.screenToWorldVertical = new Phaser.Math.Vector3(
+      1,
+      0,
+      1 / this.Z_FACTOR
+    );
+
+    // convert a world unit to screen pixels on all 3 axes
+    this.worldToScreen = new Phaser.Math.Vector3(
+      1,
+      this.Y_FACTOR,
+      this.Z_FACTOR
+    );
   }
 
   // Convert tile coordinates to world position
@@ -52,10 +101,19 @@ export class GameScene extends Phaser.Scene {
     screen.x = this.map.tileToWorldX(tileX)!;
     screen.y = this.map.tileToWorldY(tileY)!;
 
+    // this.debugGraphics.clear();
+    // this.debugGraphics.fillStyle(0x00ff00, 1);
+    // this.debugGraphics.fillRect(screen.x - 4, screen.y - 4, 8, 8);
+
+    const world = this.getSurfaceWorldPosition(
+      screen,
+      new Phaser.Math.Vector3()
+    );
+
     if (screen.x === null || screen.y === null)
       throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
 
-    return this.getSurfaceWorldPosition(screen, new Phaser.Math.Vector3());
+    return world;
   }
 
   // Get the building tile at the given screen position
@@ -68,33 +126,43 @@ export class GameScene extends Phaser.Scene {
   // This one is not simple
   // We need to check for occlusion by buildings (this is a naive approach)
   // We get 2 heights:
-  // - the surface height of the tile at the world position (surfaceZ)
-  // - the surface height at the projected screen position of the surfaceZ (projectedSurfaceZ)
+  // - the surface height of the tile at the world position of the ground (surfaceZ)
+  // - the surface height at the projected screen position of the ground surfaceZ (projectedSurfaceZ)
   // If they are the same, surface is on a building
   // If they are different, surface is occluded by a building, return null
   // null really means world(x,y) is visually behind a building, caller can assume 0 if it makes sense
   getSurfaceZFromWorldPosition(world: Phaser.Math.Vector3): number | null {
-    const surfaceZ = this.getSurfaceZFromScreenPosition(world);
-    if (surfaceZ === 0) return surfaceZ; // nothing can occlude a ground surface at minimum z in a top down view, early return
     const oldWorldZ = world.z; // save the original world z, we are going to mutate it for perf
-    world.z = surfaceZ;
+    world.z = 0; // set z to 0 to get the screen position at ground level
+    const groundScreen = this.getScreenPosition(world, this._projectedSurfaceZ);
+    const surfaceZ = this.getSurfaceZFromScreenPosition(groundScreen);
+    if (surfaceZ === 0) {
+      world.z = oldWorldZ;
+      return surfaceZ; // nothing can occlude a ground surface at minimum z in a top down view, early return
+    }
+
+    world.z = surfaceZ; // set z to the surface height to get the screen position of the world at surface level
     const projectedSurfaceZ = this.getSurfaceZFromScreenPosition(
-      this.getScreenPosition(world, this._vector2)
+      this.getScreenPosition(world, this._projectedSurfaceZ)
     );
-    world.z = oldWorldZ; // fix the mutated input world
+
+    world.z = oldWorldZ;
     return projectedSurfaceZ === surfaceZ ? surfaceZ : null;
   }
 
   // Get the surface height at the given screen position
   getSurfaceZFromScreenPosition(screen: Phaser.Types.Math.Vector2Like): number {
+    if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
     const buildingTile = this.getBuildingTileFromScreenPosition(screen);
-    return buildingTile ? 2 * TILE_HEIGHT_PX : 0; // top of building is 2 tiles high
+
+    // top of building is 2 tiles high
+    return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
   }
 
   // Get the screen position of the given world position
   getScreenPosition(world: Phaser.Math.Vector3, output: Phaser.Math.Vector2) {
     output.x = world.x;
-    output.y = world.y - world.z * TILT_FACTOR;
+    output.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
     return output;
   }
 
@@ -105,7 +173,7 @@ export class GameScene extends Phaser.Scene {
   ) {
     const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
     output.x = screen.x;
-    output.y = screen.y + surfaceZ * TILT_FACTOR;
+    output.y = (screen.y + surfaceZ * this.Z_FACTOR) / this.Y_FACTOR;
     output.z = surfaceZ;
     return output;
   }
@@ -139,12 +207,40 @@ export class GameScene extends Phaser.Scene {
       highlight: 0xcccccc, // Light Grey
     };
 
+    const bulletRadius = Math.ceil(
+      BULLET_RADIUS_METERS *
+        WORLD_UNIT_PER_METER *
+        this.worldToScreen.x *
+        BIG_WORLD_FACTOR
+    );
+
+    const bulletDiameter = bulletRadius * 2;
+    const cannonDiameter = bulletDiameter + 2;
+    const cannonLength = bulletDiameter * 5;
+
     createParticleTexture(this, PARTICLE_SPRITE);
-    createPixelCannonTexture(this, PIXEL_CANNON_SPRITE, cannonColors, 30, 10);
-    createCannonTexture(this, CANNON_SPRITE, 0x444444, 30, 10);
-    createCannonTexture(this, CANNON_SHADOW_SPRITE, 0x000000, 30, 10);
-    createCircleTexture(this, BULLET_SPRITE, 0xff0000, 10);
-    createCircleTexture(this, BULLET_SHADOW_SPRITE, 0x000000, 8);
+    createPixelCannonTexture(
+      this,
+      CANNON_SPRITE,
+      cannonColors,
+      cannonLength,
+      cannonDiameter
+    );
+    createCannonTexture(
+      this,
+      CANNON_SPRITE,
+      0x444444,
+      cannonLength,
+      cannonDiameter
+    );
+    createCannonTexture(
+      this,
+      CANNON_SHADOW_SPRITE,
+      0x000000,
+      cannonLength,
+      cannonDiameter
+    );
+    createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletDiameter);
   }
 
   create() {
@@ -204,19 +300,20 @@ export class GameScene extends Phaser.Scene {
     const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
-    this.cannon = new Cannon(this, this.tileToWorldPosition(34, 75), 270);
-    this.bulletGroup = this.physics.add.group();
-    this.enemyGroup = this.physics.add.group(enemies.list);
+    const cannonWorld = this.tileToWorldPosition(34, 75);
+    this.cannon = new Cannon(this, cannonWorld, 270);
+    this.bullets = this.physics.add.group();
+    this.enemies = this.physics.add.group(enemies.list);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      this._vector2.set(pointer.worldX, pointer.worldY);
-      this.cannon.requestShoot(this._vector2);
+      this._pointerScreen.set(pointer.worldX, pointer.worldY);
+      this.cannon.requestShoot(this._pointerScreen);
     });
 
     this.physics.add.overlap(
-      this.bulletGroup,
-      this.enemyGroup,
+      this.bullets,
+      this.enemies,
       (bullet, enemy) => {
         if (
           (bullet as Bullet).groundElevation() > (enemy as Enemy).displayHeight
@@ -250,13 +347,13 @@ export class GameScene extends Phaser.Scene {
     // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
   }
 
-  inViewport(object: { world: Phaser.Math.Vector3 }): boolean {
+  inViewport(object: Phaser.GameObjects.Image): boolean {
     const bounds = this.cameras.main.worldView;
     return (
-      object.world.x >= bounds.x - 200 &&
-      object.world.x <= bounds.right + 200 &&
-      object.world.y >= bounds.y - 200 &&
-      object.world.y <= bounds.bottom + 200
+      object.x >= bounds.x - 200 &&
+      object.x <= bounds.right + 200 &&
+      object.y >= bounds.y - 200 &&
+      object.y <= bounds.bottom + 200
     );
   }
 

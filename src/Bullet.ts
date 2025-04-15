@@ -1,21 +1,21 @@
 import * as Phaser from "phaser";
 import {
-  BULLET_SHADOW_SPRITE,
   BULLET_SPRITE,
   INVISIBLE_UPDATE_INTERVAL,
-  PIXELS_PER_METER,
+  WORLD_UNIT_PER_METER,
   VISIBLE_UPDATE_INTERVAL,
+  BULLET_RADIUS_METERS,
 } from "./constants";
 import { GameScene } from "./GameScene";
 
-const GRAVITY = 9.81 * PIXELS_PER_METER;
+const GRAVITY = 9.81 * WORLD_UNIT_PER_METER; // WU/s^2
 const GROUND_FACTOR = 0.7; // Multiplier for horizontal velocity on bounce (1 = no friction)
 const BOUNCE_FACTOR = 0.5; // Multiplier for vertical velocity on bounce (0 = no bounce, 1 = perfect bounce)
 // canon de 12 livres
 const BULLET_MASS_KG = 6;
-const BULLET_RADIUS_METERS = 0.06;
-const C_d = 0.5;
+const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
+const BULLET_AREA_M2 = Math.PI * BULLET_RADIUS_METERS * BULLET_RADIUS_METERS; // Cross-sectional area in m^2
 
 export class Bullet extends Phaser.GameObjects.Image {
   private _screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -28,7 +28,7 @@ export class Bullet extends Phaser.GameObjects.Image {
   velocity: Phaser.Math.Vector3;
   shadowSprite: Phaser.GameObjects.Image;
   gameScene: GameScene;
-  dragFactor: number;
+  dragConstantSI: number;
 
   constructor(
     gameScene: GameScene,
@@ -40,20 +40,11 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.world = world.clone();
     this.velocity = velocity.clone();
     this.gameScene = gameScene;
-    this.dragFactor =
-      (0.5 *
-        rho *
-        C_d *
-        Math.PI *
-        BULLET_RADIUS_METERS *
-        BULLET_RADIUS_METERS) /
-      PIXELS_PER_METER;
+    // ½ * ρ * v²
+    this.dragConstantSI = 0.5 * rho * C_d * BULLET_AREA_M2;
 
     this.gameScene.add.existing(this);
-    this.shadowSprite = gameScene.add
-      .image(0, 0, BULLET_SHADOW_SPRITE)
-      .setAlpha(0.5);
-
+    this.shadowSprite = gameScene.add.image(0, 0, BULLET_SPRITE).setAlpha(0.5);
     this.updateVisuals();
   }
 
@@ -78,33 +69,42 @@ export class Bullet extends Phaser.GameObjects.Image {
   }
 
   move(delta: number) {
+    const speed = this.velocity.length(); // Speed in World Units / Second
+    if (speed === 0) return;
+
     const SECONDS = delta / 1000; // Convert ms to seconds for physics
 
     // --- Calculate Drag Acceleration ---
     let ax_drag = 0;
     let ay_drag = 0;
     let az_drag = 0;
-    const speed = this.velocity.length();
 
-    if (speed > 0.01) {
-      // Avoid division by zero and apply drag only if moving
-      // Drag force magnitude = k * speed^2 (simplified from |v|*v)
-      // Drag acceleration = F_drag / mass = (k * speed^2) / mass
-      // Direction is opposite velocity, so multiply by (-vx/speed), (-vy/speed), (-vz/speed)
-      const dragAccelMagnitude =
-        (this.dragFactor * speed * speed) / BULLET_MASS_KG;
+    const speed_si = speed / WORLD_UNIT_PER_METER; // Units: (WU/s) / (WU/m) = m/s
+    // Calculate Drag Force magnitude in SI units (Newtons)
+    // F_drag = k * speed_si^2
+    // Units: (kg/m) * (m/s)^2 = kg * m / s^2 (Newtons)
+    const F_drag_magnitude_si = this.dragConstantSI * speed_si * speed_si;
 
-      ax_drag = -dragAccelMagnitude * (this.velocity.x / speed);
-      ay_drag = -dragAccelMagnitude * (this.velocity.y / speed);
-      az_drag = -dragAccelMagnitude * (this.velocity.z / speed);
-    }
+    // Calculate Drag Acceleration magnitude in SI units (m/s^2)
+    // a = F / m
+    // Units: (kg * m / s^2) / kg = m / s^2
+    const accel_drag_magnitude_si = F_drag_magnitude_si / BULLET_MASS_KG;
+
+    // Convert Drag Acceleration magnitude back to World Units (World Units / s^2)
+    // Units: (m / s^2) * (WU / m) = WU / s^2
+    const accel_drag_magnitude_world =
+      accel_drag_magnitude_si * WORLD_UNIT_PER_METER;
+
+    ax_drag = accel_drag_magnitude_world * (this.velocity.x / speed);
+    ay_drag = accel_drag_magnitude_world * (this.velocity.y / speed);
+    az_drag = accel_drag_magnitude_world * (this.velocity.z / speed);
 
     // --- Calculate Total Acceleration ---
     // XY acceleration is just drag
-    const ax_total = ax_drag;
-    const ay_total = ay_drag;
+    const ax_total = -ax_drag;
+    const ay_total = -ay_drag;
     // Z acceleration includes drag AND gravity
-    const az_total = az_drag - GRAVITY; // Subtract gravity
+    const az_total = -az_drag - GRAVITY; // Subtract gravity
 
     this.velocity.x += ax_total * SECONDS;
     this.velocity.y += ay_total * SECONDS;
@@ -114,19 +114,6 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.world.x += this.velocity.x * SECONDS;
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
-
-    // Destroy if out of map bounds
-    const mapWidth = this.gameScene.map.widthInPixels;
-    const mapHeight = this.gameScene.map.heightInPixels;
-    if (
-      this.world.x < 0 ||
-      this.world.x > mapWidth ||
-      this.world.y < 0 ||
-      this.world.y > mapHeight
-    ) {
-      this.destroy();
-      return; // Exit early if destroyed
-    }
 
     const surfaceZ =
       this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0; // null means the ground is behind a building, let's assume 0 for now
@@ -152,6 +139,7 @@ export class Bullet extends Phaser.GameObjects.Image {
     }
 
     const screen = this.gameScene.getScreenPosition(this.world, this._screen);
+
     this.x = screen.x;
     this.y = screen.y;
   }
@@ -171,8 +159,7 @@ export class Bullet extends Phaser.GameObjects.Image {
   }
 
   preUpdate(time: number, delta: number) {
-    if (this.active === false) return;
-    const visible = this.gameScene.inViewport(this);
+    const visible = true;
     const timerInterval = visible
       ? VISIBLE_UPDATE_INTERVAL
       : INVISIBLE_UPDATE_INTERVAL;
