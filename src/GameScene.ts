@@ -31,6 +31,7 @@ const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "kenney-tiny-town";
 const DUNGEON_SPRITE = "kenney-tiny-dungeon";
 const TILE_MAP = "map";
+const GROUND_NORMAL = new Phaser.Math.Vector3(0, 0, 1);
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
@@ -120,6 +121,20 @@ export class GameScene extends Phaser.Scene {
   getBuildingTileFromScreenPosition(screen: Phaser.Types.Math.Vector2Like) {
     // Caution, Phaser uses "worldXY" for the screen position in our naming convention
     return this.map.getTileAtWorldXY(screen.x, screen.y, false, undefined, 1);
+  }
+
+  // 0 => mud
+  // 1 => iron
+  getSurfaceHardnessFromWorldPosition(world: Phaser.Math.Vector3): number {
+    const screen = this.getScreenPosition(world, this._projectedSurfaceZ);
+
+    return 0.5;
+  }
+
+  getSurfaceNormalFromWorldPosition(
+    world: Phaser.Math.Vector3
+  ): Phaser.Math.Vector3 {
+    return GROUND_NORMAL;
   }
 
   // Get the building tile at the given world position

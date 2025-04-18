@@ -7,6 +7,7 @@ import {
   BULLET_RADIUS_METERS,
 } from "./constants";
 import { GameScene } from "./GameScene";
+import { sphereToGroundCollision } from "./lib/sphereToGroundCollision"; // Import the collision function
 
 const GRAVITY = 9.81 * WORLD_UNIT_PER_METER; // WU/s^2
 const GROUND_FACTOR = 0.7; // Multiplier for horizontal velocity on bounce (1 = no friction)
@@ -29,6 +30,8 @@ export class Bullet extends Phaser.GameObjects.Image {
   shadowSprite: Phaser.GameObjects.Image;
   gameScene: GameScene;
   dragConstantSI: number;
+  radius: number;
+  invMass: number;
 
   constructor(
     gameScene: GameScene,
@@ -42,9 +45,10 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.gameScene = gameScene;
     // ½ * ρ * v²
     this.dragConstantSI = 0.5 * rho * C_d * BULLET_AREA_M2;
-
+    this.radius = this.height / 2;
     this.gameScene.add.existing(this);
     this.shadowSprite = gameScene.add.image(0, 0, BULLET_SPRITE).setAlpha(0.5);
+    this.invMass = 1 / BULLET_MASS_KG;
     this.updateVisuals();
   }
 
@@ -115,27 +119,21 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
 
-    const surfaceZ =
-      this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0; // null means the ground is behind a building, let's assume 0 for now
+    // --- Ground Collision using sphereToGroundCollision ---
+    const touchingGround = sphereToGroundCollision(
+      this, // Pass the bullet instance (implements Solid interface)
+      this.radius
+    );
 
-    const relativeZ = Math.max(0, this.world.z - surfaceZ);
-    // Stop if slow and at ground
-    if (speed < 10 && relativeZ === 0) {
-      this.destroy();
-      return;
-    }
-
-    if (relativeZ === 0 && this.velocity.z < 0) {
-      // Moving down and at/below ground
-      // Correct position
-      this.world.z = surfaceZ;
-
-      // Bounce: Reverse and dampen vertical velocity
-      this.velocity.z *= -BOUNCE_FACTOR;
-
-      // Friction: Dampen horizontal velocity
-      this.velocity.x *= GROUND_FACTOR;
-      this.velocity.y *= GROUND_FACTOR;
+    if (touchingGround) {
+      // Stop if slow and on the ground
+      const speedSq = this.velocity.lengthSq(); // Use squared speed for efficiency
+      // Threshold in (WU/s)^2, adjust as needed (e.g., (1 WU/s)^2)
+      const stopSpeedThresholdSq = 1;
+      if (speedSq < stopSpeedThresholdSq) {
+        this.destroy();
+        return;
+      }
     }
 
     const screen = this.gameScene.getScreenPosition(this.world, this._screen);
