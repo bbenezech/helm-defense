@@ -1,79 +1,189 @@
-import { GameScene } from "../GameScene";
+import Phaser from "phaser";
+import { GameScene } from "../GameScene"; // Assuming GameScene has the methods
+import { SMALL_WORLD_FACTOR } from "../constants";
 
 interface Solid {
   world: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   gameScene: GameScene;
-  invMass: number;
+  invMass: number; // Inverse mass (1/mass), or 0 for static objects
 }
 
-const maxSpeed = 600;
+const EPSILON = 1e-6;
+const EPSILON_SQ = EPSILON * EPSILON;
+const MAX_SPEED = 600; // Max speed for normalization factor
+const MIN_BOUNCE_THRESHOLD = 0.1; // Calculated bounce percentages below this become zero
+
+const targetWorkspace = new Phaser.Math.Vector3();
 
 /**
- * Collides a sphere against height‑mapped ground using a 'softness' parameter.
- * Calculates bounce vs. splash based on surface softness and impact characteristics.
+ * Modifies a velocity vector in-place to simulate a bounce off a surface,
+ * preserving speed and interpolating the bounce direction. Uses a single sqrt.
  *
- * @param s           Solid whose .world and .velocity are Phaser.Math.Vector3
- * @param radius      Distance from sphere centre to its lowest point (≥ 0)
- * @returns           CollisionResult indicating if collision occurred and the splash/bounce factors.
+ * - Velocity magnitude remains constant.
+ * - Normal is the normalized surface normal vector.
+ * - interpolationFactor interpolates the output direction:
+ *   -  0: Output velocity is along the normal (soft "trampoline" bounce).
+ *   - 1: Output velocity is a specular reflection (hard "billiard" bounce).
+ *
+ * @param velocity The velocity vector to modify in-place.
+ * @param normal The normalized surface normal vector (unit-length).
+ * @param hardnessFactor A value typically between 0 and 1 controlling the bounce direction.
+ * @returns The modified velocity vector.
+ */
+export function bounce(
+  velocity: Phaser.Math.Vector3,
+  normal: Phaser.Math.Vector3, // unit-length
+  hardnessFactor: number
+): Phaser.Math.Vector3 {
+  // 1. Calculate and store the original speed (magnitude).
+  // This is the only place where sqrt is used.
+  const speed = velocity.length();
+
+  // Handle zero velocity case to avoid division by zero if normalization were needed later.
+  if (speed === 0) {
+    return velocity; // No speed, no bounce.
+  }
+
+  // 2. Calculate the dot product of velocity and normal.
+  // This represents the component of velocity projecting onto the normal.
+  // A negative value means the velocity is heading towards the surface.
+  const dotVN = velocity.dot(normal);
+
+  // Note: Standard physics often only reflects if dotVN < 0.
+  // Here, we follow the prompt to always interpolate based on the factor.
+  // If dotVN >= 0, the object is technically already moving away from the normal,
+  // but the reflection formula still works mathematically.
+
+  // 3. Clamp the interpolation factor to the valid range [0, 1].
+  const softnessFactor = 1 - hardnessFactor;
+
+  // 4. Calculate the target velocity components for the two extreme cases:
+
+  // Case A: Pure Normal Bounce (interpolationFactor = 0)
+  // The velocity should be directly along the normal, with the original speed.
+  const vNormX = normal.x * speed;
+  const vNormY = normal.y * speed;
+  const vNormZ = normal.z * speed;
+
+  // Case B: Pure Specular Reflection (interpolationFactor = 1)
+  // Use the reflection formula: v' = v - 2 * (v . n) * n
+  // This reflected vector inherently preserves the magnitude ('speed').
+  // Store original velocity components before modifying 'velocity' if we were
+  // calculating this in-place directly. Since we calculate components separately,
+  // we can use the current velocity values.
+  const twoDotVN = 2 * dotVN;
+  const vSpecX = velocity.x - twoDotVN * normal.x;
+  const vSpecY = velocity.y - twoDotVN * normal.y;
+  const vSpecZ = velocity.z - twoDotVN * normal.z;
+
+  // 5. Linearly interpolate between the normal bounce and specular reflection velocities.
+  // result = (1 - t) * vNormal + t * vSpecular
+  // Update the velocity vector in-place with the interpolated components.
+  velocity.x = softnessFactor * vNormX + hardnessFactor * vSpecX;
+  velocity.y = softnessFactor * vNormY + hardnessFactor * vSpecY;
+  velocity.z = softnessFactor * vNormZ + hardnessFactor * vSpecZ;
+
+  return velocity.normalize().scale(speed); // Normalize to maintain the original speed
+}
+
+/**
+ * Collides a sphere against height-mapped ground. Calculates bounce magnitude
+ * and direction based on impact characteristics and surface properties.
+ * Uses bounceOptimized for efficient directional calculation.
+ *
+ * @param s Solid object with position, velocity, etc.
+ * @param radius Sphere radius (center to lowest point).
+ * @returns Splash energy factor (number), or false if no collision.
  */
 export function sphereToGroundCollision(
   s: Solid,
   radius: number
-): number | boolean {
-  const epsilon = 1e-6;
-  if (s.velocity.z > epsilon) return false; // moving up
+): number | false {
+  // Check if moving up and away
+  if (s.velocity.z > EPSILON) return false;
 
-  // get ground properties from the tiles
-  const height = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0; // null means behind building, assume 0.
-  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world); // 1 for iron, 0 for mud
-  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world); // normal of the surface, -Pi/2 on flat surface
-  // Calculate dot product of velocity and normal.
-  // vn will be negative if velocity points towards the surface normal (typical impact).
-  const vn = s.velocity.dot(normal);
+  // Check if above ground
+  if (s.world.z > radius) return false;
 
-  // If vn >= 0, the object is moving parallel or away from the surface normal.
-  // This shouldn't happen if we are penetrating, unless velocity is zero or exactly parallel.
-  // We can treat this as a non-colliding case or grazing contact with no bounce.
-  if (vn >= -epsilon) {
-    s.world.z = height + radius; // Resolve penetration minimally
-    // Optionally apply friction here if desired for grazing contact
-    return 0; // No bounce/splash from this angle
+  // Get Ground Properties
+  const height = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
+  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world);
+  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world);
+
+  // Penetration & Impact Angle Check ---
+  const elevation = s.world.z - height;
+  const penetrationDepth = radius - elevation;
+
+  // Check for penetration
+  if (penetrationDepth <= EPSILON) {
+    return false; // Not penetrating or just touching
   }
 
-  const elevation = s.world.z - height;
-  if (elevation >= radius - epsilon) return false;
+  // Check relative direction (velocity vs normal)
+  const velocityDotNormal = s.velocity.dot(normal);
+  if (velocityDotNormal >= -EPSILON) {
+    // Moving parallel or away from the surface normal while penetrating (unusual).
+    // Resolve position minimally, but treat as grazing contact with no bounce impulse.
+    s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Use workspace vec
+    s.velocity.reset();
+    return 0;
+  }
 
-  const softness = 1 - hardness;
+  // Calculate Bounce Magnitude Factors ---
+  const initialSpeedSq = s.velocity.lengthSq();
+  // Handle case where object is penetrating but not moving significantly
+  if (initialSpeedSq < EPSILON_SQ) {
+    s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON));
+    s.velocity.reset(); // Stop it
+    return 0; // No splash energy
+  }
+  const initialSpeed = Math.sqrt(initialSpeedSq); // Needed for factors
 
-  const speed = s.velocity.length();
-  // Calculate cos(angle) between velocity and normal. Should be in [-1, 0] for impact.
-  const cosAngle = vn / speed; // Assumes normal is normalized, speed != 0
+  // Cosine of the angle between -velocity and normal (impact angle relative to normal)
+  // velocityDotNormal is negative, so -velocityDotNormal is positive.
+  const cosImpactAngle = -velocityDotNormal / initialSpeed; // Range [0, 1]
 
-  // Factor representing how parallel the impact is to the surface.
-  // abs(cosAngle) = 0 for parallel/grazing (90deg), 1 for perpendicular/head-on (180deg).
-  // We want the opposite: 1 for grazing, 0 for head-on.
-  const parallelFactor = Phaser.Math.Clamp(1.0 - Math.abs(cosAngle), 0.0, 1.0);
-  const fastFactor = Phaser.Math.Clamp(speed / maxSpeed, 0, 1);
-  const bullet_bounce_potential = Phaser.Math.Clamp(
-    parallelFactor * fastFactor, // Bounce potential higher for fast, grazing impacts
-    0,
-    1
+  // parallelFactor: 1 for grazing (cosImpactAngle=0), 0 for head-on (cosImpactAngle=1)
+  const parallelFactor = Phaser.Math.Clamp(1.0 - cosImpactAngle, 0.0, 1.0);
+  // fastFactor: How fast relative to max speed
+  const fastFactor = Phaser.Math.Clamp(initialSpeed / MAX_SPEED, 0.0, 1.0); // Use speed, not speedSq
+
+  // Potential for bounce based purely on impact angle and speed
+  const impactBouncePotential = Phaser.Math.Clamp(
+    parallelFactor * fastFactor, // Higher for fast, grazing impacts
+    0.0,
+    1.0
   );
 
-  let bounce_percentage =
-    bullet_bounce_potential > softness ? hardness * bullet_bounce_potential : 0; // SPLAAAAASH IN THE MUD
-  if (bounce_percentage < 0.1) bounce_percentage = 0; // small bounces are not interesting
-  const splash_percentage = 1.0 - bounce_percentage;
+  // Combine impact potential with surface properties. Bounce if impact potential > softness.
+  let bounce_percentage = hardness * impactBouncePotential;
 
-  // TODO
-  // when surface_bounce_potential is > 0.5, reduce the velocity on the normal: ball is "rolling" over hard surface
-  // when surface_bounce_potential is low, straighten velocity on the normal: ball is "absorbed" by the soft surface, and direction of the restitution is not completely vertical, but a bit more opposite from velocity, the ball is sent back from where it came from.
+  // Apply threshold: weak bounces become splashes (no speed retained)
+  if (bounce_percentage < MIN_BOUNCE_THRESHOLD) {
+    bounce_percentage = 0.0;
+  }
+  const energy =
+    (1.0 - bounce_percentage) *
+    0.5 *
+    (1.0 / s.invMass) *
+    initialSpeedSq *
+    SMALL_WORLD_FACTOR *
+    SMALL_WORLD_FACTOR; // Energy in Joules
+  const tnt_kg = energy / (4.184 * 10e6); // 1 TNT kg = 4.184 MJ
 
-  s.world.z = height + radius;
-  s.velocity.x *= bounce_percentage;
-  s.velocity.y *= bounce_percentage;
-  s.velocity.z *= -bounce_percentage;
+  if (bounce_percentage === 0) {
+    // No bounce, just resolve position
+    s.velocity.reset(); // Stop it
+    return tnt_kg;
+  }
 
-  return 0.5 * splash_percentage * speed * speed * (1 / s.invMass); // part of velocity energy sent back to the surface
+  // Push object out along the normal by the penetration depth
+  s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
+
+  bounce(s.velocity, normal, hardness); // Modifies s.velocity in-place
+
+  // Apply the calculated speed reduction (bounce_percentage)
+  s.velocity.scale(bounce_percentage);
+  return tnt_kg;
 }

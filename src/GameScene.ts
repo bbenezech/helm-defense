@@ -128,7 +128,7 @@ export class GameScene extends Phaser.Scene {
   getSurfaceHardnessFromWorldPosition(world: Phaser.Math.Vector3): number {
     const screen = this.getScreenPosition(world, this._projectedSurfaceZ);
 
-    return 0.5;
+    return 0.4;
   }
 
   getSurfaceNormalFromWorldPosition(

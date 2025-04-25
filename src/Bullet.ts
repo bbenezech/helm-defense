@@ -5,13 +5,12 @@ import {
   WORLD_UNIT_PER_METER,
   VISIBLE_UPDATE_INTERVAL,
   BULLET_RADIUS_METERS,
+  PARTICLE_SPRITE,
 } from "./constants";
 import { GameScene } from "./GameScene";
 import { sphereToGroundCollision } from "./lib/sphereToGroundCollision"; // Import the collision function
 
 const GRAVITY = 9.81 * WORLD_UNIT_PER_METER; // WU/s^2
-const GROUND_FACTOR = 0.7; // Multiplier for horizontal velocity on bounce (1 = no friction)
-const BOUNCE_FACTOR = 0.5; // Multiplier for vertical velocity on bounce (0 = no bounce, 1 = perfect bounce)
 // canon de 12 livres
 const BULLET_MASS_KG = 6;
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
@@ -32,23 +31,53 @@ export class Bullet extends Phaser.GameObjects.Image {
   dragConstantSI: number;
   radius: number;
   invMass: number;
+  explosionEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+  rotation: number;
 
   constructor(
     gameScene: GameScene,
     world: Phaser.Math.Vector3,
-    velocity: Phaser.Math.Vector3
+    velocity: Phaser.Math.Vector3,
+    rotation: number
   ) {
     super(gameScene, 0, 0, BULLET_SPRITE);
 
     this.world = world.clone();
     this.velocity = velocity.clone();
+    this.rotation = rotation;
     this.gameScene = gameScene;
     // ½ * ρ * v²
     this.dragConstantSI = 0.5 * rho * C_d * BULLET_AREA_M2;
     this.radius = this.height / 2;
     this.gameScene.add.existing(this);
-    this.shadowSprite = gameScene.add.image(0, 0, BULLET_SPRITE).setAlpha(0.5);
+    this.shadowSprite = gameScene.add
+      .image(0, 0, BULLET_SPRITE)
+      .setAlpha(0.5)
+      .setScale(this.gameScene.worldToScreen.x, this.gameScene.worldToScreen.y);
     this.invMass = 1 / BULLET_MASS_KG;
+    const angle = Phaser.Math.RadToDeg(this.rotation);
+    this.explosionEmitter = this.gameScene.add.particles(
+      this.x,
+      this.y,
+      PARTICLE_SPRITE,
+      {
+        x: () => this.x,
+        y: () => this.y,
+        lifespan: { min: 500, max: 3000 },
+        scale: { start: 1, end: 0 },
+        blendMode: "ADD",
+        angle: { min: angle - 60, max: angle + 60 },
+        speed: { min: 5, max: 80 },
+        frequency: -1,
+        gravityX: 0,
+        gravityY:
+          9.8 *
+          WORLD_UNIT_PER_METER *
+          this.gameScene.worldToScreen.z *
+          Math.cos(this.rotation),
+      }
+    );
+
     this.updateVisuals();
   }
 
@@ -119,13 +148,22 @@ export class Bullet extends Phaser.GameObjects.Image {
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
 
+    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
+
+    this.x = screen.x;
+    this.y = screen.y;
+
     // --- Ground Collision using sphereToGroundCollision ---
-    const touchingGround = sphereToGroundCollision(
+    const tnt_kg = sphereToGroundCollision(
       this, // Pass the bullet instance (implements Solid interface)
       this.radius
     );
 
-    if (touchingGround) {
+    if (tnt_kg !== false) {
+      this.explosionEmitter.explode(
+        Phaser.Math.Clamp(Math.ceil(tnt_kg), 1, 10) * 10
+      );
+
       // Stop if slow and on the ground
       const speedSq = this.velocity.lengthSq(); // Use squared speed for efficiency
       // Threshold in (WU/s)^2, adjust as needed (e.g., (1 WU/s)^2)
@@ -135,11 +173,6 @@ export class Bullet extends Phaser.GameObjects.Image {
         return;
       }
     }
-
-    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
-
-    this.x = screen.x;
-    this.y = screen.y;
   }
 
   updateVisuals() {

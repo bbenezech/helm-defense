@@ -193,7 +193,12 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   shoot(visible: boolean) {
     const muzzleWorld = this.getMuzzleWorld();
-    const bullet = new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
+    const bullet = new Bullet(
+      this.gameScene,
+      muzzleWorld,
+      this.getVelocity(),
+      this.azymuth
+    );
 
     this.gameScene.bullets.add(bullet);
 
@@ -205,6 +210,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     if (visible) {
       if (DO_RECOIL) {
         const recoilRotation = this.azymuth + Math.PI; // 180 degrees rotation
+        const cannonRecoilRotation = this.rotation + Math.PI; // 90 degrees rotation
         const recoilDistance = this.cannonLength * RECOIL_FACTOR;
         const wheelsRecoilDistance = recoilDistance * 0.5;
 
@@ -267,9 +273,11 @@ export class Cannon extends Phaser.GameObjects.Image {
             {
               delay: PRE_RECOIL_DURATION_MS,
               x:
-                this.cannonScreen.x + recoilDistance * Math.cos(recoilRotation),
+                this.cannonScreen.x +
+                recoilDistance * Math.cos(cannonRecoilRotation),
               y:
-                this.cannonScreen.y + recoilDistance * Math.sin(recoilRotation),
+                this.cannonScreen.y +
+                recoilDistance * Math.sin(cannonRecoilRotation),
               duration: RECOIL_DURATION_MS,
               ease: "Sine.easeOut",
             },
