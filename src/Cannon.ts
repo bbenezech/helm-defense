@@ -344,7 +344,7 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   shoot(visible: boolean) {
     const muzzleWorld = this.getMuzzleWorld();
-    const bullet = new Bullet(
+    new Bullet(
       this.gameScene,
       muzzleWorld,
       this.getBulletVelocity(),

@@ -6,6 +6,7 @@ interface Solid {
   world: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   gameScene: GameScene;
+  stop: () => void;
   invMass: number; // Inverse mass (1/mass), or 0 for static objects
 }
 
@@ -100,19 +101,11 @@ export function sphereToGroundCollision(
   s: Solid,
   radius: number
 ): number | false {
-  // Check if moving up and away
-  if (s.velocity.z > EPSILON) return false;
-
-  // Check if above ground
-  if (s.world.z > radius) return false;
-
   // Get Ground Properties
   const height = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
-  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world);
-  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world);
 
   // Penetration & Impact Angle Check ---
-  const elevation = s.world.z - height;
+  const elevation = s.world.z - height; // Elevation above ground
   const penetrationDepth = radius - elevation;
 
   // Check for penetration
@@ -121,25 +114,10 @@ export function sphereToGroundCollision(
   }
 
   // Check relative direction (velocity vs normal)
+  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world);
   const velocityDotNormal = s.velocity.dot(normal);
-  if (velocityDotNormal >= -EPSILON) {
-    // Moving parallel or away from the surface normal while penetrating (unusual).
-    // Resolve position minimally, but treat as grazing contact with no bounce impulse.
-    s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Use workspace vec
-    s.velocity.reset();
-    return 0;
-  }
 
-  // Calculate Bounce Magnitude Factors ---
-  const initialSpeedSq = s.velocity.lengthSq();
-  // Handle case where object is penetrating but not moving significantly
-  if (initialSpeedSq < EPSILON_SQ) {
-    s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON));
-    s.velocity.reset(); // Stop it
-    return 0; // No splash energy
-  }
-  const initialSpeed = Math.sqrt(initialSpeedSq); // Needed for factors
-
+  const initialSpeed = s.velocity.length();
   // Cosine of the angle between -velocity and normal (impact angle relative to normal)
   // velocityDotNormal is negative, so -velocityDotNormal is positive.
   const cosImpactAngle = -velocityDotNormal / initialSpeed; // Range [0, 1]
@@ -157,6 +135,7 @@ export function sphereToGroundCollision(
   );
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
+  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world);
   let bounce_percentage = hardness * impactBouncePotential;
 
   // Apply threshold: weak bounces become splashes (no speed retained)
@@ -167,14 +146,15 @@ export function sphereToGroundCollision(
     (1.0 - bounce_percentage) *
     0.5 *
     (1.0 / s.invMass) *
-    initialSpeedSq *
+    initialSpeed *
+    initialSpeed *
     SMALL_WORLD_FACTOR *
     SMALL_WORLD_FACTOR; // Energy in Joules
   const tnt_kg = energy / (4.184 * 10e6); // 1 TNT kg = 4.184 MJ
 
   if (bounce_percentage === 0) {
     // No bounce, just resolve position
-    s.velocity.reset(); // Stop it
+    s.stop();
     return tnt_kg;
   }
 

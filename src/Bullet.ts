@@ -63,8 +63,8 @@ export class Bullet extends Phaser.GameObjects.Image {
       {
         x: () => this.x,
         y: () => this.y,
-        lifespan: { min: 500, max: 3000 },
-        scale: { start: 1, end: 0 },
+        lifespan: { min: 500, max: 1000 },
+        alpha: { start: 1, end: 0 },
         blendMode: "ADD",
         angle: { min: angle - 60, max: angle + 60 },
         speed: { min: 5, max: 80 },
@@ -101,9 +101,25 @@ export class Bullet extends Phaser.GameObjects.Image {
     );
   }
 
+  stop() {
+    this.velocity.reset();
+    const surfaceZ =
+      this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
+    this.world.z = surfaceZ + this.radius; // Set to ground level
+  }
+
+  stopped() {
+    return (
+      this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0
+    );
+  }
+
   move(delta: number) {
-    const speed = this.velocity.length(); // Speed in World Units / Second
-    if (speed === 0) return;
+    if (this.stopped()) return;
+    if (this.velocity.lengthSq() < 1) {
+      this.stop();
+      return;
+    }
 
     const SECONDS = delta / 1000; // Convert ms to seconds for physics
 
@@ -112,6 +128,7 @@ export class Bullet extends Phaser.GameObjects.Image {
     let ay_drag = 0;
     let az_drag = 0;
 
+    const speed = this.velocity.length(); // Speed in World Units / Second
     const speed_si = speed / WORLD_UNIT_PER_METER; // Units: (WU/s) / (WU/m) = m/s
     // Calculate Drag Force magnitude in SI units (Newtons)
     // F_drag = k * speed_si^2
@@ -132,26 +149,17 @@ export class Bullet extends Phaser.GameObjects.Image {
     ay_drag = accel_drag_magnitude_world * (this.velocity.y / speed);
     az_drag = accel_drag_magnitude_world * (this.velocity.z / speed);
 
-    // --- Calculate Total Acceleration ---
-    // XY acceleration is just drag
     const ax_total = -ax_drag;
     const ay_total = -ay_drag;
-    // Z acceleration includes drag AND gravity
     const az_total = -az_drag - GRAVITY; // Subtract gravity
 
     this.velocity.x += ax_total * SECONDS;
     this.velocity.y += ay_total * SECONDS;
     this.velocity.z += az_total * SECONDS;
 
-    // Update world position based on velocity
     this.world.x += this.velocity.x * SECONDS;
     this.world.y += this.velocity.y * SECONDS;
     this.world.z += this.velocity.z * SECONDS;
-
-    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
-
-    this.x = screen.x;
-    this.y = screen.y;
 
     // --- Ground Collision using sphereToGroundCollision ---
     const tnt_kg = sphereToGroundCollision(
@@ -160,23 +168,15 @@ export class Bullet extends Phaser.GameObjects.Image {
     );
 
     if (tnt_kg !== false) {
-      this.explosionEmitter.explode(
-        Phaser.Math.Clamp(Math.ceil(tnt_kg), 1, 10) * 10
-      );
-
-      // Stop if slow and on the ground
-      const speedSq = this.velocity.lengthSq(); // Use squared speed for efficiency
-      // Threshold in (WU/s)^2, adjust as needed (e.g., (1 WU/s)^2)
-      const stopSpeedThresholdSq = 1;
-      if (speedSq < stopSpeedThresholdSq) {
-        this.destroy();
-        return;
-      }
+      this.explosionEmitter.explode(Phaser.Math.Clamp(tnt_kg * 10, 1, 10));
     }
   }
 
   updateVisuals() {
-    this.setDepth(this.y);
+    const screen = this.gameScene.getScreenPosition(this.world, this._screen);
+    this.x = screen.x;
+    this.y = screen.y;
+
     const shadowScreen = this.getShadowScreen();
     if (shadowScreen === null) {
       this.shadowSprite.setVisible(false);
@@ -185,8 +185,10 @@ export class Bullet extends Phaser.GameObjects.Image {
         this.shadowSprite.setVisible(true);
       this.shadowSprite
         .setPosition(shadowScreen.x, shadowScreen.y)
-        .setDepth(this.y - 1);
+        .setDepth(shadowScreen.y);
     }
+
+    this.setDepth(this.y);
   }
 
   preUpdate(time: number, delta: number) {
