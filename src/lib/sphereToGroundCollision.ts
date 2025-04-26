@@ -35,17 +35,9 @@ const targetWorkspace = new Phaser.Math.Vector3();
 export function bounce(
   velocity: Phaser.Math.Vector3,
   normal: Phaser.Math.Vector3, // unit-length
-  hardnessFactor: number
-): Phaser.Math.Vector3 {
-  // 1. Calculate and store the original speed (magnitude).
-  // This is the only place where sqrt is used.
-  const speed = velocity.length();
-
-  // Handle zero velocity case to avoid division by zero if normalization were needed later.
-  if (speed === 0) {
-    return velocity; // No speed, no bounce.
-  }
-
+  hardnessFactor: number,
+  speed: number
+) {
   // 2. Calculate the dot product of velocity and normal.
   // This represents the component of velocity projecting onto the normal.
   // A negative value means the velocity is heading towards the surface.
@@ -85,7 +77,7 @@ export function bounce(
   velocity.y = softnessFactor * vNormY + hardnessFactor * vSpecY;
   velocity.z = softnessFactor * vNormZ + hardnessFactor * vSpecZ;
 
-  return velocity.normalize().scale(speed); // Normalize to maintain the original speed
+  velocity.normalize().scale(speed); // Normalize to maintain the original speed
 }
 
 /**
@@ -161,7 +153,7 @@ export function sphereToGroundCollision(
   // Push object out along the normal by the penetration depth
   s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
 
-  bounce(s.velocity, normal, hardness); // Modifies s.velocity in-place
+  bounce(s.velocity, normal, hardness, initialSpeed); // Modifies s.velocity in-place
 
   // Apply the calculated speed reduction (bounce_percentage)
   s.velocity.scale(bounce_percentage);
