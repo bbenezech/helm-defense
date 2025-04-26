@@ -351,8 +351,6 @@ export class Cannon extends Phaser.GameObjects.Image {
       this.azymuth
     );
 
-    this.gameScene.bullets.add(bullet);
-
     if (PLAY_SOUNDS) {
       const blast = Math.ceil(Math.random() * 5);
       this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });

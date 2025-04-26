@@ -44,8 +44,6 @@ export class GameScene extends Phaser.Scene {
   map!: Phaser.Tilemaps.Tilemap;
   cannon!: Cannon;
   debugGraphics!: Phaser.GameObjects.Graphics;
-  bullets!: Phaser.Physics.Arcade.Group;
-  enemies!: Phaser.Physics.Arcade.Group;
   score = 0;
   X_FACTOR = 1;
   Y_FACTOR: number;
@@ -317,31 +315,12 @@ export class GameScene extends Phaser.Scene {
     // Cannons
     const cannonWorld = this.tileToWorldPosition(34, 75);
     this.cannon = new Cannon(this, cannonWorld, 270);
-    this.bullets = this.physics.add.group();
-    this.enemies = this.physics.add.group(enemies.list);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
       this.cannon.requestShoot(this._pointerScreen);
     });
-
-    this.physics.add.overlap(
-      this.bullets,
-      this.enemies,
-      (bullet, enemy) => {
-        if (
-          (bullet as Bullet).groundElevation() > (enemy as Enemy).displayHeight
-        )
-          return;
-
-        this.score += 1;
-        this.game.events.emit("updateScore", this.score);
-        enemy.destroy();
-      },
-      undefined,
-      this
-    );
   }
 
   adjustMainCamera() {
