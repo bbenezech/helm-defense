@@ -26,8 +26,9 @@ const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 
 export class Cannon extends Phaser.GameObjects.Image {
   // cache vectors to avoid creating new ones every frame, do not use directly, use getters
-  private _screenVelocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private _velocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
+  private _screenVelocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private _bulletVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleWorldOffset: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -155,20 +156,10 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   getMuzzleWorld() {
-    const cosElev = Math.cos(this.altitude);
-    const sinElev = Math.sin(this.altitude);
-    const cosAzim = Math.cos(this.azymuth);
-    const sinAzim = Math.sin(this.azymuth);
-    const barrelLengthWorld =
-      this.barrelLength * this.gameScene.screenToWorldHorizontal.x; // the barrel length is measured on the X axis in world units
-
-    this._muzzleWorldOffset.x = barrelLengthWorld * cosElev * cosAzim;
-    this._muzzleWorldOffset.y = barrelLengthWorld * cosElev * sinAzim;
-    this._muzzleWorldOffset.z = barrelLengthWorld * sinElev;
-
-    this._muzzleWorld.addVectors(this.cannonWorld, this._muzzleWorldOffset);
-
-    return this._muzzleWorld;
+    return this._muzzleWorld.addVectors(
+      this.cannonWorld,
+      this.getMuzzleWorldOffset()
+    );
   }
 
   readyToShoot() {
@@ -179,16 +170,24 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   getVelocity() {
-    const horizontalSpeed = this.muzzleSpeed * Math.cos(this.altitude);
-    const verticalSpeed = this.muzzleSpeed * Math.sin(this.altitude);
-
-    this._velocity.set(
+    const horizontalSpeed = Math.cos(this.altitude);
+    return this._velocity.set(
       horizontalSpeed * Math.cos(this.azymuth),
       horizontalSpeed * Math.sin(this.azymuth),
-      verticalSpeed
+      Math.sin(this.altitude)
     );
+  }
 
-    return this._velocity;
+  getBulletVelocity() {
+    return this._bulletVelocity
+      .copy(this.getVelocity())
+      .scale(this.muzzleSpeed);
+  }
+
+  getMuzzleWorldOffset() {
+    return this._muzzleWorldOffset
+      .copy(this.getVelocity())
+      .scale(this.barrelLength);
   }
 
   shoot(visible: boolean) {
@@ -196,7 +195,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     const bullet = new Bullet(
       this.gameScene,
       muzzleWorld,
-      this.getVelocity(),
+      this.getBulletVelocity(),
       this.azymuth
     );
 
@@ -324,13 +323,8 @@ export class Cannon extends Phaser.GameObjects.Image {
     }
   }
 
-  // Rotates the cannon sprite and shadow towards the mouse pointer
   move(delta: number, visible: boolean) {
-    // Calculate max rotation step for this frame
     const maxAngleStep = TURN_RATE_RADIANS_PER_SECOND * (delta / 1000.0);
-
-    // Calculate the new azimuth using RotateTo for smooth interpolation
-    // This function handles wrapping around -PI/PI and finds the shortest path.
     this.azymuth = Phaser.Math.Angle.RotateTo(
       this.azymuth,
       this.requestedAzymuth,
@@ -341,10 +335,8 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   updateVisuals() {
-    // Update cannon's rotation
-    const velocity = this.getVelocity();
     const screenVelocity = this.gameScene.getScreenPosition(
-      velocity,
+      this.getVelocity(),
       this._screenVelocity
     );
 
@@ -352,18 +344,15 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.wheels.setRotation(CANNON_WHEELS_SPRITE_ROTATION + this.azymuth);
     this.rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
 
-    // Update cannon scale based on projected barrel length (perspective effect)
     const muzzleWorld = this.getMuzzleWorld();
     const muzzleScreen = this.gameScene.getScreenPosition(
       muzzleWorld,
       this._muzzleScreen
     );
+
     this.scaleX =
-      Phaser.Math.Distance.BetweenPointsSquared(
-        this.cannonScreen,
-        muzzleScreen
-      ) /
-      (this.barrelLength * this.barrelLength);
+      Phaser.Math.Distance.BetweenPoints(this.cannonScreen, muzzleScreen) /
+      this.barrelLength;
   }
 
   requestShoot(targetScreen: Phaser.Types.Math.Vector2Like) {
