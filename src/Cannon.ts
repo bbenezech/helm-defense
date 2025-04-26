@@ -22,6 +22,7 @@ const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
 const INITIAL_SPEED_METERS_PER_SECOND = 440; // 440 m/s
 const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
+const COOLDOWN_MS = 1000; // 1 second cooldown
 
 export class Cannon extends Phaser.GameObjects.Image {
   // cache vectors to avoid creating new ones every frame, do not use directly, use getters
@@ -59,6 +60,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   cannonRadius: number; // half heigth of the cannon sprite
   barrelLength: number; // barrel length is the length of the cannon minus the round part at the back, which actually is the length from origin of rotation to muzzle's end
   wheels: Phaser.GameObjects.Image; // wheels sprite
+  cooldown: number = 0; // cooldown time in ms
 
   private moveTimer: number = 0; // Timer to accumulate delta time for move updates
 
@@ -316,8 +318,8 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   readyToShoot() {
     return (
-      Math.abs(this.azymuth - this.requestedAzymuth) < 0.01 &&
-      this.recoilTween.isPlaying() === false
+      this.cooldown <= 0 &&
+      Math.abs(this.azymuth - this.requestedAzymuth) < 0.01
     );
   }
 
@@ -343,6 +345,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   shoot(visible: boolean) {
+    this.cooldown = COOLDOWN_MS; // 1 second cooldown
     const muzzleWorld = this.getMuzzleWorld();
     new Bullet(
       this.gameScene,
@@ -440,6 +443,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   preUpdate(time: number, delta: number) {
+    if (this.cooldown > 0) this.cooldown -= delta;
     const visible = this.gameScene.inViewport(this);
     const timerInterval = visible
       ? VISIBLE_UPDATE_INTERVAL
