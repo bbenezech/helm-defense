@@ -13,9 +13,8 @@ import {
 } from "./constants";
 import { GameScene } from "./GameScene";
 
-const PRE_RECOIL_DURATION_MS = 30;
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
-const RECOIL_DURATION_MS = 50;
+const RECOIL_DURATION_MS = 500;
 const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
@@ -50,9 +49,9 @@ export class Cannon extends Phaser.GameObjects.Image {
   shootRequested: boolean; // if true, shoot when ready
 
   muzzleSpeed: number;
-  recoilTween: Phaser.Tweens.TweenChain | null = null;
-  shadowRecoilTween: Phaser.Tweens.TweenChain | null = null;
-  wheelsRecoilTween: Phaser.Tweens.TweenChain | null = null;
+  recoilTween: Phaser.Tweens.TweenChain;
+  shadowRecoilTween: Phaser.Tweens.TweenChain;
+  wheelsRecoilTween: Phaser.Tweens.TweenChain;
   shadow: Phaser.GameObjects.Image;
   muzzleParticleEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   muzzleFlashEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -142,6 +141,157 @@ export class Cannon extends Phaser.GameObjects.Image {
       })
       .setDepth(this.y);
 
+    this.recoilTween = this.gameScene.tweens.chain({
+      paused: true,
+      persist: true,
+      targets: this,
+      tweens: [
+        {
+          props: {
+            x: {
+              ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
+              duration: RECOIL_DURATION_MS,
+              getStart: () => this.cannonScreen.x,
+              getEnd: () =>
+                this.cannonScreen.x +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  Math.cos(this.rotation + Math.PI),
+            },
+            y: {
+              ease: Phaser.Math.Easing.Expo.Out,
+              duration: RECOIL_DURATION_MS,
+              getStart: () => this.cannonScreen.y,
+              getEnd: () =>
+                this.cannonScreen.y +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  Math.sin(this.rotation + Math.PI),
+            },
+          },
+        },
+        {
+          props: {
+            x: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS,
+              getEnd: () => this.cannonScreen.x,
+            },
+            y: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS,
+              getEnd: () => this.cannonScreen.y,
+            },
+          },
+        },
+      ],
+      onStop: () => {
+        this.setPosition(this.cannonScreen.x, this.cannonScreen.y);
+      },
+    });
+
+    this.shadowRecoilTween = this.gameScene.tweens.chain({
+      paused: true,
+      persist: true,
+      targets: this.shadow,
+      tweens: [
+        {
+          props: {
+            x: {
+              ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
+              duration: RECOIL_DURATION_MS,
+              getStart: () => this.screen.x,
+              getEnd: () =>
+                this.screen.x +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  Math.cos(this.azymuth + Math.PI),
+            },
+            y: {
+              ease: Phaser.Math.Easing.Expo.Out,
+              duration: RECOIL_DURATION_MS,
+              getStart: () => this.screen.y,
+              getEnd: () =>
+                this.screen.y +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  Math.sin(this.azymuth + Math.PI),
+            },
+          },
+        },
+        {
+          props: {
+            x: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS,
+              getEnd: () => this.screen.x,
+            },
+            y: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS,
+              getEnd: () => this.screen.y,
+            },
+          },
+        },
+      ],
+      onStop: () => {
+        this.setPosition(this.screen.x, this.screen.y);
+      },
+    });
+
+    this.wheelsRecoilTween = this.gameScene.tweens.chain({
+      paused: true,
+      persist: true,
+      targets: this.wheels,
+      tweens: [
+        {
+          props: {
+            x: {
+              delay: PRE_WHEELS_RECOIL_DURATION_MS,
+              ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
+              duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
+              getStart: () => this.screen.x,
+              getEnd: () =>
+                this.screen.x +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  0.5 *
+                  Math.cos(this.azymuth + Math.PI),
+            },
+            y: {
+              delay: PRE_WHEELS_RECOIL_DURATION_MS,
+              ease: Phaser.Math.Easing.Expo.Out,
+              duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
+              getStart: () => this.screen.y,
+              getEnd: () =>
+                this.screen.y +
+                this.cannonLength *
+                  RECOIL_FACTOR *
+                  0.5 *
+                  Math.sin(this.azymuth + Math.PI),
+            },
+          },
+        },
+        {
+          props: {
+            x: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS / 2,
+              getEnd: () => this.screen.x,
+            },
+            y: {
+              ease: Phaser.Math.Easing.Linear,
+              duration: RECOIL_RETURN_DURATION_MS / 2,
+              getEnd: () => this.screen.y,
+            },
+          },
+        },
+      ],
+      onStop: () => {
+        this.wheels.setPosition(this.screen.x, this.screen.y);
+      },
+    });
+
     this.updateVisuals();
   }
 
@@ -167,7 +317,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   readyToShoot() {
     return (
       Math.abs(this.azymuth - this.requestedAzymuth) < 0.01 &&
-      this.recoilTween === null
+      this.recoilTween.isPlaying() === false
     );
   }
 
@@ -210,93 +360,9 @@ export class Cannon extends Phaser.GameObjects.Image {
 
     if (visible) {
       if (DO_RECOIL) {
-        const recoilRotation = this.azymuth + Math.PI; // 180 degrees rotation
-        const cannonRecoilRotation = this.rotation + Math.PI; // 90 degrees rotation
-        const recoilDistance = this.cannonLength * RECOIL_FACTOR;
-        const wheelsRecoilDistance = recoilDistance * 0.5;
-
-        this.wheelsRecoilTween = this.gameScene.tweens.chain({
-          targets: this.wheels,
-          tweens: [
-            {
-              delay: PRE_RECOIL_DURATION_MS + PRE_WHEELS_RECOIL_DURATION_MS,
-              x:
-                this.screen.x + wheelsRecoilDistance * Math.cos(recoilRotation),
-              y:
-                this.screen.y + wheelsRecoilDistance * Math.sin(recoilRotation),
-              duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
-              ease: "Sine.easeOut",
-            },
-            {
-              x: this.screen.x,
-              y: this.screen.y,
-              duration: RECOIL_RETURN_DURATION_MS,
-              ease: "Sine.easeIn",
-            },
-          ],
-          onComplete: () => {
-            this.shadowRecoilTween = null;
-          },
-          onStop: () => {
-            this.shadowRecoilTween = null;
-            this.shadow.setPosition(this.screen.x, this.screen.y);
-          },
-        });
-        this.shadowRecoilTween = this.gameScene.tweens.chain({
-          targets: this.shadow,
-          tweens: [
-            {
-              delay: PRE_RECOIL_DURATION_MS,
-              x: this.screen.x + recoilDistance * Math.cos(recoilRotation),
-              y: this.screen.y + recoilDistance * Math.sin(recoilRotation),
-              duration: RECOIL_DURATION_MS,
-              ease: "Sine.easeOut",
-            },
-            {
-              x: this.screen.x,
-              y: this.screen.y,
-              duration: RECOIL_RETURN_DURATION_MS,
-              ease: "Sine.easeIn",
-            },
-          ],
-          onComplete: () => {
-            this.shadowRecoilTween = null;
-          },
-          onStop: () => {
-            this.shadowRecoilTween = null;
-            this.shadow.setPosition(this.screen.x, this.screen.y);
-          },
-        });
-
-        this.recoilTween = this.gameScene.tweens.chain({
-          targets: this,
-          tweens: [
-            {
-              delay: PRE_RECOIL_DURATION_MS,
-              x:
-                this.cannonScreen.x +
-                recoilDistance * Math.cos(cannonRecoilRotation),
-              y:
-                this.cannonScreen.y +
-                recoilDistance * Math.sin(cannonRecoilRotation),
-              duration: RECOIL_DURATION_MS,
-              ease: "Sine.easeOut",
-            },
-            {
-              x: this.cannonScreen.x,
-              y: this.cannonScreen.y,
-              duration: RECOIL_RETURN_DURATION_MS,
-              ease: "Sine.easeIn",
-            },
-          ],
-          onComplete: () => {
-            this.recoilTween = null;
-          },
-          onStop: () => {
-            this.recoilTween = null;
-            this.setPosition(this.cannonScreen.x, this.cannonScreen.y);
-          },
-        });
+        this.recoilTween.restart();
+        this.shadowRecoilTween.restart();
+        this.wheelsRecoilTween.restart();
       }
 
       const muzzleScreen = this.gameScene.getScreenPosition(
