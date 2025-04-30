@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GameScene } from "../GameScene"; // Assuming GameScene has the methods
 import { SMALL_WORLD_FACTOR } from "../constants";
+import { INITIAL_BULLET_SPEED } from "../Cannon";
 
 export interface Solid {
   world: Phaser.Math.Vector3;
@@ -10,7 +11,6 @@ export interface Solid {
 }
 
 const EPSILON = 1e-6;
-const MAX_SPEED = 600; // Max speed for normalization factor
 const MIN_BOUNCE_THRESHOLD = 0.1; // Calculated bounce percentages below this become zero
 
 const targetWorkspace = new Phaser.Math.Vector3();
@@ -114,7 +114,7 @@ export function sphereToGroundCollision(
   // parallelFactor: 1 for grazing (cosImpactAngle=0), 0 for head-on (cosImpactAngle=1)
   const parallelFactor = Phaser.Math.Clamp(1.0 - cosImpactAngle, 0.0, 1.0);
   // fastFactor: How fast relative to max speed
-  const fastFactor = Phaser.Math.Clamp(speed / MAX_SPEED, 0.0, 1.0);
+  const fastFactor = Phaser.Math.Clamp(speed / INITIAL_BULLET_SPEED, 0.0, 1.0);
 
   // Potential for bounce based purely on impact angle and speed
   const impactBouncePotential = Phaser.Math.Clamp(
