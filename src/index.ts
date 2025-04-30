@@ -3,9 +3,14 @@ import { GameScene } from "./GameScene";
 import { UIScene } from "./UIScene";
 
 new Phaser.Game({
-  type: Phaser.AUTO,
+  type: Phaser.WEBGL,
   scene: [GameScene, UIScene],
-  scale: {
-    mode: Phaser.Scale.RESIZE,
-  },
+
+  failIfMajorPerformanceCaveat: true,
+  disableContextMenu: true,
+  disablePostFX: true,
+  disablePreFX: true,
+  roundPixels: true,
+  pixelArt: true,
+  antialias: false,
 });

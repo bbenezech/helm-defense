@@ -17,7 +17,6 @@ import {
   SMALL_WORLD_FACTOR,
   BIG_WORLD_FACTOR,
 } from "./constants";
-import { createEnemyContainer, Enemy } from "./Enemy";
 import { createCannonTexture } from "./lib/createCannonTexture";
 import { createCircleTexture } from "./lib/createCircleTexture";
 import { createParticleTexture } from "./lib/createParticleTexture";
@@ -309,8 +308,6 @@ export class GameScene extends Phaser.Scene {
       maxSpeed: 1,
       maxZoom: 4,
     });
-
-    const enemies = createEnemyContainer(this, 200, -50, this.map.height);
 
     // Cannons
     const cannonWorld = this.tileToWorldPosition(34, 75);

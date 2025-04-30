@@ -2,16 +2,14 @@ import Phaser from "phaser";
 import { GameScene } from "../GameScene"; // Assuming GameScene has the methods
 import { SMALL_WORLD_FACTOR } from "../constants";
 
-interface Solid {
+export interface Solid {
   world: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   gameScene: GameScene;
-  stop: () => void;
   invMass: number; // Inverse mass (1/mass), or 0 for static objects
 }
 
 const EPSILON = 1e-6;
-const EPSILON_SQ = EPSILON * EPSILON;
 const MAX_SPEED = 600; // Max speed for normalization factor
 const MIN_BOUNCE_THRESHOLD = 0.1; // Calculated bounce percentages below this become zero
 
@@ -36,9 +34,9 @@ export function bounce(
   velocity: Phaser.Math.Vector3,
   normal: Phaser.Math.Vector3, // unit-length
   hardnessFactor: number,
-  speed: number
+  initialSpeed: number
 ) {
-  // 2. Calculate the dot product of velocity and normal.
+  // 1. Calculate the dot product of velocity and normal.
   // This represents the component of velocity projecting onto the normal.
   // A negative value means the velocity is heading towards the surface.
   const dotVN = velocity.dot(normal);
@@ -48,16 +46,16 @@ export function bounce(
   // If dotVN >= 0, the object is technically already moving away from the normal,
   // but the reflection formula still works mathematically.
 
-  // 3. Clamp the interpolation factor to the valid range [0, 1].
+  // 2. Clamp the interpolation factor to the valid range [0, 1].
   const softnessFactor = 1 - hardnessFactor;
 
-  // 4. Calculate the target velocity components for the two extreme cases:
+  // 3. Calculate the target velocity components for the two extreme cases:
 
   // Case A: Pure Normal Bounce (interpolationFactor = 0)
   // The velocity should be directly along the normal, with the original speed.
-  const vNormX = normal.x * speed;
-  const vNormY = normal.y * speed;
-  const vNormZ = normal.z * speed;
+  const vNormX = normal.x * initialSpeed;
+  const vNormY = normal.y * initialSpeed;
+  const vNormZ = normal.z * initialSpeed;
 
   // Case B: Pure Specular Reflection (interpolationFactor = 1)
   // Use the reflection formula: v' = v - 2 * (v . n) * n
@@ -70,15 +68,16 @@ export function bounce(
   const vSpecY = velocity.y - twoDotVN * normal.y;
   const vSpecZ = velocity.z - twoDotVN * normal.z;
 
-  // 5. Linearly interpolate between the normal bounce and specular reflection velocities.
+  // 4. Linearly interpolate between the normal bounce and specular reflection velocities.
   // result = (1 - t) * vNormal + t * vSpecular
   // Update the velocity vector in-place with the interpolated components.
   velocity.x = softnessFactor * vNormX + hardnessFactor * vSpecX;
   velocity.y = softnessFactor * vNormY + hardnessFactor * vSpecY;
   velocity.z = softnessFactor * vNormZ + hardnessFactor * vSpecZ;
-
-  velocity.normalize().scale(speed); // Normalize to maintain the original speed
 }
+
+const SMALL_WORLD_FACTOR_SQ = SMALL_WORLD_FACTOR * SMALL_WORLD_FACTOR;
+const TNT_KG_IN_JOULES = 4.184 * 10e6; // 1 TNT kg = 4.184 MJ
 
 /**
  * Collides a sphere against height-mapped ground. Calculates bounce magnitude
@@ -87,37 +86,35 @@ export function bounce(
  *
  * @param s Solid object with position, velocity, etc.
  * @param radius Sphere radius (center to lowest point).
- * @returns Splash energy factor (number), or false if no collision.
+ * @returns Splash energy in TNT kg eq. (number), or false if no collision.
  */
 export function sphereToGroundCollision(
   s: Solid,
-  radius: number
+  speedSq: number,
+  speed?: number
 ): number | false {
-  // Get Ground Properties
-  const height = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
+  const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
 
   // Penetration & Impact Angle Check ---
-  const elevation = s.world.z - height; // Elevation above ground
-  const penetrationDepth = radius - elevation;
+  const elevation = s.world.z - groundZ; // Elevation above ground
+  const penetrationDepth = -elevation;
 
   // Check for penetration
-  if (penetrationDepth <= EPSILON) {
-    return false; // Not penetrating or just touching
-  }
+  if (penetrationDepth <= EPSILON) return false; // Not penetrating or just touching
 
   // Check relative direction (velocity vs normal)
   const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world);
   const velocityDotNormal = s.velocity.dot(normal);
 
-  const initialSpeed = s.velocity.length();
   // Cosine of the angle between -velocity and normal (impact angle relative to normal)
   // velocityDotNormal is negative, so -velocityDotNormal is positive.
-  const cosImpactAngle = -velocityDotNormal / initialSpeed; // Range [0, 1]
+  speed ??= Math.sqrt(speedSq);
+  const cosImpactAngle = -velocityDotNormal / speed; // Range [0, 1]
 
   // parallelFactor: 1 for grazing (cosImpactAngle=0), 0 for head-on (cosImpactAngle=1)
   const parallelFactor = Phaser.Math.Clamp(1.0 - cosImpactAngle, 0.0, 1.0);
   // fastFactor: How fast relative to max speed
-  const fastFactor = Phaser.Math.Clamp(initialSpeed / MAX_SPEED, 0.0, 1.0); // Use speed, not speedSq
+  const fastFactor = Phaser.Math.Clamp(speed / MAX_SPEED, 0.0, 1.0);
 
   // Potential for bounce based purely on impact angle and speed
   const impactBouncePotential = Phaser.Math.Clamp(
@@ -128,34 +125,31 @@ export function sphereToGroundCollision(
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
   const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world);
+
   let bounce_percentage = hardness * impactBouncePotential;
 
-  // Apply threshold: weak bounces become splashes (no speed retained)
-  if (bounce_percentage < MIN_BOUNCE_THRESHOLD) {
-    bounce_percentage = 0.0;
-  }
+  // Apply threshold: weak uninteresting bounces become splashes (no speed retained)
+  if (bounce_percentage < MIN_BOUNCE_THRESHOLD) bounce_percentage = 0.0;
+
+  const explosion_percentage = 1.0 - bounce_percentage;
   const energy =
-    (1.0 - bounce_percentage) *
-    0.5 *
-    (1.0 / s.invMass) *
-    initialSpeed *
-    initialSpeed *
-    SMALL_WORLD_FACTOR *
-    SMALL_WORLD_FACTOR; // Energy in Joules
-  const tnt_kg = energy / (4.184 * 10e6); // 1 TNT kg = 4.184 MJ
+    (explosion_percentage *
+      0.5 *
+      ((speedSq * SMALL_WORLD_FACTOR_SQ) / s.invMass)) /
+    TNT_KG_IN_JOULES;
 
   if (bounce_percentage === 0) {
     // No bounce, just resolve position
-    s.stop();
-    return tnt_kg;
+    s.velocity.reset();
+    s.world.z = groundZ;
+    return energy;
   }
 
   // Push object out along the normal by the penetration depth
   s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
 
-  bounce(s.velocity, normal, hardness, initialSpeed); // Modifies s.velocity in-place
+  bounce(s.velocity, normal, hardness, speed); // Modifies s.velocity in-place
+  s.velocity.normalize().scale(speed * bounce_percentage); // Maintain the original speed
 
-  // Apply the calculated speed reduction (bounce_percentage)
-  s.velocity.scale(bounce_percentage);
-  return tnt_kg;
+  return energy;
 }

@@ -24,6 +24,9 @@ const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 const COOLDOWN_MS = 1000; // 1 second cooldown
 
+export const INITIAL_BULLET_SPEED =
+  (INITIAL_SPEED_METERS_PER_SECOND * WORLD_UNIT_PER_METER) / SMALL_WORLD_FACTOR;
+
 export class Cannon extends Phaser.GameObjects.Image {
   // cache vectors to avoid creating new ones every frame, do not use directly, use getters
   private _velocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
@@ -107,9 +110,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setDepth(this.y - 2);
 
     this.barrelLength = this.cannonLength * (1 - originX);
-    this.muzzleSpeed =
-      (INITIAL_SPEED_METERS_PER_SECOND * WORLD_UNIT_PER_METER) /
-      SMALL_WORLD_FACTOR;
+    this.muzzleSpeed = INITIAL_BULLET_SPEED;
     this.altitude = INITIAL_ALTITUDE;
     this.requestedAzymuth = this.azymuth = Phaser.Math.DegToRad(rotationDeg); // Pointing to the top
     this.shootRequested = false;
@@ -347,12 +348,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   shoot(visible: boolean) {
     this.cooldown = COOLDOWN_MS; // 1 second cooldown
     const muzzleWorld = this.getMuzzleWorld();
-    new Bullet(
-      this.gameScene,
-      muzzleWorld,
-      this.getBulletVelocity(),
-      this.azymuth
-    );
+    new Bullet(this.gameScene, muzzleWorld, this.getBulletVelocity());
 
     if (PLAY_SOUNDS) {
       const blast = Math.ceil(Math.random() * 5);
