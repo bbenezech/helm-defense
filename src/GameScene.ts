@@ -1,4 +1,5 @@
 import { Cannon } from "./actors/Cannon";
+import { Cube } from "./actors/Cube";
 import {
   BULLET_SPRITE,
   CANNON_SPRITE,
@@ -290,6 +291,9 @@ export class GameScene extends Phaser.Scene {
     // Cannons
     const cannonWorld = this.tileToWorldPosition(34, 75);
     this.cannon = new Cannon(this, cannonWorld, 270);
+
+    const cubeWorld = this.tileToWorldPosition(70, 77);
+    new Cube(this, cubeWorld, 10, 4, 15);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
