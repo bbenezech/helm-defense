@@ -192,13 +192,10 @@ export class GameScene extends Phaser.Scene {
 
   preload() {
     this.load.tilemapTiledJSON(TILE_MAP, "map.json");
-    this.load.image(
-      TOWN_SPRITE,
-      "kenney_tiny-town/Tilemap/tilemap_extruded.png"
-    );
+    this.load.image(TOWN_SPRITE, "kenney_tiny-town/Tilemap/tilemap_packed.png");
     this.load.image(
       DUNGEON_SPRITE,
-      "kenney_tiny-dungeon/Tilemap/tilemap_extruded.png"
+      "kenney_tiny-dungeon/Tilemap/tilemap_packed.png"
     );
     this.load.image(ENEMY_SPRITE, "kenney_tiny-dungeon/Tiles/tile_0100.png");
     this.load.image(
@@ -261,21 +258,33 @@ export class GameScene extends Phaser.Scene {
 
     // Create the tilemap
     this.map = this.make.tilemap({ key: TILE_MAP });
-    const townTileset = this.map.addTilesetImage(TOWN_SPRITE, TOWN_SPRITE);
+    const townTileset = this.map.addTilesetImage(
+      TOWN_SPRITE,
+      TOWN_SPRITE,
+      16,
+      16,
+      0,
+      0
+    );
     const dungeonTileset = this.map.addTilesetImage(
       DUNGEON_SPRITE,
-      DUNGEON_SPRITE
+      DUNGEON_SPRITE,
+      16,
+      16,
+      0,
+      0
     );
 
     if (!townTileset || !dungeonTileset) throw new Error("Missing asset");
 
-    this.map.createLayer(0, [townTileset, dungeonTileset], 0, 0); // terrain
-    this.map.createLayer(1, [townTileset, dungeonTileset], 0, 0); // buildings
-    this.map.createLayer(2, [townTileset, dungeonTileset], 0, 0); // trees
-    this.map.createLayer(3, [townTileset, dungeonTileset], 0, 0); // objects
+    this.map.createLayer(0, townTileset, 0, 0, true)!;
+    this.map.createLayer(1, [townTileset, dungeonTileset], 0, 0)!;
+    this.map.createLayer(2, [townTileset, dungeonTileset], 0, 0)!;
+    this.map.createLayer(3, [townTileset, dungeonTileset], 0, 0)!;
+
     const camera = this.cameras.main;
+
     this.adjustMainCamera();
-    // Set camera bounds to map dimensions
     camera.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
     camera.setRoundPixels(true);
 
@@ -296,15 +305,11 @@ export class GameScene extends Phaser.Scene {
       right: cursors.right,
       up: cursors.up,
       down: cursors.down,
-      // acceleration: 0.04,
-      // drag: 0.0005,
       zoomIn: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.MINUS),
       zoomOut: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.PLUS),
       zoomSpeed: 0.1,
       acceleration: 1,
       drag: 1,
-      // acceleration: 0.04,
-      // drag: 0.0005,
       maxSpeed: 1,
       maxZoom: 4,
     });
@@ -322,20 +327,15 @@ export class GameScene extends Phaser.Scene {
 
   adjustMainCamera() {
     const camera = this.cameras.main;
-    camera.setZoom(camera.width / this.map.widthInPixels);
+    // camera.setZoom(camera.width / this.map.widthInPixels);
     camera.scrollX = 0; // Start at the left
     camera.scrollY = this.map.heightInPixels - camera.height; // Start at the bottom
   }
 
   // Handle game resize event
   handleResize(gameSize: Phaser.Structs.Size) {
-    // Optional: Ensure the camera viewport itself resizes if necessary
-    // this.cameras.main.setSize(gameSize.width, gameSize.height);
-
+    this.cameras.main.setSize(gameSize.width, gameSize.height);
     this.adjustMainCamera();
-
-    // Re-apply bounds (usually not strictly necessary if map size doesn't change, but safe)
-    // this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
   }
 
   inViewport(object: Phaser.GameObjects.Image): boolean {

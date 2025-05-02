@@ -5,12 +5,10 @@ import { UIScene } from "./UIScene";
 new Phaser.Game({
   type: Phaser.WEBGL,
   scene: [GameScene, UIScene],
-
   failIfMajorPerformanceCaveat: true,
-  disableContextMenu: true,
-  disablePostFX: true,
-  disablePreFX: true,
-  roundPixels: true,
   pixelArt: true,
-  antialias: false,
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoRound: true,
+  },
 });
