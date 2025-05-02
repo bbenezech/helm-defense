@@ -1,8 +1,4 @@
-interface Solid {
-  world: Phaser.Math.Vector3;
-  velocity: Phaser.Math.Vector3;
-  invMass: number; // = 1 / mass. Use 0 for infinite mass if needed by calculations.
-}
+import { Solid } from "./sphereToGround";
 
 export function sphereToSphereCollision(
   a: Solid,

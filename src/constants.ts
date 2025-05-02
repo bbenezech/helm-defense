@@ -1,18 +1,57 @@
 export const TILE_HEIGHT_PX = 16;
-export const SMALL_WORLD_FACTOR = 12; // slower ballistics so that it looks fun
-export const BIG_WORLD_FACTOR = 4; // bigger ballistics so that it looks fun
 export const WORLD_UNIT_PER_METER = 16; // World unit per meter. With our camera, 1px on x = 1 world unit
 export const ENEMY_SPRITE = "enemy"; // Enemy sprite key
 export const CANNON_SPRITE = "cannon"; // Cannon sprite key
 export const BULLET_SPRITE = "bullet"; // Bullet sprite key
-export const BULLET_RADIUS_METERS = 0.06;
-export const CANNON_SHADOW_SPRITE = "cannon-shadow";
 export const PARTICLE_SPRITE = "particle";
 export const PIXEL_CANNON_SPRITE = "pixel-cannon";
 export const CANNON_WHEELS_SPRITE = "cannon-wheels";
 export const CANNON_WHEELS_SPRITE_ROTATION = Math.PI * 1.5; // to make it face right
 export const FLARES = "flares";
 export const PLAY_SOUNDS = true;
+export const GRAVITY_SI = 9.81;
+
+const TWELVE_POUND_BULLET_SI = {
+  speed: 440,
+  mass: 6,
+  radius: 0.06,
+};
+
+const SLOW_BALLISTIC_FACTOR = 8; // slower ballistics so that it looks fun
+
+// make a bullet with the same impact, but with a scaled speed
+// - speed is scaled down by factor
+// - mass is scaled up by factor^2 to compensate for the slower speed on impact
+// - radius is scaled up by factor^2/3 to keep the impact visually realistic with the fake mass
+function getBullet(
+  bulletSI: {
+    speed: number;
+    mass: number;
+    radius: number;
+  },
+  factor: number
+) {
+  const speedSI = bulletSI.speed / factor;
+  const speed = speedSI * WORLD_UNIT_PER_METER;
+  const mass = bulletSI.mass * factor * factor;
+  const radiusSI = bulletSI.radius * Math.pow(factor, 2 / 3);
+  const radius = Math.ceil(radiusSI * WORLD_UNIT_PER_METER);
+  const sqRadius = radius * radius;
+  const invMass = 1 / mass;
+
+  return {
+    speedSI,
+    speed,
+    mass,
+    radiusSI,
+    radius,
+    sqRadius,
+    invMass,
+  };
+}
+
+export const BULLET = getBullet(TWELVE_POUND_BULLET_SI, SLOW_BALLISTIC_FACTOR);
+
 export const VISIBLE_UPDATE_INTERVAL = 1; // Target 60 FPS when visible
 export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisible
 

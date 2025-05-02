@@ -23,13 +23,13 @@ export function createCannonTexture(
   const rectHeight = height;
 
   // 3. Define the points of the combined shape polygon
-  const points: Phaser.Types.Math.Vector2Like[] = [];
+  const points: Phaser.Math.Vector2[] = [];
 
   // --- Start with rectangle corners (excluding the left edge) ---
   // Top-right corner
-  points.push({ x: rectX + rectWidth, y: rectY });
+  points.push(new Phaser.Math.Vector2(rectX + rectWidth, rectY));
   // Bottom-right corner
-  points.push({ x: rectX + rectWidth, y: rectY + rectHeight });
+  points.push(new Phaser.Math.Vector2(rectX + rectWidth, rectY + rectHeight));
 
   // --- Add points along the semicircle arc ---
   // Go from bottom tangent point counter-clockwise to top tangent point
@@ -45,7 +45,7 @@ export function createCannonTexture(
 
     const px = circleCenterX + radius * Math.cos(currentAngle);
     const py = circleCenterY + radius * Math.sin(currentAngle);
-    points.push({ x: px, y: py });
+    points.push(new Phaser.Math.Vector2(px, py));
   }
 
   // The loop automatically includes the start (bottom) and end (top) tangent points.

@@ -1,6 +1,6 @@
-import { ENEMY_SPRITE } from "./constants";
-import { GameScene } from "./GameScene";
-import { Solid } from "./lib/sphereToGroundCollision";
+import { ENEMY_SPRITE } from "../constants";
+import { GameScene } from "../GameScene";
+import { Solid } from "../collision/sphereToGround";
 
 const ENNEMY_MASS_KG = 100;
 
@@ -10,6 +10,7 @@ export class Enemy extends Phaser.GameObjects.Image implements Solid {
   shadow: Phaser.GameObjects.Image;
   gameScene: GameScene;
   invMass: number;
+  mass: number;
 
   constructor(gameScene: GameScene, world: Phaser.Math.Vector3) {
     super(gameScene, 0, 0, ENEMY_SPRITE);
@@ -17,6 +18,7 @@ export class Enemy extends Phaser.GameObjects.Image implements Solid {
     this.world = world.clone();
     this.velocity = new Phaser.Math.Vector3(0, 0, 0);
     this.gameScene = gameScene;
+    this.mass = ENNEMY_MASS_KG;
     this.invMass = 1 / ENNEMY_MASS_KG;
     this.gameScene.add.existing(this);
     this.shadow = this.gameScene.add

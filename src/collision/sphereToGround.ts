@@ -1,12 +1,12 @@
 import Phaser from "phaser";
 import { GameScene } from "../GameScene"; // Assuming GameScene has the methods
-import { SMALL_WORLD_FACTOR } from "../constants";
-import { INITIAL_BULLET_SPEED } from "../Cannon";
+import { BULLET } from "../constants";
 
 export interface Solid {
   world: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   gameScene: GameScene;
+  mass: number; // Mass in kg, or +Inf for static objects
   invMass: number; // Inverse mass (1/mass), or 0 for static objects
 }
 
@@ -76,8 +76,8 @@ export function bounce(
   velocity.z = softnessFactor * vNormZ + hardnessFactor * vSpecZ;
 }
 
-const SMALL_WORLD_FACTOR_SQ = SMALL_WORLD_FACTOR * SMALL_WORLD_FACTOR;
 const TNT_KG_IN_JOULES = 4.184 * 10e6; // 1 TNT kg = 4.184 MJ
+const INV_TNT_KG_IN_JOULES = 1 / TNT_KG_IN_JOULES;
 
 /**
  * Collides a sphere against height-mapped ground. Calculates bounce magnitude
@@ -114,7 +114,7 @@ export function sphereToGroundCollision(
   // parallelFactor: 1 for grazing (cosImpactAngle=0), 0 for head-on (cosImpactAngle=1)
   const parallelFactor = Phaser.Math.Clamp(1.0 - cosImpactAngle, 0.0, 1.0);
   // fastFactor: How fast relative to max speed
-  const fastFactor = Phaser.Math.Clamp(speed / INITIAL_BULLET_SPEED, 0.0, 1.0);
+  const fastFactor = Phaser.Math.Clamp(speed / BULLET.speed, 0.0, 1.0);
 
   // Potential for bounce based purely on impact angle and speed
   const impactBouncePotential = Phaser.Math.Clamp(
@@ -133,10 +133,7 @@ export function sphereToGroundCollision(
 
   const explosion_percentage = 1.0 - bounce_percentage;
   const energy =
-    (explosion_percentage *
-      0.5 *
-      ((speedSq * SMALL_WORLD_FACTOR_SQ) / s.invMass)) /
-    TNT_KG_IN_JOULES;
+    explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
 
   if (bounce_percentage === 0) {
     // No bounce, just resolve position
@@ -149,7 +146,7 @@ export function sphereToGroundCollision(
   s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
 
   bounce(s.velocity, normal, hardness, speed); // Modifies s.velocity in-place
-  s.velocity.normalize().scale(speed * bounce_percentage); // Maintain the original speed
+  s.velocity.normalize().scale(speed * bounce_percentage); // Set the new speed
 
   return energy;
 }

@@ -37,7 +37,7 @@ export function createPixelCannonTexture(
   // A. Shadow/Outline Layer (Optional but adds depth)
   // Draw the full shape slightly offset (e.g., 1 pixel down)
   graphics.fillStyle(colors.shadow, 1);
-  const shadowPoints: Phaser.Types.Math.Vector2Like[] = calculateCannonPoints(
+  const shadowPoints: Phaser.Math.Vector2[] = calculateCannonPoints(
     pixelWidth,
     pixelHeight,
     1
@@ -46,7 +46,7 @@ export function createPixelCannonTexture(
 
   // B. Base Color Layer
   graphics.fillStyle(colors.base, 1);
-  const basePoints: Phaser.Types.Math.Vector2Like[] = calculateCannonPoints(
+  const basePoints: Phaser.Math.Vector2[] = calculateCannonPoints(
     pixelWidth,
     pixelHeight,
     0 // No offset
@@ -80,7 +80,7 @@ function calculateCannonPoints(
   width: number,
   height: number,
   offsetY: number // Vertical offset for shadow
-): Phaser.Types.Math.Vector2Like[] {
+): Phaser.Math.Vector2[] {
   const radius = height / 2;
   const circleCenterX = radius;
   const circleCenterY = radius;
@@ -92,13 +92,13 @@ function calculateCannonPoints(
   const rectHeight = height;
 
   // 3. Define the points of the combined shape polygon
-  const points: Phaser.Types.Math.Vector2Like[] = [];
+  const points: Phaser.Math.Vector2[] = [];
 
   // --- Start with rectangle corners (excluding the left edge) ---
   // Top-right corner
-  points.push({ x: rectX + rectWidth, y: rectY });
+  points.push(new Phaser.Math.Vector2(rectX + rectWidth, rectY));
   // Bottom-right corner
-  points.push({ x: rectX + rectWidth, y: rectY + rectHeight });
+  points.push(new Phaser.Math.Vector2(rectX + rectWidth, rectY + rectHeight));
 
   // --- Add points along the semicircle arc ---
   // Go from bottom tangent point counter-clockwise to top tangent point
@@ -114,7 +114,7 @@ function calculateCannonPoints(
 
     const px = circleCenterX + radius * Math.cos(currentAngle);
     const py = circleCenterY + radius * Math.sin(currentAngle);
-    points.push({ x: px, y: py });
+    points.push(new Phaser.Math.Vector2(px, py));
   }
 
   // The loop automatically includes the start (bottom) and end (top) tangent points.

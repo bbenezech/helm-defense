@@ -1,7 +1,6 @@
 import { Bullet } from "./Bullet";
 import {
   WORLD_UNIT_PER_METER,
-  SMALL_WORLD_FACTOR,
   PARTICLE_SPRITE,
   CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
@@ -10,8 +9,10 @@ import {
   CANNON_WHEELS_SPRITE_ROTATION,
   INVISIBLE_UPDATE_INTERVAL,
   VISIBLE_UPDATE_INTERVAL,
-} from "./constants";
-import { GameScene } from "./GameScene";
+  BULLET,
+  GRAVITY_SI,
+} from "../constants";
+import { GameScene } from "../GameScene";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 500;
@@ -19,13 +20,9 @@ const RECOIL_RETURN_DURATION_MS = 500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
 const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
-const INITIAL_SPEED_METERS_PER_SECOND = 440; // 440 m/s
-const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
+const INITIAL_ALTITUDE = Phaser.Math.DegToRad(0);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 const COOLDOWN_MS = 1000; // 1 second cooldown
-
-export const INITIAL_BULLET_SPEED =
-  (INITIAL_SPEED_METERS_PER_SECOND * WORLD_UNIT_PER_METER) / SMALL_WORLD_FACTOR;
 
 export class Cannon extends Phaser.GameObjects.Image {
   // cache vectors to avoid creating new ones every frame, do not use directly, use getters
@@ -33,7 +30,6 @@ export class Cannon extends Phaser.GameObjects.Image {
   private _screenVelocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private _azymuth: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _screenAzymuth: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-  private _bulletVelocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleWorldOffset: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -52,7 +48,6 @@ export class Cannon extends Phaser.GameObjects.Image {
   altitude: number; // elevation angle of the muzzle in radians
   shootRequested: boolean; // if true, shoot when ready
 
-  muzzleSpeed: number;
   recoilTween: Phaser.Tweens.TweenChain;
   shadowRecoilTween: Phaser.Tweens.TweenChain;
   wheelsRecoilTween: Phaser.Tweens.TweenChain;
@@ -110,7 +105,6 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setDepth(this.y - 2);
 
     this.barrelLength = this.cannonLength * (1 - originX);
-    this.muzzleSpeed = INITIAL_BULLET_SPEED;
     this.altitude = INITIAL_ALTITUDE;
     this.requestedAzymuth = this.azymuth = Phaser.Math.DegToRad(rotationDeg); // Pointing to the top
     this.shootRequested = false;
@@ -118,11 +112,10 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.muzzleParticleEmitter = this.gameScene.add
       .particles(this.x, this.y, PARTICLE_SPRITE, {
         speed: {
-          min: this.muzzleSpeed * 0.5,
-          max: this.muzzleSpeed * 1.5,
+          min: BULLET.speed * 0.2,
+          max: BULLET.speed * 1,
         },
-        lifespan: { min: 800, max: 2000 },
-        scale: { start: 1, end: 0 },
+        lifespan: { min: 400, max: 1000 },
         blendMode: "ADD",
         angle: { min: -7, max: 7 },
         frequency: -1,
@@ -333,12 +326,6 @@ export class Cannon extends Phaser.GameObjects.Image {
     );
   }
 
-  getBulletVelocity() {
-    return this._bulletVelocity
-      .copy(this.getVelocity())
-      .scale(this.muzzleSpeed);
-  }
-
   getMuzzleWorldOffset() {
     return this._muzzleWorldOffset
       .copy(this.getVelocity())
@@ -348,7 +335,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   shoot(visible: boolean) {
     this.cooldown = COOLDOWN_MS; // 1 second cooldown
     const muzzleWorld = this.getMuzzleWorld();
-    new Bullet(this.gameScene, muzzleWorld, this.getBulletVelocity());
+    new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
 
     if (PLAY_SOUNDS) {
       const blast = Math.ceil(Math.random() * 5);
@@ -370,7 +357,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       this.muzzleParticleEmitter
         .setParticleGravity(
           0,
-          9.8 *
+          GRAVITY_SI *
             WORLD_UNIT_PER_METER *
             this.gameScene.worldToScreen.z *
             Math.cos(this.azymuth)

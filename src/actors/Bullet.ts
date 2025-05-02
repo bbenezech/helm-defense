@@ -4,18 +4,16 @@ import {
   INVISIBLE_UPDATE_INTERVAL,
   WORLD_UNIT_PER_METER,
   VISIBLE_UPDATE_INTERVAL,
-  BULLET_RADIUS_METERS,
   PARTICLE_SPRITE,
-} from "./constants";
-import { GameScene } from "./GameScene";
-import { Solid, sphereToGroundCollision } from "./lib/sphereToGroundCollision"; // Import the collision function
+  BULLET,
+  GRAVITY_SI,
+} from "../constants";
+import { GameScene } from "../GameScene";
+import { Solid, sphereToGroundCollision } from "../collision/sphereToGround"; // Import the collision function
 
-const GRAVITY = 9.81 * WORLD_UNIT_PER_METER; // WU/s^2
 // canon de 12 livres
-const BULLET_MASS_KG = 6;
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
-const BULLET_AREA_M2 = Math.PI * BULLET_RADIUS_METERS * BULLET_RADIUS_METERS; // Cross-sectional area in m^2
 
 export class Bullet extends Phaser.GameObjects.Image implements Solid {
   private _screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -29,29 +27,31 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   velocity: Phaser.Math.Vector3;
   shadow: Phaser.GameObjects.Image;
   gameScene: GameScene;
-  dragConstantSI: number;
+  mass: number;
   invMass: number;
+  dragConstantSI: number;
   explosionEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   explosion: false | number = false; // Explosion effect on next frame
 
   constructor(
     gameScene: GameScene,
     world: Phaser.Math.Vector3,
-    velocity: Phaser.Math.Vector3
+    normalizedVelocity: Phaser.Math.Vector3
   ) {
     super(gameScene, 0, 0, BULLET_SPRITE);
 
     this.world = world.clone();
-    this.velocity = velocity.clone();
+    this.velocity = normalizedVelocity.clone().scale(BULLET.speed);
     this.gameScene = gameScene;
-    // ½ * ρ * v²
-    this.dragConstantSI = 0.5 * rho * C_d * BULLET_AREA_M2;
+    this.dragConstantSI =
+      0.5 * rho * C_d * Math.PI * BULLET.radiusSI * BULLET.radiusSI; // ½ * ρ * v²
     this.gameScene.add.existing(this);
     this.shadow = this.gameScene.add
       .image(0, 0, this.texture)
       .setAlpha(0.5)
       .setScale(this.gameScene.worldToScreen.x, this.gameScene.worldToScreen.y);
-    this.invMass = 1 / BULLET_MASS_KG;
+    this.mass = BULLET.mass;
+    this.invMass = BULLET.invMass;
     this.rotation = Math.atan2(this.velocity.y, this.velocity.x);
     const angle = Phaser.Math.RadToDeg(this.rotation);
     this.explosionEmitter = this.gameScene.add.particles(
@@ -110,39 +110,25 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     if (this.dragTimer >= 125) {
       const dragDeltaSeconds = this.dragTimer / 1000;
       this.dragTimer = 0;
-      // --- Calculate Drag Acceleration ---
-      let ax_drag = 0;
-      let ay_drag = 0;
-      let az_drag = 0;
-
-      speed = Math.sqrt(speedSq); // Speed in World Units / Second
-      const speed_si = speed / WORLD_UNIT_PER_METER; // Units: (WU/s) / (WU/m) = m/s
+      speed = Math.sqrt(speedSq);
+      const speedSI = speed / WORLD_UNIT_PER_METER;
       // Calculate Drag Force magnitude in SI units (Newtons)
       // F_drag = k * speed_si^2
       // Units: (kg/m) * (m/s)^2 = kg * m / s^2 (Newtons)
-      const F_drag_magnitude_si = this.dragConstantSI * speed_si * speed_si;
+      const dragForceMagnitudeSI = this.dragConstantSI * speedSI * speedSI;
 
-      // Calculate Drag Acceleration magnitude in SI units (m/s^2)
-      // a = F / m
-      // Units: (kg * m / s^2) / kg = m / s^2
-      const accel_drag_magnitude_si = F_drag_magnitude_si / BULLET_MASS_KG;
+      // Calculate Drag Acceleration magnitude
+      const dragAccelerationMagnitude =
+        dragForceMagnitudeSI * this.invMass * WORLD_UNIT_PER_METER;
 
-      // Convert Drag Acceleration magnitude back to World Units (World Units / s^2)
-      // Units: (m / s^2) * (WU / m) = WU / s^2
-      const accel_drag_magnitude_world =
-        accel_drag_magnitude_si * WORLD_UNIT_PER_METER;
+      const axDrag = dragAccelerationMagnitude * (this.velocity.x / speed);
+      const ayDrag = dragAccelerationMagnitude * (this.velocity.y / speed);
+      const azDrag = dragAccelerationMagnitude * (this.velocity.z / speed);
 
-      ax_drag = accel_drag_magnitude_world * (this.velocity.x / speed);
-      ay_drag = accel_drag_magnitude_world * (this.velocity.y / speed);
-      az_drag = accel_drag_magnitude_world * (this.velocity.z / speed);
-
-      const ax_total = -ax_drag;
-      const ay_total = -ay_drag;
-      const az_total = -az_drag - GRAVITY; // Subtract gravity
-
-      this.velocity.x += ax_total * dragDeltaSeconds;
-      this.velocity.y += ay_total * dragDeltaSeconds;
-      this.velocity.z += az_total * dragDeltaSeconds;
+      this.velocity.x += -axDrag * dragDeltaSeconds;
+      this.velocity.y += -ayDrag * dragDeltaSeconds;
+      this.velocity.z +=
+        (-azDrag - GRAVITY_SI * WORLD_UNIT_PER_METER) * dragDeltaSeconds;
     }
 
     const deltaSeconds = delta / 1000; // Convert ms to seconds for physics

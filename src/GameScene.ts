@@ -1,29 +1,25 @@
-import { Bullet } from "./Bullet";
-import { Cannon } from "./Cannon";
+import { Cannon } from "./actors/Cannon";
 import {
   BULLET_SPRITE,
   CANNON_SPRITE,
   ENEMY_SPRITE,
-  CANNON_SHADOW_SPRITE,
   TILE_HEIGHT_PX,
   PARTICLE_SPRITE,
-  PIXEL_CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
   PERSPECTIVE,
   AXONOMETRIC,
-  BULLET_RADIUS_METERS,
-  WORLD_UNIT_PER_METER,
-  SMALL_WORLD_FACTOR,
-  BIG_WORLD_FACTOR,
+  BULLET,
 } from "./constants";
-import { createCannonTexture } from "./lib/createCannonTexture";
-import { createCircleTexture } from "./lib/createCircleTexture";
-import { createParticleTexture } from "./lib/createParticleTexture";
+import { createCannonTexture } from "./texture/cannon";
+import { createCircleTexture } from "./texture/circle";
+import { createParticleTexture } from "./texture/particle";
 import {
   createPixelCannonTexture,
   PixelCannonColors,
-} from "./lib/createPixelCannonTexture";
+} from "./texture/pixelCannon";
+import { randomAround, randomBetween } from "./lib/random";
+import { SURFACE_HARDNESS } from "./world/surface";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -123,9 +119,7 @@ export class GameScene extends Phaser.Scene {
   // 0 => mud
   // 1 => iron
   getSurfaceHardnessFromWorldPosition(world: Phaser.Math.Vector3): number {
-    const screen = this.getScreenPosition(world, this._projectedSurfaceZ);
-
-    return 0.4;
+    return Phaser.Math.Clamp(randomAround(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
   getSurfaceNormalFromWorldPosition(
@@ -216,40 +210,19 @@ export class GameScene extends Phaser.Scene {
       highlight: 0xcccccc, // Light Grey
     };
 
-    const bulletRadius = Math.ceil(
-      BULLET_RADIUS_METERS *
-        WORLD_UNIT_PER_METER *
-        this.worldToScreen.x *
-        BIG_WORLD_FACTOR
-    );
-
-    const bulletDiameter = bulletRadius * 2;
-    const cannonDiameter = bulletDiameter + 2;
-    const cannonLength = bulletDiameter * 5;
+    const bulletRadius = BULLET.radius * this.worldToScreen.x;
+    const cannonRadius = bulletRadius * 1.2;
+    const cannonLength = cannonRadius * 8;
 
     createParticleTexture(this, PARTICLE_SPRITE);
-    createPixelCannonTexture(
-      this,
-      CANNON_SPRITE,
-      cannonColors,
-      cannonLength,
-      cannonDiameter
-    );
     createCannonTexture(
       this,
       CANNON_SPRITE,
       0x444444,
       cannonLength,
-      cannonDiameter
+      cannonRadius * 2
     );
-    createCannonTexture(
-      this,
-      CANNON_SHADOW_SPRITE,
-      0x000000,
-      cannonLength,
-      cannonDiameter
-    );
-    createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletDiameter);
+    createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletRadius * 2);
   }
 
   create() {
