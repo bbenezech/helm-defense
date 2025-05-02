@@ -16,9 +16,10 @@ const BOTTOM_COLOR = {
 /**
  * Represents a cuboid defined by two parallel squares (top and bottom faces)
  * in world space for debugging projections.
- * All world-space calculations are done first.
- * Screen projection and rendering happen *only* within updateVisuals.
- * Uses GameScene projection and depth sorting.
+ * World-space calculations are done first.
+ * Screen projection and rendering happen *only* within updateVisuals,
+ * positioning a container and setting relative polygon points within it.
+ * Uses GameScene projection and depth sorting via the container.
  */
 export class Cube {
   private gameScene: GameScene;
@@ -28,25 +29,22 @@ export class Cube {
   private sizeZ: number; // Size in world units for Z (height)
 
   // --- Geometry (World Space) ---
-  // 8 Vertices: 4 for bottom square, 4 for top square
   private worldVertices: Phaser.Math.Vector3[];
 
   // --- Rendering (Screen Space - Populated ONLY in updateVisuals) ---
+  private container: Phaser.GameObjects.Container;
   private screenVertices: Phaser.Math.Vector2[];
   private topPolygon: Phaser.GameObjects.Polygon;
   private bottomPolygon: Phaser.GameObjects.Polygon;
-  // Cache for screen center projection (used for depth)
+  // Cache for screen center projection (used for container position and depth)
   private _screenCenter: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-
-  // Optional: Container if rotation is needed later
-  // private container: Phaser.GameObjects.Container;
 
   constructor(
     gameScene: GameScene,
     worldCenter: Phaser.Math.Vector3,
-    sizeXMeters: number, // Default to 1 meter
+    sizeXMeters: number,
     sizeYMeters: number,
-    sizeZMeters: number // Default to 1 meter
+    sizeZMeters: number
   ) {
     this.gameScene = gameScene;
     this.worldCenter = worldCenter.clone();
@@ -55,22 +53,27 @@ export class Cube {
     const sizeX = sizeXMeters * WORLD_UNIT_PER_METER;
     const sizeY = sizeYMeters * WORLD_UNIT_PER_METER;
     this.sizeZ = sizeZMeters * WORLD_UNIT_PER_METER;
-    // Calculate half size for vertex offsets
     this.halfSizeX = sizeX / 2;
     this.halfSizeY = sizeY / 2;
-    // Initialize world vertices array (will be calculated in updateVertices)
+
+    // Initialize world vertices array
     this.worldVertices = Array.from(
       { length: 8 },
       () => new Phaser.Math.Vector3()
     );
-    // Initialize screen vertices array
+    // Initialize screen vertices array (will be populated in updateVisuals)
     this.screenVertices = Array.from(
       { length: 8 },
       () => new Phaser.Math.Vector2()
     );
 
-    // Create Polygon objects (initially empty or with placeholder points)
-    // Their positions and shapes will be set in the first updateVisuals call
+    // --- Create Container ---
+    // Initial position will be set in the first updateVisuals call
+    this.container = this.gameScene.add.container(0, 0);
+    // --- Create Polygons (relative to container) ---
+    // Add them to the container, not the scene directly.
+    // Their positions within the container will be (0,0) initially,
+    // but their shapes will be defined by points relative to the container's origin.
     this.bottomPolygon = this.gameScene.add.polygon(
       0,
       0,
@@ -78,12 +81,13 @@ export class Cube {
       BOTTOM_COLOR.fill,
       BOTTOM_COLOR.alpha
     );
-    this.bottomPolygon.setOrigin(0, 0); // Vertices will be absolute screen coords
+    this.bottomPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.bottomPolygon.isFilled = true;
     this.bottomPolygon.isStroked = true;
     this.bottomPolygon.strokeColor = BOTTOM_COLOR.stroke;
     this.bottomPolygon.lineWidth = 1;
     this.bottomPolygon.closePath = true;
+    this.container.add(this.bottomPolygon); // Add to container
 
     this.topPolygon = this.gameScene.add.polygon(
       0,
@@ -92,12 +96,13 @@ export class Cube {
       TOP_COLOR.fill,
       TOP_COLOR.alpha
     );
-    this.topPolygon.setOrigin(0, 0); // Vertices will be absolute screen coords
+    this.topPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.topPolygon.isFilled = true;
     this.topPolygon.isStroked = true;
     this.topPolygon.strokeColor = TOP_COLOR.stroke;
     this.topPolygon.lineWidth = 1;
     this.topPolygon.closePath = true;
+    this.container.add(this.topPolygon); // Add to container
 
     // Initial calculation of world state and rendering
     this.calculateWorldVertices();
@@ -109,30 +114,36 @@ export class Cube {
     const center = this.worldCenter;
     const hsX = this.halfSizeX;
     const hsY = this.halfSizeY;
-    const bottomZ = center.z; // Bottom face at the Z level of the center point
-    const topZ = center.z + this.sizeZ; // Top face 'sizeZ' world units above the center point Z
+    const bottomZ = center.z;
+    const topZ = center.z + this.sizeZ;
 
-    // Define 8 world vertices relative to the potentially updated worldCenter
-    // Bottom Square Vertices (Z = bottomZ) - Indices 0-3 (CCW from above)
-    this.worldVertices[0].set(center.x - hsX, center.y + hsY, bottomZ); // 0: Bottom-Back-Left   (X-, Y+, Z=bottomZ)
-    this.worldVertices[1].set(center.x + hsX, center.y + hsY, bottomZ); // 1: Bottom-Back-Right  (X+, Y+, Z=bottomZ)
-    this.worldVertices[2].set(center.x + hsX, center.y - hsY, bottomZ); // 2: Bottom-Front-Right (X+, Y-, Z=bottomZ)
-    this.worldVertices[3].set(center.x - hsX, center.y - hsY, bottomZ); // 3: Bottom-Front-Left  (X-, Y-, Z=bottomZ)
-    // Top Square Vertices (Z = topZ) - Indices 4-7 (CCW from above)
-    this.worldVertices[4].set(center.x - hsX, center.y + hsY, topZ); // 4: Top-Back-Left    (X-, Y+, Z=topZ)
-    this.worldVertices[5].set(center.x + hsX, center.y + hsY, topZ); // 5: Top-Back-Right   (X+, Y+, Z=topZ)
-    this.worldVertices[6].set(center.x + hsX, center.y - hsY, topZ); // 6: Top-Front-Right  (X+, Y-, Z=topZ)
-    this.worldVertices[7].set(center.x - hsX, center.y - hsY, topZ); // 7: Top-Front-Left
+    // Bottom Square Vertices (Indices 0-3)
+    this.worldVertices[0].set(center.x - hsX, center.y + hsY, bottomZ);
+    this.worldVertices[1].set(center.x + hsX, center.y + hsY, bottomZ);
+    this.worldVertices[2].set(center.x + hsX, center.y - hsY, bottomZ);
+    this.worldVertices[3].set(center.x - hsX, center.y - hsY, bottomZ);
+    // Top Square Vertices (Indices 4-7)
+    this.worldVertices[4].set(center.x - hsX, center.y + hsY, topZ);
+    this.worldVertices[5].set(center.x + hsX, center.y + hsY, topZ);
+    this.worldVertices[6].set(center.x + hsX, center.y - hsY, topZ);
+    this.worldVertices[7].set(center.x - hsX, center.y - hsY, topZ);
   }
 
   /**
-   * Projects world vertices to screen space using GameScene.getScreenPosition
-   * and updates Phaser Polygon GameObjects (shape and depth).
+   * Projects world positions to screen space, updates the container's position
+   * and depth, and updates the polygons' shapes relative to the container.
    * This is the ONLY place screen calculations should occur for this class.
    */
   updateVisuals() {
-    // --- Screen Projection ---
-    // Project world vertices to screen space
+    // --- Project Center and Set Container Position/Depth ---
+    const screenCenter = this.gameScene.getScreenPosition(
+      this.worldCenter,
+      this._screenCenter // Use cached vector
+    );
+    this.container.setPosition(screenCenter.x, screenCenter.y);
+    this.container.setDepth(screenCenter.y); // Use screen Y for depth sorting
+
+    // --- Project World Vertices to Screen Space ---
     for (let i = 0; i < this.worldVertices.length; i++) {
       this.gameScene.getScreenPosition(
         this.worldVertices[i],
@@ -140,49 +151,42 @@ export class Cube {
       );
     }
 
-    // --- Update Bottom Polygon Shape ---
-    // Use vertices 0, 1, 2, 3
-    const bottomPoints: number[] = [];
+    // --- Update Polygon Shapes (Relative to Container) ---
+    // Calculate points relative to the container's origin (screenCenter)
+    const bottomPointsRelative: number[] = [];
     for (let i = 0; i <= 3; i++) {
-      bottomPoints.push(this.screenVertices[i].x, this.screenVertices[i].y);
+      bottomPointsRelative.push(
+        this.screenVertices[i].x - screenCenter.x,
+        this.screenVertices[i].y - screenCenter.y
+      );
     }
-    this.bottomPolygon.setTo(bottomPoints); // Update the polygon's points
+    this.bottomPolygon.setTo(bottomPointsRelative);
 
-    // --- Update Top Polygon Shape ---
-    // Use vertices 4, 5, 6, 7
-    const topPoints: number[] = [];
+    const topPointsRelative: number[] = [];
     for (let i = 4; i <= 7; i++) {
-      topPoints.push(this.screenVertices[i].x, this.screenVertices[i].y);
+      topPointsRelative.push(
+        this.screenVertices[i].x - screenCenter.x,
+        this.screenVertices[i].y - screenCenter.y
+      );
     }
-    this.topPolygon.setTo(topPoints); // Update the polygon's points
+    this.topPolygon.setTo(topPointsRelative);
 
-    // --- Update Depth ---
-    // Project the world center to screen space to get a Y value for depth sorting.
-    const screenCenter = this.gameScene.getScreenPosition(
-      this.worldCenter,
-      this._screenCenter
-    );
-    // Add small offsets to ensure top is visually above bottom if they overlap perfectly
-    // Objects with higher Y appear further away (lower depth value in Phaser 3 default)
-    // but here we use Y directly, so higher Y means 'further back' / 'higher up' on screen.
-    // We want the top face visually 'on top', so it needs a higher depth value.
-    this.bottomPolygon.setDepth(screenCenter.y - 0.1); // Slightly lower depth
-    this.topPolygon.setDepth(screenCenter.y + 0.1); // Slightly higher depth
+    // Note: Depth sorting within the container is handled by the order they were added.
+    // If more complex layering is needed, you could setDepth on the polygons too,
+    // e.g., this.bottomPolygon.setDepth(-0.1); this.topPolygon.setDepth(0.1);
   }
 
   /**
-   * Recalculates world vertices based on the current worldCenter
-   * and then updates the visuals (projection, polygon shapes, depth).
-   * Call this if worldCenter changes or a visual refresh is needed.
+   * Recalculates world vertices and then updates the visuals (container position,
+   * polygon shapes relative to container, depth).
    */
   update() {
-    this.calculateWorldVertices(); // Update world state first
-    this.updateVisuals(); // Then update screen representation
+    this.calculateWorldVertices();
+    this.updateVisuals();
   }
 
-  /** Cleans up resources and event listeners. */
+  /** Cleans up the container and its children (polygons). */
   destroy() {
-    this.bottomPolygon.destroy();
-    this.topPolygon.destroy();
+    this.container.destroy(); // Destroys container and children
   }
 }
