@@ -293,7 +293,7 @@ export class GameScene extends Phaser.Scene {
     this.cannon = new Cannon(this, cannonWorld, 270);
 
     const cubeWorld = this.tileToWorldPosition(70, 77);
-    new Cube(this, cubeWorld, 10, 4, 15);
+    new Cube(this, cubeWorld, 5, 5, 5, Math.PI / 4);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {

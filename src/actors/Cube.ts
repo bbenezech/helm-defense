@@ -27,6 +27,7 @@ export class Cube {
   private halfSizeX: number; // Half size in world units for X
   private halfSizeY: number; // Half size in world units for Y
   private sizeZ: number; // Size in world units for Z (height)
+  worldRotationZ: number = 0; // Rotation angle in radians around the Z-axis
 
   // --- Geometry (World Space) ---
   private worldVertices: Phaser.Math.Vector3[];
@@ -44,10 +45,12 @@ export class Cube {
     worldCenter: Phaser.Math.Vector3,
     sizeXMeters: number,
     sizeYMeters: number,
-    sizeZMeters: number
+    sizeZMeters: number,
+    worldRotationZ: number
   ) {
     this.gameScene = gameScene;
     this.worldCenter = worldCenter.clone();
+    this.worldRotationZ = worldRotationZ; // Default rotation
 
     // Calculate sizes in world units
     const sizeX = sizeXMeters * WORLD_UNIT_PER_METER;
@@ -111,22 +114,41 @@ export class Cube {
 
   /** Calculates ONLY world vertex positions based on the current worldCenter. */
   private calculateWorldVertices() {
-    const center = this.worldCenter;
     const hsX = this.halfSizeX;
     const hsY = this.halfSizeY;
-    const bottomZ = center.z;
-    const topZ = center.z + this.sizeZ;
+    const bottomZ = 0; // Relative Z for bottom face
+    const topZ = this.sizeZ; // Relative Z for top face
 
-    // Bottom Square Vertices (Indices 0-3)
-    this.worldVertices[0].set(center.x - hsX, center.y + hsY, bottomZ);
-    this.worldVertices[1].set(center.x + hsX, center.y + hsY, bottomZ);
-    this.worldVertices[2].set(center.x + hsX, center.y - hsY, bottomZ);
-    this.worldVertices[3].set(center.x - hsX, center.y - hsY, bottomZ);
-    // Top Square Vertices (Indices 4-7)
-    this.worldVertices[4].set(center.x - hsX, center.y + hsY, topZ);
-    this.worldVertices[5].set(center.x + hsX, center.y + hsY, topZ);
-    this.worldVertices[6].set(center.x + hsX, center.y - hsY, topZ);
-    this.worldVertices[7].set(center.x - hsX, center.y - hsY, topZ);
+    // 1. Define vertices relative to local origin (0, 0, 0)
+    const localVertices = [
+      // Bottom face
+      new Phaser.Math.Vector3(-hsX, +hsY, bottomZ),
+      new Phaser.Math.Vector3(+hsX, +hsY, bottomZ),
+      new Phaser.Math.Vector3(+hsX, -hsY, bottomZ),
+      new Phaser.Math.Vector3(-hsX, -hsY, bottomZ),
+      // Top face
+      new Phaser.Math.Vector3(-hsX, +hsY, topZ),
+      new Phaser.Math.Vector3(+hsX, +hsY, topZ),
+      new Phaser.Math.Vector3(+hsX, -hsY, topZ),
+      new Phaser.Math.Vector3(-hsX, -hsY, topZ),
+    ];
+
+    // 2. Apply rotation around Z-axis (using a temporary matrix or quaternion)
+    // For simplicity, let's use direct rotation calculation here
+    const cosR = Math.cos(this.worldRotationZ);
+    const sinR = Math.sin(this.worldRotationZ);
+
+    // 3. Rotate and translate to final world positions
+    for (let i = 0; i < localVertices.length; i++) {
+      const local = localVertices[i];
+      const rotatedX = local.x * cosR - local.y * sinR;
+      const rotatedY = local.x * sinR + local.y * cosR;
+      this.worldVertices[i].set(
+        this.worldCenter.x + rotatedX,
+        this.worldCenter.y + rotatedY,
+        this.worldCenter.z + local.z // Add world center Z offset
+      );
+    }
   }
 
   /**
@@ -141,6 +163,7 @@ export class Cube {
       this._screenCenter // Use cached vector
     );
     this.container.setPosition(screenCenter.x, screenCenter.y);
+    this.container.setRotation(0); // Ensure container itself isn't rotated
     this.container.setDepth(screenCenter.y); // Use screen Y for depth sorting
 
     // --- Project World Vertices to Screen Space ---
@@ -174,15 +197,6 @@ export class Cube {
     // Note: Depth sorting within the container is handled by the order they were added.
     // If more complex layering is needed, you could setDepth on the polygons too,
     // e.g., this.bottomPolygon.setDepth(-0.1); this.topPolygon.setDepth(0.1);
-  }
-
-  /**
-   * Recalculates world vertices and then updates the visuals (container position,
-   * polygon shapes relative to container, depth).
-   */
-  update() {
-    this.calculateWorldVertices();
-    this.updateVisuals();
   }
 
   /** Cleans up the container and its children (polygons). */
