@@ -13,16 +13,23 @@ const game = new Phaser.Game({
   },
 });
 
-window.addEventListener("blur", () => {
-  console.log("window blurred, pausing game (window listener).");
+const title = document.title;
+
+function blurGame() {
   if (game.isRunning && !game.isPaused) {
     game.pause();
+    document.title = `Paused - ${title}`;
   }
-});
+}
 
-window.addEventListener("focus", () => {
-  console.log("window focused, resuming game (window listener).");
+function focusGame() {
   if (game.isRunning && game.isPaused) {
     game.resume();
+    document.title = title;
   }
-});
+}
+
+window.addEventListener("blur", blurGame);
+window.addEventListener("focus", focusGame);
+window.document.body.addEventListener("mouseleave", blurGame);
+window.document.body.addEventListener("mouseenter", focusGame);
