@@ -13,6 +13,7 @@ import {
   GRAVITY_SI,
 } from "../constants";
 import { GameScene } from "../GameScene";
+import { log } from "../lib/log";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 500;
@@ -333,6 +334,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   shoot(visible: boolean) {
+    log("cannon shoot");
     this.cooldown = COOLDOWN_MS; // 1 second cooldown
     const muzzleWorld = this.getMuzzleWorld();
     new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
