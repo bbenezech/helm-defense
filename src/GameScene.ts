@@ -15,17 +15,14 @@ import {
 import { createCannonTexture } from "./texture/cannon";
 import { createCircleTexture } from "./texture/circle";
 import { createParticleTexture } from "./texture/particle";
-import {
-  createPixelCannonTexture,
-  PixelCannonColors,
-} from "./texture/pixelCannon";
-import { randomAround, randomBetween } from "./lib/random";
+import { PixelCannonColors } from "./texture/pixelCannon";
+import { randomAround } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
-const TOWN_SPRITE = "kenney-tiny-town";
-const DUNGEON_SPRITE = "kenney-tiny-dungeon";
+const TOWN_SPRITE = "town";
+const DUNGEON_SPRITE = "dungeon";
 const TILE_MAP = "map";
 const GROUND_NORMAL = new Phaser.Math.Vector3(0, 0, 1);
 
@@ -187,16 +184,11 @@ export class GameScene extends Phaser.Scene {
 
   preload() {
     this.load.tilemapTiledJSON(TILE_MAP, "map.json");
-    this.load.image(TOWN_SPRITE, "kenney_tiny-town/Tilemap/tilemap_packed.png");
-    this.load.image(
-      DUNGEON_SPRITE,
-      "kenney_tiny-dungeon/Tilemap/tilemap_packed.png"
-    );
-    this.load.image(ENEMY_SPRITE, "kenney_tiny-dungeon/Tiles/tile_0100.png");
-    this.load.image(
-      CANNON_WHEELS_SPRITE,
-      "kenney_tiny-dungeon/Tiles/tile_0073.png"
-    );
+    this.load.image(TOWN_SPRITE, "town.png");
+    this.load.image(DUNGEON_SPRITE, "dungeon.png");
+
+    this.load.image(ENEMY_SPRITE, "enemy.png");
+    this.load.image(CANNON_WHEELS_SPRITE, "wheels.png");
     this.load.atlas(FLARES, "flares.png", "flares.json");
 
     this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
