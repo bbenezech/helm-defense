@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import bodyParser from "body-parser";
 
 export default defineConfig(({ mode }) => ({
-  base: mode === "gh-pages" ? `/helm-defence/` : "/",
+  base: mode === "gh-pages" ? `/helm-defense/` : "/",
   server: { host: "0.0.0.0", port: 9000, open: true },
   plugins:
     mode === "gh-pages"
