@@ -11,7 +11,9 @@
     "serve": "vite serve"
   },
   "dependencies": {
+    "@types/d3-random": "^3.0.3",
     "body-parser": "^2.2.0",
+    "d3-random": "^3.0.1",
     "phaser": "^4.0.0-rc.2",
     "serve": "^14.2.4",
     "vite": "^6.2.6"

@@ -16,7 +16,7 @@ import { createCannonTexture } from "./texture/cannon";
 import { createCircleTexture } from "./texture/circle";
 import { createParticleTexture } from "./texture/particle";
 import { PixelCannonColors } from "./texture/pixelCannon";
-import { randomAround } from "./lib/random";
+import { randomAround, randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
@@ -117,7 +117,7 @@ export class GameScene extends Phaser.Scene {
   // 0 => mud
   // 1 => iron
   getSurfaceHardnessFromWorldPosition(world: Phaser.Math.Vector3): number {
-    return Phaser.Math.Clamp(randomAround(SURFACE_HARDNESS.grass, 0.1), 0, 1);
+    return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
   getSurfaceNormalFromWorldPosition(
