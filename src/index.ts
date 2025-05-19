@@ -5,8 +5,7 @@ import { UIScene } from "./UIScene";
 const game = new Phaser.Game({
   type: Phaser.WEBGL,
   scene: [GameScene, UIScene],
-  failIfMajorPerformanceCaveat: true,
-  pixelArt: true,
+
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoRound: true,
@@ -18,6 +17,7 @@ const title = document.title;
 function blurGame() {
   if (game.isRunning && !game.isPaused) {
     game.pause();
+
     document.title = `Paused - ${title}`;
   }
 }

@@ -15,8 +15,7 @@ import {
 import { createCannonTexture } from "./texture/cannon";
 import { createCircleTexture } from "./texture/circle";
 import { createParticleTexture } from "./texture/particle";
-import { PixelCannonColors } from "./texture/pixelCannon";
-import { randomAround, randomNormal } from "./lib/random";
+import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
@@ -197,12 +196,6 @@ export class GameScene extends Phaser.Scene {
     this.load.audio("cannon_blast_4", "cannon_blast_4.mp3");
     this.load.audio("cannon_blast_5", "cannon_blast_5.mp3");
 
-    const cannonColors: PixelCannonColors = {
-      base: 0x444444, // Medium Grey
-      shadow: 0x444444, // Dark Grey
-      highlight: 0xcccccc, // Light Grey
-    };
-
     const bulletRadius = BULLET.radius * this.worldToScreen.x;
     const cannonRadius = bulletRadius * 1.2;
     const cannonLength = cannonRadius * 8;
@@ -224,7 +217,7 @@ export class GameScene extends Phaser.Scene {
 
     // Create the tilemap
     this.map = this.make.tilemap({ key: TILE_MAP });
-    const townTileset = this.map.addTilesetImage(
+    const townTilesetImage = this.map.addTilesetImage(
       TOWN_SPRITE,
       TOWN_SPRITE,
       16,
@@ -232,7 +225,7 @@ export class GameScene extends Phaser.Scene {
       0,
       0
     );
-    const dungeonTileset = this.map.addTilesetImage(
+    const dungeonTilesetImage = this.map.addTilesetImage(
       DUNGEON_SPRITE,
       DUNGEON_SPRITE,
       16,
@@ -241,12 +234,13 @@ export class GameScene extends Phaser.Scene {
       0
     );
 
-    if (!townTileset || !dungeonTileset) throw new Error("Missing asset");
+    if (!townTilesetImage || !dungeonTilesetImage)
+      throw new Error("Missing asset");
 
-    this.map.createLayer(0, townTileset, 0, 0, true)!;
-    this.map.createLayer(1, [townTileset, dungeonTileset], 0, 0)!;
-    this.map.createLayer(2, [townTileset, dungeonTileset], 0, 0)!;
-    this.map.createLayer(3, [townTileset, dungeonTileset], 0, 0)!;
+    this.map.createLayer(0, townTilesetImage, 0, 0, true)!;
+    this.map.createLayer(1, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
+    this.map.createLayer(2, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
+    this.map.createLayer(3, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
 
     const camera = this.cameras.main;
 
