@@ -10,15 +10,23 @@ export class Sound {
     [key: string]: Phaser.Sound.WebAudioSound[];
   } = {};
   private lastKeyIndex: number | null = null;
+  private invMaxDistance: number;
+  private invMaxWidth: number;
 
   constructor(gameScene: GameScene, keys: string[]) {
     this.gameScene = gameScene;
     this.keys = keys;
+    const maxDistance = Math.sqrt(
+      this.gameScene.map.widthInPixels * this.gameScene.map.widthInPixels +
+        this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels
+    );
 
+    this.invMaxDistance = 1 / maxDistance;
+    this.invMaxWidth = 1 / this.gameScene.map.widthInPixels;
     for (const key of this.keys) this.pool[key] = [];
   }
 
-  play(config?: Phaser.Types.Sound.SoundConfig) {
+  play(screenX: number, screenY: number) {
     if (PLAY_SOUNDS === false) return;
 
     let key;
@@ -45,9 +53,19 @@ export class Sound {
       log("Sound instance added to pool", key);
     }
 
-    instance.setDetune(randomNormal(0, 25));
-    instance.setRate(randomNormal(1, 0.1));
-    instance.setVolume(randomNormal(1, 0.1));
-    instance.play(config);
+    const { centerX, centerY } = this.gameScene.cameras.main.worldView;
+
+    const dx = screenX - centerX;
+    const dy = screenY - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const volume = 1 - distance * this.invMaxDistance;
+    const pan = dx * this.invMaxWidth;
+    instance.setVolume(volume);
+    instance.setPan(pan);
+    instance.setDetune(randomNormal(0, 50));
+    instance.setRate(randomNormal(1, 0.2));
+
+    log(`Playing ${key} with volume: ${volume}, pan: ${pan}`);
+    instance.play();
   }
 }

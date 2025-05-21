@@ -56,10 +56,12 @@ export const VISIBLE_UPDATE_INTERVAL = 1; // Target 60 FPS when visible
 export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisible
 
 // Angle (θ): The camera's pitch angle measured downwards from the horizontal plane (0° = horizontal, 90° = straight down).
+
 // Orthographic Projection: A standard projection where parallel lines remain parallel.
 // Y-Compression (sin θ): Represents how much the worldY axis (depth) is visually compressed along the screen's Y-axis relative to the worldX axis. A factor of 1 means no compression; 0.5 means it appears half as long.
 // Z-Influence (cos θ): Represents how much worldZ (height) shifts the point along the screen's Y-axis (positive cos θ means positive worldZ decreases screenY, assuming screen Y increases downwards).
 // Approximate Formula: screenY ≈ worldY * sin(θ) - worldZ * cos(θ)
+
 // Floor-Aligned Projection (Y=1): A modified projection common in games where the Y-compression is removed (Y-Factor is forced to 1) for simpler ground-plane mapping.
 // Z-Influence (cot θ): The adjusted factor for worldZ needed to maintain the original visual slant relative to the uncompressed worldY. (cot θ = cos θ / sin θ).
 // Approximate Formula: screenY ≈ worldY * 1.0 - worldZ * cot(θ)
@@ -75,7 +77,7 @@ export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisi
 // oblique               45.0°       0.7071          0.7071                 1.0000                         Balanced Orthographic factors. Floor-Aligned Z-factor matches Cavalier.
 // trueIsometric         35.264°     0.5774          0.8165                 1.4142                         Mathematically precise Isometric angle. High Z influence.
 // simpleIsometric       30.0°       0.5000          0.8660                 1.7321                         Common game Isometric. Y compressed by half. Very high Z influence.
-// pixelArtIsometric     26.565°     0.4472          0.8944                 2.0000                         Used for 2:1 pixel art lines. Extreme Z influence when floor-aligned.
+// pixelArtIsometric     26.565°     0.4472          0.8944                 2.0000                         Used for 2:1 pixel art lines. Extreme Z influence.
 export const AXONOMETRIC = true; // Use axonometric projection (false for top-down)
 export const PERSPECTIVE_INDEX = {
   // in parentheses: the ratio z/y lengths in non axonometric projection, length of the z axis in axonometric projection
@@ -87,5 +89,6 @@ export const PERSPECTIVE_INDEX = {
   trueIsometric: 35.264,
   simpleIsometric: 30,
   pixelArtIsometric: 26.565,
+  platformer: 10,
 };
-export const PERSPECTIVE = PERSPECTIVE_INDEX.threeQuarter;
+export const PERSPECTIVE = PERSPECTIVE_INDEX.oblique;

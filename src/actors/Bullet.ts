@@ -135,6 +135,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     this.world.x += this.velocity.x * deltaSeconds;
     this.world.y += this.velocity.y * deltaSeconds;
     this.world.z += this.velocity.z * deltaSeconds;
+
     this.explosion = sphereToGroundCollision(this, speedSq, speed);
   }
 

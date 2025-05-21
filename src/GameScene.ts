@@ -46,10 +46,12 @@ export class GameScene extends Phaser.Scene {
   screenToWorldVertical: Phaser.Math.Vector3;
   worldToScreen: Phaser.Math.Vector3;
   zoomLevel = ZOOM_LEVELS.indexOf(1);
-  cannonBlast: Sound;
+  cannonBlast!: Sound;
+  audioListener: Phaser.Math.Vector2;
 
   constructor() {
     super({ key: "GameScene" });
+    this.audioListener = new Phaser.Math.Vector2();
 
     const verticalCamAngle = PERSPECTIVE;
     const axonometric = AXONOMETRIC;
@@ -88,14 +90,6 @@ export class GameScene extends Phaser.Scene {
       this.Y_FACTOR,
       this.Z_FACTOR
     );
-
-    this.cannonBlast = new Sound(this, [
-      "cannon_blast_1",
-      "cannon_blast_2",
-      "cannon_blast_3",
-      "cannon_blast_4",
-      "cannon_blast_5",
-    ]);
   }
 
   // Convert tile coordinates to world position
@@ -187,6 +181,7 @@ export class GameScene extends Phaser.Scene {
     output: Phaser.Math.Vector3
   ) {
     const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
+
     output.x = screen.x;
     output.y = (screen.y + surfaceZ * this.Z_FACTOR) / this.Y_FACTOR;
     output.z = surfaceZ;
@@ -202,12 +197,6 @@ export class GameScene extends Phaser.Scene {
     this.load.image(CANNON_WHEELS_SPRITE, "wheels.png");
     this.load.atlas(FLARES, "flares.png", "flares.json");
 
-    this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
-    this.load.audio("cannon_blast_2", "cannon_blast_2.mp3");
-    this.load.audio("cannon_blast_3", "cannon_blast_3.mp3");
-    this.load.audio("cannon_blast_4", "cannon_blast_4.mp3");
-    this.load.audio("cannon_blast_5", "cannon_blast_5.mp3");
-
     const bulletRadius = BULLET.radius * this.worldToScreen.x;
     const cannonRadius = bulletRadius * 1.2;
     const cannonLength = cannonRadius * 8;
@@ -221,6 +210,12 @@ export class GameScene extends Phaser.Scene {
       cannonRadius * 2
     );
     createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletRadius * 2);
+
+    this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
+    this.load.audio("cannon_blast_2", "cannon_blast_2.mp3");
+    this.load.audio("cannon_blast_3", "cannon_blast_3.mp3");
+    this.load.audio("cannon_blast_4", "cannon_blast_4.mp3");
+    this.load.audio("cannon_blast_5", "cannon_blast_5.mp3");
   }
 
   create() {
@@ -288,6 +283,14 @@ export class GameScene extends Phaser.Scene {
 
     const cubeWorld = this.tileToWorldPosition(70, 77);
     new Cube(this, cubeWorld, 5, 5, 5, Math.PI / 4);
+
+    this.cannonBlast = new Sound(this, [
+      "cannon_blast_1",
+      "cannon_blast_2",
+      "cannon_blast_3",
+      "cannon_blast_4",
+      "cannon_blast_5",
+    ]);
 
     // Shoot on mouse click
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
@@ -361,10 +364,9 @@ export class GameScene extends Phaser.Scene {
     this.controls.update(delta);
     const mouseX = this.input.x;
     const mouseY = this.input.y;
+    const cam = this.cameras.main;
 
     if (this.input.isOver && mouseX && mouseY) {
-      const cam = this.cameras.main;
-
       if (mouseX < SCROLL_BOUNDARY) {
         const ratio = (SCROLL_BOUNDARY - mouseX) / SCROLL_BOUNDARY;
         cam.scrollX -= SCROLL_SPEED * ratio * ratio;
@@ -384,5 +386,6 @@ export class GameScene extends Phaser.Scene {
         cam.scrollY += SCROLL_SPEED * ratio * ratio;
       }
     }
+    this.audioListener.set(cam.worldView.centerX, cam.worldView.centerY);
   }
 }

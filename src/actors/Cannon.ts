@@ -336,7 +336,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.cooldown = COOLDOWN_MS;
     const muzzleWorld = this.getMuzzleWorld();
     new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
-    this.gameScene.cannonBlast.play();
+    this.gameScene.cannonBlast.play(this.x, this.y);
 
     if (visible) {
       if (DO_RECOIL) {
