@@ -17,6 +17,7 @@ import { createCircleTexture } from "./texture/circle";
 import { createParticleTexture } from "./texture/particle";
 import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
+import { Sound } from "./lib/sound";
 
 const SCROLL_BOUNDARY = 300; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -45,6 +46,7 @@ export class GameScene extends Phaser.Scene {
   screenToWorldVertical: Phaser.Math.Vector3;
   worldToScreen: Phaser.Math.Vector3;
   zoomLevel = ZOOM_LEVELS.indexOf(1);
+  cannonBlast: Sound;
 
   constructor() {
     super({ key: "GameScene" });
@@ -86,6 +88,14 @@ export class GameScene extends Phaser.Scene {
       this.Y_FACTOR,
       this.Z_FACTOR
     );
+
+    this.cannonBlast = new Sound(this, [
+      "cannon_blast_1",
+      "cannon_blast_2",
+      "cannon_blast_3",
+      "cannon_blast_4",
+      "cannon_blast_5",
+    ]);
   }
 
   // Convert tile coordinates to world position

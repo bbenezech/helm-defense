@@ -5,7 +5,6 @@ import {
   CANNON_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
-  PLAY_SOUNDS,
   CANNON_WHEELS_SPRITE_ROTATION,
   INVISIBLE_UPDATE_INTERVAL,
   VISIBLE_UPDATE_INTERVAL,
@@ -334,15 +333,10 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   shoot(visible: boolean) {
-    log("cannon shoot");
-    this.cooldown = COOLDOWN_MS; // 1 second cooldown
+    this.cooldown = COOLDOWN_MS;
     const muzzleWorld = this.getMuzzleWorld();
     new Bullet(this.gameScene, muzzleWorld, this.getVelocity());
-
-    if (PLAY_SOUNDS) {
-      const blast = Math.ceil(Math.random() * 5);
-      this.gameScene.sound.play(`cannon_blast_${blast}`, { volume: 0.5 });
-    }
+    this.gameScene.cannonBlast.play();
 
     if (visible) {
       if (DO_RECOIL) {

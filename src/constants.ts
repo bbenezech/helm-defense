@@ -8,7 +8,7 @@ export const PIXEL_CANNON_SPRITE = "pixel-cannon";
 export const CANNON_WHEELS_SPRITE = "cannon-wheels";
 export const CANNON_WHEELS_SPRITE_ROTATION = Math.PI * 1.5; // to make it face right
 export const FLARES = "flares";
-export const PLAY_SOUNDS = true;
+export const PLAY_SOUNDS: boolean = true;
 export const GRAVITY_SI = 9.81;
 
 const TWELVE_POUND_BULLET_SI = {
