@@ -52,8 +52,8 @@ function getBullet(
 
 export const BULLET = getBullet(TWELVE_POUND_BULLET_SI, SLOW_BALLISTIC_FACTOR);
 
-export const VISIBLE_UPDATE_INTERVAL = 1; // Target 60 FPS when visible
-export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisible
+export const VISIBLE_UPDATE_INTERVAL = 0; // Target max FPS when visible
+export const INVISIBLE_UPDATE_INTERVAL = 100; // Target 10 FPS when invisible
 
 // Angle (θ): The camera's pitch angle measured downwards from the horizontal plane (0° = horizontal, 90° = straight down).
 
@@ -78,7 +78,6 @@ export const INVISIBLE_UPDATE_INTERVAL = 1000 / 10; // Target 10 FPS when invisi
 // trueIsometric         35.264°     0.5774          0.8165                 1.4142                         Mathematically precise Isometric angle. High Z influence.
 // simpleIsometric       30.0°       0.5000          0.8660                 1.7321                         Common game Isometric. Y compressed by half. Very high Z influence.
 // pixelArtIsometric     26.565°     0.4472          0.8944                 2.0000                         Used for 2:1 pixel art lines. Extreme Z influence.
-export const AXONOMETRIC = true; // Use axonometric projection (false for top-down)
 export const PERSPECTIVE_INDEX = {
   // in parentheses: the ratio z/y lengths in non axonometric projection, length of the z axis in axonometric projection
   topDown: 90,
@@ -91,4 +90,7 @@ export const PERSPECTIVE_INDEX = {
   pixelArtIsometric: 26.565,
   platformer: 10,
 };
-export const PERSPECTIVE = PERSPECTIVE_INDEX.oblique;
+
+export const PERSPECTIVES = Object.keys(
+  PERSPECTIVE_INDEX
+) as (keyof typeof PERSPECTIVE_INDEX)[];

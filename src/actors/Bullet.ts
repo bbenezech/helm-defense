@@ -23,6 +23,8 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   private moveTimer = 0;
   private dragTimer = 0;
 
+  private dirty: boolean = true;
+
   world: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   shadow: Phaser.GameObjects.Image;
@@ -75,8 +77,6 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
           Math.cos(this.rotation),
       }
     );
-
-    this.updateVisuals();
   }
 
   getShadowScreen(): Phaser.Math.Vector2 | null {
@@ -93,15 +93,14 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     );
   }
 
-  move(delta: number) {
-    if (this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0)
-      return;
+  move(delta: number): boolean {
     const speedSq = this.velocity.lengthSq();
+    if (speedSq === 0) return false;
     if (speedSq < 1) {
       this.velocity.reset();
       this.world.z =
         this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
-      return;
+      return true;
     }
 
     // calculate drag every 1/4 of seconds
@@ -137,6 +136,8 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     this.world.z += this.velocity.z * deltaSeconds;
 
     this.explosion = sphereToGroundCollision(this, speedSq, speed);
+
+    return true;
   }
 
   updateVisuals() {
@@ -165,15 +166,20 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   }
 
   preUpdate(time: number, delta: number) {
-    const visible = true;
+    const visible = this.gameScene.inViewport(this);
     const timerInterval = visible
       ? VISIBLE_UPDATE_INTERVAL
       : INVISIBLE_UPDATE_INTERVAL;
+
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {
-      this.move(this.moveTimer);
-      if (visible) this.updateVisuals();
+      this.dirty ||= this.move(this.moveTimer);
       this.moveTimer = 0;
+    }
+
+    if (this.gameScene.dirty || this.dirty) {
+      this.dirty = false;
+      this.updateVisuals();
     }
   }
 

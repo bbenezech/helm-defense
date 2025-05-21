@@ -8,9 +8,9 @@ import {
   PARTICLE_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
-  PERSPECTIVE,
-  AXONOMETRIC,
   BULLET,
+  PERSPECTIVE_INDEX,
+  PERSPECTIVES,
 } from "./constants";
 import { createCannonTexture } from "./texture/cannon";
 import { createCircleTexture } from "./texture/circle";
@@ -40,28 +40,37 @@ export class GameScene extends Phaser.Scene {
   debugGraphics!: Phaser.GameObjects.Graphics;
   score = 0;
   X_FACTOR = 1;
-  Y_FACTOR: number;
-  Z_FACTOR: number;
-  screenToWorldHorizontal: Phaser.Math.Vector3;
-  screenToWorldVertical: Phaser.Math.Vector3;
-  worldToScreen: Phaser.Math.Vector3;
+  Y_FACTOR!: number;
+  Z_FACTOR!: number;
+  screenToWorldHorizontal!: Phaser.Math.Vector3;
+  screenToWorldVertical!: Phaser.Math.Vector3;
+  worldToScreen!: Phaser.Math.Vector3;
   zoom!: number;
   zooms!: number[];
   cannonBlast!: Sound;
   coverZoom!: number;
+  axonometric: boolean;
+  perspective: (typeof PERSPECTIVES)[number];
+  dirty: boolean = true;
 
   constructor() {
     super({ key: "GameScene" });
 
-    const verticalCamAngle = PERSPECTIVE;
-    const axonometric = AXONOMETRIC;
-    const camRotation = Phaser.Math.DegToRad(verticalCamAngle);
+    this.perspective = "zeldaHigh";
+    this.axonometric = true;
+    this.setupPerspective();
+  }
+
+  setupPerspective() {
+    const camRotation = Phaser.Math.DegToRad(
+      PERSPECTIVE_INDEX[this.perspective]
+    );
 
     const cosCam = Math.cos(camRotation);
     const sinCam = Math.sin(camRotation);
     const cotCam = cosCam / sinCam;
 
-    if (axonometric) {
+    if (this.axonometric) {
       this.X_FACTOR = 1;
       this.Y_FACTOR = sinCam;
       this.Z_FACTOR = cosCam;
@@ -90,6 +99,8 @@ export class GameScene extends Phaser.Scene {
       this.Y_FACTOR,
       this.Z_FACTOR
     );
+
+    this.dirty = true;
   }
 
   // Convert tile coordinates to world position
@@ -161,11 +172,12 @@ export class GameScene extends Phaser.Scene {
 
   // Get the surface height at the given screen position
   getSurfaceZFromScreenPosition(screen: Phaser.Types.Math.Vector2Like): number {
-    if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
+    // if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
     const buildingTile = this.getBuildingTileFromScreenPosition(screen);
 
     // top of building is 2 tiles high
-    return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
+    // return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
+    return buildingTile ? 2 * TILE_HEIGHT_PX : 0;
   }
 
   // Get the screen position of the given world position
@@ -298,6 +310,35 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
       switch (e.keyCode) {
+        case Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET:
+          this.perspective =
+            PERSPECTIVES[
+              (PERSPECTIVES.indexOf(this.perspective) + 1) % PERSPECTIVES.length
+            ];
+
+          this.setupPerspective();
+          log(
+            `Perspective changed to ${this.perspective} (${
+              PERSPECTIVE_INDEX[this.perspective]
+            }°)`
+          );
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET:
+          this.perspective =
+            PERSPECTIVES[
+              (PERSPECTIVES.indexOf(this.perspective) -
+                1 +
+                PERSPECTIVES.length) %
+                PERSPECTIVES.length
+            ];
+          this.setupPerspective();
+          log(
+            `Perspective changed to ${this.perspective} (${
+              PERSPECTIVE_INDEX[this.perspective]
+            }°)`
+          );
+
+          break;
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
           this.cannon.requestShoot(this._pointerScreen);
           break;
@@ -365,17 +406,18 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(this.zoom);
   }
 
-  inViewport(object: Phaser.GameObjects.Image): boolean {
+  inViewport(screen: { x: number; y: number }): boolean {
     const bounds = this.cameras.main.worldView;
     return (
-      object.x >= bounds.x - 200 &&
-      object.x <= bounds.right + 200 &&
-      object.y >= bounds.y - 200 &&
-      object.y <= bounds.bottom + 200
+      screen.x >= bounds.x - 200 &&
+      screen.x <= bounds.right + 200 &&
+      screen.y >= bounds.y - 200 &&
+      screen.y <= bounds.bottom + 200
     );
   }
 
   update(time: number, delta: number) {
+    this.dirty = false;
     this.controls.update(delta);
     const mouseX = this.input.x;
     const mouseY = this.input.y;

@@ -1,5 +1,9 @@
 import { GameScene } from "../GameScene";
-import { WORLD_UNIT_PER_METER } from "../constants";
+import {
+  INVISIBLE_UPDATE_INTERVAL,
+  VISIBLE_UPDATE_INTERVAL,
+  WORLD_UNIT_PER_METER,
+} from "../constants";
 
 // Colors for the two squares
 const TOP_COLOR = {
@@ -21,7 +25,7 @@ const BOTTOM_COLOR = {
  * positioning a container and setting relative polygon points within it.
  * Uses GameScene projection and depth sorting via the container.
  */
-export class Cube {
+export class Cube extends Phaser.GameObjects.Container {
   private gameScene: GameScene;
   worldCenter: Phaser.Math.Vector3; // Center of the bottom face in world units
   private halfSizeX: number; // Half size in world units for X
@@ -33,12 +37,13 @@ export class Cube {
   private worldVertices: Phaser.Math.Vector3[];
 
   // --- Rendering (Screen Space - Populated ONLY in updateVisuals) ---
-  private container: Phaser.GameObjects.Container;
   private screenVertices: Phaser.Math.Vector2[];
   private topPolygon: Phaser.GameObjects.Polygon;
   private bottomPolygon: Phaser.GameObjects.Polygon;
   // Cache for screen center projection (used for container position and depth)
   private _screenCenter: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+
+  private dirty: boolean = true;
 
   constructor(
     gameScene: GameScene,
@@ -48,6 +53,7 @@ export class Cube {
     sizeZMeters: number,
     worldRotationZ: number
   ) {
+    super(gameScene, 0, 0);
     this.gameScene = gameScene;
     this.worldCenter = worldCenter.clone();
     this.worldRotationZ = worldRotationZ; // Default rotation
@@ -72,7 +78,7 @@ export class Cube {
 
     // --- Create Container ---
     // Initial position will be set in the first updateVisuals call
-    this.container = this.gameScene.add.container(0, 0);
+    this.gameScene.add.existing(this);
     // --- Create Polygons (relative to container) ---
     // Add them to the container, not the scene directly.
     // Their positions within the container will be (0,0) initially,
@@ -90,7 +96,7 @@ export class Cube {
     this.bottomPolygon.strokeColor = BOTTOM_COLOR.stroke;
     this.bottomPolygon.lineWidth = 1;
     this.bottomPolygon.closePath = true;
-    this.container.add(this.bottomPolygon); // Add to container
+    this.add(this.bottomPolygon); // Add to container
 
     this.topPolygon = this.gameScene.add.polygon(
       0,
@@ -105,7 +111,7 @@ export class Cube {
     this.topPolygon.strokeColor = TOP_COLOR.stroke;
     this.topPolygon.lineWidth = 1;
     this.topPolygon.closePath = true;
-    this.container.add(this.topPolygon); // Add to container
+    this.add(this.topPolygon); // Add to container
 
     // Initial calculation of world state and rendering
     this.calculateWorldVertices();
@@ -162,9 +168,9 @@ export class Cube {
       this.worldCenter,
       this._screenCenter // Use cached vector
     );
-    this.container.setPosition(screenCenter.x, screenCenter.y);
-    this.container.setRotation(0); // Ensure container itself isn't rotated
-    this.container.setDepth(screenCenter.y); // Use screen Y for depth sorting
+    this.setPosition(screenCenter.x, screenCenter.y);
+    this.setRotation(0); // Ensure container itself isn't rotated
+    this.setDepth(screenCenter.y); // Use screen Y for depth sorting
 
     // --- Project World Vertices to Screen Space ---
     for (let i = 0; i < this.worldVertices.length; i++) {
@@ -193,14 +199,17 @@ export class Cube {
       );
     }
     this.topPolygon.setTo(topPointsRelative);
-
-    // Note: Depth sorting within the container is handled by the order they were added.
-    // If more complex layering is needed, you could setDepth on the polygons too,
-    // e.g., this.bottomPolygon.setDepth(-0.1); this.topPolygon.setDepth(0.1);
   }
 
-  /** Cleans up the container and its children (polygons). */
-  destroy() {
-    this.container.destroy(); // Destroys container and children
+  preUpdate(time: number, delta: number) {
+    const visible = this.gameScene.inViewport(this);
+    const timerInterval = visible
+      ? VISIBLE_UPDATE_INTERVAL
+      : INVISIBLE_UPDATE_INTERVAL;
+
+    if (this.gameScene.dirty || this.dirty) {
+      this.dirty ||= false;
+      this.updateVisuals();
+    }
   }
 }
