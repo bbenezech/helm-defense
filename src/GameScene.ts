@@ -18,12 +18,13 @@ import { createParticleTexture } from "./texture/particle";
 import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 
-const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
+const SCROLL_BOUNDARY = 300; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
 const TILE_MAP = "map";
 const GROUND_NORMAL = new Phaser.Math.Vector3(0, 0, 1);
+const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 4];
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
@@ -43,6 +44,7 @@ export class GameScene extends Phaser.Scene {
   screenToWorldHorizontal: Phaser.Math.Vector3;
   screenToWorldVertical: Phaser.Math.Vector3;
   worldToScreen: Phaser.Math.Vector3;
+  zoomLevel = ZOOM_LEVELS.indexOf(1);
 
   constructor() {
     super({ key: "GameScene" });
@@ -244,8 +246,9 @@ export class GameScene extends Phaser.Scene {
 
     const camera = this.cameras.main;
 
-    this.adjustMainCamera();
+    this.resetMainCameraPosition();
     camera.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+    camera.setZoom(ZOOM_LEVELS[this.zoomLevel]);
     camera.setRoundPixels(true);
 
     this.scale.on("resize", this.handleResize, this);
@@ -253,7 +256,6 @@ export class GameScene extends Phaser.Scene {
       this.scale.off("resize", this.handleResize, this);
     });
 
-    // This starts the UIScene running concurrently and renders it on top
     this.scene.launch("UIScene");
 
     const keyboard = this.input.keyboard!;
@@ -265,13 +267,9 @@ export class GameScene extends Phaser.Scene {
       right: cursors.right,
       up: cursors.up,
       down: cursors.down,
-      zoomIn: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.MINUS),
-      zoomOut: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.PLUS),
-      zoomSpeed: 0.1,
       acceleration: 1,
       drag: 1,
       maxSpeed: 1,
-      maxZoom: 4,
     });
 
     // Cannons
@@ -286,19 +284,57 @@ export class GameScene extends Phaser.Scene {
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
       this.cannon.requestShoot(this._pointerScreen);
     });
+
+    this.input.on("wheel", (e: WheelEvent) => {
+      if (e.deltaY > 0) {
+        this.changeZoom(1);
+      } else if (e.deltaY < 0) {
+        this.changeZoom(-1);
+      }
+    });
+
+    this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
+      switch (e.keyCode) {
+        case Phaser.Input.Keyboard.KeyCodes.SPACE:
+          this.cannon.requestShoot(this._pointerScreen);
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.MINUS:
+          this.changeZoom(-1);
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.PLUS:
+          this.changeZoom(1);
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.F:
+          this.scale.toggleFullscreen({});
+          break;
+      }
+    });
   }
 
-  adjustMainCamera() {
+  resetMainCameraPosition() {
     const camera = this.cameras.main;
-    // camera.setZoom(camera.width / this.map.widthInPixels);
     camera.scrollX = 0; // Start at the left
     camera.scrollY = this.map.heightInPixels - camera.height; // Start at the bottom
   }
 
-  // Handle game resize event
+  changeZoom(direction: 1 | -1) {
+    const previousZoomIndex = this.zoomLevel;
+    this.zoomLevel += direction;
+
+    this.zoomLevel = Phaser.Math.Clamp(
+      this.zoomLevel,
+      0,
+      ZOOM_LEVELS.length - 1
+    );
+
+    if (this.zoomLevel !== previousZoomIndex) {
+      const newZoom = ZOOM_LEVELS[this.zoomLevel];
+      this.cameras.main.zoomTo(newZoom, 0);
+    }
+  }
+
   handleResize(gameSize: Phaser.Structs.Size) {
     this.cameras.main.setSize(gameSize.width, gameSize.height);
-    this.adjustMainCamera();
   }
 
   inViewport(object: Phaser.GameObjects.Image): boolean {
@@ -318,15 +354,24 @@ export class GameScene extends Phaser.Scene {
 
     if (this.input.isOver && mouseX && mouseY) {
       const cam = this.cameras.main;
+
       if (mouseX < SCROLL_BOUNDARY) {
-        cam.scrollX -= SCROLL_SPEED;
+        const ratio = (SCROLL_BOUNDARY - mouseX) / SCROLL_BOUNDARY;
+        cam.scrollX -= SCROLL_SPEED * ratio * ratio;
       } else if (mouseX > this.game.canvas.width - SCROLL_BOUNDARY) {
-        cam.scrollX += SCROLL_SPEED;
+        const ratio =
+          (mouseX - (this.game.canvas.width - SCROLL_BOUNDARY)) /
+          SCROLL_BOUNDARY;
+        cam.scrollX += SCROLL_SPEED * ratio * ratio;
       }
       if (mouseY < SCROLL_BOUNDARY) {
-        cam.scrollY -= SCROLL_SPEED;
+        const ratio = (SCROLL_BOUNDARY - mouseY) / SCROLL_BOUNDARY;
+        cam.scrollY -= SCROLL_SPEED * ratio * ratio;
       } else if (mouseY > this.game.canvas.height - SCROLL_BOUNDARY) {
-        cam.scrollY += SCROLL_SPEED;
+        const ratio =
+          (mouseY - (this.game.canvas.height - SCROLL_BOUNDARY)) /
+          SCROLL_BOUNDARY;
+        cam.scrollY += SCROLL_SPEED * ratio * ratio;
       }
     }
   }

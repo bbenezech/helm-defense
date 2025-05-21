@@ -10,6 +10,11 @@ const game = new Phaser.Game({
     mode: Phaser.Scale.RESIZE,
     autoRound: true,
   },
+
+  input: {
+    keyboard: {},
+    mouse: {},
+  },
 });
 
 const title = document.title;
