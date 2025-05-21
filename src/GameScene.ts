@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
   cannon!: Cannon;
   debugGraphics!: Phaser.GameObjects.Graphics;
   score = 0;
-  X_FACTOR = 1;
+  X_FACTOR!: number;
   Y_FACTOR!: number;
   Z_FACTOR!: number;
   screenToWorldHorizontal!: Phaser.Math.Vector3;
@@ -81,11 +81,13 @@ export class GameScene extends Phaser.Scene {
       this.Z_FACTOR = cotCam;
     }
 
+    // if Z is constant
     this.screenToWorldHorizontal = new Phaser.Math.Vector3(
       1,
       1 / this.Y_FACTOR,
       0
-    ); // if Z is constant
+    );
+
     // if Y is constant
     this.screenToWorldVertical = new Phaser.Math.Vector3(
       1,
@@ -172,17 +174,16 @@ export class GameScene extends Phaser.Scene {
 
   // Get the surface height at the given screen position
   getSurfaceZFromScreenPosition(screen: Phaser.Types.Math.Vector2Like): number {
-    // if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
+    if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
     const buildingTile = this.getBuildingTileFromScreenPosition(screen);
 
     // top of building is 2 tiles high
-    // return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
-    return buildingTile ? 2 * TILE_HEIGHT_PX : 0;
+    return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
   }
 
   // Get the screen position of the given world position
   getScreenPosition(world: Phaser.Math.Vector3, output: Phaser.Math.Vector2) {
-    output.x = world.x;
+    output.x = world.x * this.X_FACTOR;
     output.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
     return output;
   }
@@ -194,9 +195,10 @@ export class GameScene extends Phaser.Scene {
   ) {
     const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
 
-    output.x = screen.x;
+    output.x = screen.x / this.X_FACTOR;
     output.y = (screen.y + surfaceZ * this.Z_FACTOR) / this.Y_FACTOR;
     output.z = surfaceZ;
+
     return output;
   }
 

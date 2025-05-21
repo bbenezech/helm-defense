@@ -170,7 +170,8 @@ export class Cannon extends Phaser.GameObjects.Image {
         },
       ],
       onStop: () => {
-        this.setPosition(this.getCannonScreen().x, this.getCannonScreen().y);
+        const { x, y } = this.getCannonScreen();
+        this.setPosition(x, y);
       },
     });
 
@@ -219,7 +220,8 @@ export class Cannon extends Phaser.GameObjects.Image {
         },
       ],
       onStop: () => {
-        this.setPosition(this.getScreen().x, this.getScreen().y);
+        const { x, y } = this.getScreen();
+        this.setPosition(x, y);
       },
     });
 
