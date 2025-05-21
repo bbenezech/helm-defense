@@ -18,6 +18,7 @@ import { createParticleTexture } from "./texture/particle";
 import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 import { Sound } from "./lib/sound";
+import { log } from "./lib/log";
 
 const SCROLL_BOUNDARY = 300; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -25,7 +26,6 @@ const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
 const TILE_MAP = "map";
 const GROUND_NORMAL = new Phaser.Math.Vector3(0, 0, 1);
-const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 4];
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
@@ -45,13 +45,13 @@ export class GameScene extends Phaser.Scene {
   screenToWorldHorizontal: Phaser.Math.Vector3;
   screenToWorldVertical: Phaser.Math.Vector3;
   worldToScreen: Phaser.Math.Vector3;
-  zoomLevel = ZOOM_LEVELS.indexOf(1);
+  zoom!: number;
+  zooms!: number[];
   cannonBlast!: Sound;
-  audioListener: Phaser.Math.Vector2;
+  coverZoom!: number;
 
   constructor() {
     super({ key: "GameScene" });
-    this.audioListener = new Phaser.Math.Vector2();
 
     const verticalCamAngle = PERSPECTIVE;
     const axonometric = AXONOMETRIC;
@@ -249,17 +249,7 @@ export class GameScene extends Phaser.Scene {
     this.map.createLayer(2, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
     this.map.createLayer(3, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
 
-    const camera = this.cameras.main;
-
-    this.resetMainCameraPosition();
-    camera.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
-    camera.setZoom(ZOOM_LEVELS[this.zoomLevel]);
-    camera.setRoundPixels(true);
-
-    this.scale.on("resize", this.handleResize, this);
-    this.events.on("shutdown", () => {
-      this.scale.off("resize", this.handleResize, this);
-    });
+    this.setupCamera();
 
     this.scene.launch("UIScene");
 
@@ -267,7 +257,7 @@ export class GameScene extends Phaser.Scene {
     const cursors = keyboard.createCursorKeys();
 
     this.controls = new Phaser.Cameras.Controls.SmoothedKeyControl({
-      camera,
+      camera: this.cameras.main,
       left: cursors.left,
       right: cursors.right,
       up: cursors.up,
@@ -324,30 +314,55 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  resetMainCameraPosition() {
+  setupCamera() {
+    const mapPixelWidth = this.map.widthInPixels;
+    const mapPixelHeight = this.map.heightInPixels;
     const camera = this.cameras.main;
     camera.scrollX = 0; // Start at the left
-    camera.scrollY = this.map.heightInPixels - camera.height; // Start at the bottom
+    camera.scrollY = mapPixelHeight - camera.height; // Start at the bottom
+    camera.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
+    camera.setRoundPixels(true);
+    this.scale.on("resize", this.handleResize, this);
+    this.handleResize(this.game.scale.gameSize);
   }
 
   changeZoom(direction: 1 | -1) {
-    const previousZoomIndex = this.zoomLevel;
-    this.zoomLevel += direction;
-
-    this.zoomLevel = Phaser.Math.Clamp(
-      this.zoomLevel,
+    const previousZoom = this.zoom;
+    const previousZoomIndex = this.zooms.indexOf(previousZoom);
+    const requestedZoomIndex = Phaser.Math.Clamp(
+      previousZoomIndex + direction,
       0,
-      ZOOM_LEVELS.length - 1
+      this.zooms.length - 1
     );
 
-    if (this.zoomLevel !== previousZoomIndex) {
-      const newZoom = ZOOM_LEVELS[this.zoomLevel];
-      this.cameras.main.zoomTo(newZoom, 0);
+    if (requestedZoomIndex !== previousZoomIndex) {
+      this.zoom = this.zooms[requestedZoomIndex];
+      this.cameras.main.zoomTo(this.zoom, 0);
     }
   }
 
-  handleResize(gameSize: Phaser.Structs.Size) {
-    this.cameras.main.setSize(gameSize.width, gameSize.height);
+  handleResize({ width, height }: { width: number; height: number }) {
+    const mapPixelWidth = this.map.widthInPixels;
+    const mapPixelHeight = this.map.heightInPixels;
+    // Zoom level if we were to make the map's width exactly fit the canvas width
+    const scaleToFitWidth = width / mapPixelWidth;
+    // Zoom level if we were to make the map's height exactly fit the canvas height
+    const scaleToFitHeight = height / mapPixelHeight;
+    this.coverZoom = Math.max(scaleToFitWidth, scaleToFitHeight);
+    this.cameras.main.setSize(width, height);
+    this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter(
+      (zoom) => zoom > this.coverZoom + 0.1
+    );
+    this.zooms.unshift(this.coverZoom);
+    if (!this.zooms.includes(this.zoom)) {
+      if (this.zoom === undefined) this.zoom = this.zooms[0];
+      else {
+        this.zoom =
+          [...this.zooms].reverse().find((z) => z <= this.zoom) ??
+          this.zooms[0];
+      }
+    }
+    this.cameras.main.setZoom(this.zoom);
   }
 
   inViewport(object: Phaser.GameObjects.Image): boolean {
@@ -386,6 +401,5 @@ export class GameScene extends Phaser.Scene {
         cam.scrollY += SCROLL_SPEED * ratio * ratio;
       }
     }
-    this.audioListener.set(cam.worldView.centerX, cam.worldView.centerY);
   }
 }

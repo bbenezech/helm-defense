@@ -29,7 +29,7 @@ function focusGame() {
   }
 }
 
-window.addEventListener("blur", blurGame);
-window.addEventListener("focus", focusGame);
-window.document.body.addEventListener("mouseleave", blurGame);
-window.document.body.addEventListener("mouseenter", focusGame);
+// window.addEventListener("blur", blurGame);
+// window.addEventListener("focus", focusGame);
+// window.document.body.addEventListener("mouseleave", blurGame);
+// window.document.body.addEventListener("mouseenter", focusGame);
