@@ -64,9 +64,12 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       this.y,
       PARTICLE_SPRITE,
       {
-        lifespan: { min: 500, max: 1500 },
+        lifespan: { min: 800, max: 1600 },
         angle: { min: -30, max: 30 },
-        speed: { min: 5, max: 80 },
+        speed: {
+          min: 140 * this.gameScene.worldToScreen.z,
+          max: 180 * this.gameScene.worldToScreen.z,
+        },
         frequency: -1,
       }
     );
@@ -154,21 +157,22 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       );
       const rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
 
-      console.log({
-        gy:
-          GRAVITY_SI *
-          WORLD_UNIT_PER_METER *
-          this.gameScene.worldToScreen.z *
-          Math.cos(rotation),
-        rotation: rotation,
-        "Math.cos(rotation)": Math.cos(rotation),
-      });
+      const gravity =
+        GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
+
+      const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
+        rotation,
+        Math.PI / 2
+      );
 
       this.explosionEmitter
+        .setParticleGravity(
+          gravity * Math.cos(rotationToGround),
+          gravity * Math.sin(rotationToGround)
+        )
         .setPosition(this.screen.x, this.screen.y)
         .setRotation(rotation)
-        // .setParticleGravity() FIXME
-        .explode(Phaser.Math.Clamp(this.explosion.energy * 10, 1, 10));
+        .explode(Phaser.Math.Clamp(this.explosion.energy * 20, 1, 20));
       this.explosion = false;
     }
   }

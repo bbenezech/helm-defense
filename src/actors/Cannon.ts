@@ -332,14 +332,18 @@ export class Cannon extends Phaser.GameObjects.Image {
       this._muzzleScreen
     );
 
+    const gravity =
+      GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
+
+    const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
+      this.rotation,
+      Math.PI / 2
+    );
+
     this.muzzleParticleEmitter
       .setParticleGravity(
-        // FIXME?
-        0,
-        GRAVITY_SI *
-          WORLD_UNIT_PER_METER *
-          this.gameScene.worldToScreen.z *
-          Math.cos(this.rotation)
+        gravity * Math.cos(rotationToGround),
+        gravity * Math.sin(rotationToGround)
       )
       .setPosition(muzzleScreen.x, muzzleScreen.y)
       .setRotation(this.rotation)
