@@ -1,7 +1,7 @@
 import { PLAY_SOUNDS } from "../constants";
 import { GameScene } from "../GameScene";
-import { log } from "./log";
 import { randomNormal } from "./random";
+import { cameraHeight } from "./trigo";
 
 export class Sound {
   private gameScene: GameScene;
@@ -16,9 +16,11 @@ export class Sound {
   constructor(gameScene: GameScene, keys: string[]) {
     this.gameScene = gameScene;
     this.keys = keys;
+    const elevationInPixels = cameraHeight(this.gameScene.map.widthInPixels);
     const maxDistance = Math.sqrt(
       this.gameScene.map.widthInPixels * this.gameScene.map.widthInPixels +
-        this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels
+        this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels +
+        elevationInPixels * elevationInPixels
     );
 
     this.invMaxDistance = 1 / maxDistance;
@@ -50,22 +52,21 @@ export class Sound {
       }
       this.pool[key].push(newInstance);
       instance = newInstance;
-      log("Sound instance added to pool", key);
     }
 
     const { centerX, centerY } = this.gameScene.cameras.main.worldView;
 
     const dx = screenX - centerX;
     const dy = screenY - centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const dz = cameraHeight(this.gameScene.cameras.main.worldView.width);
+
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const volume = 1 - distance * this.invMaxDistance;
     const pan = dx * this.invMaxWidth;
     instance.setVolume(volume);
     instance.setPan(pan);
     instance.setDetune(randomNormal(0, 50));
     instance.setRate(randomNormal(1, 0.2));
-
-    log(`Playing ${key} with volume: ${volume}, pan: ${pan}`);
     instance.play();
   }
 }

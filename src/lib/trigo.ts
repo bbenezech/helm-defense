@@ -21,3 +21,9 @@ export function azimuthRadFromVelocityVector(
 ): number {
   return Math.atan2(vector.y, vector.x);
 }
+
+const SCREEN_WIDTH = 13.75; // inches (approx. width of a 16" MacBook Pro screen)
+const DISTANCE_TO_SCREEN = 22; // inches (approx. distance from the user to the screen)
+export function cameraHeight(width: number) {
+  return width * (DISTANCE_TO_SCREEN / SCREEN_WIDTH);
+}
