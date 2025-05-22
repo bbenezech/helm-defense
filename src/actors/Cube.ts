@@ -27,7 +27,7 @@ const BOTTOM_COLOR = {
  */
 export class Cube extends Phaser.GameObjects.Container {
   private gameScene: GameScene;
-  worldCenter: Phaser.Math.Vector3; // Center of the bottom face in world units
+  world: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private halfSizeX: number; // Half size in world units for X
   private halfSizeY: number; // Half size in world units for Y
   private sizeZ: number; // Size in world units for Z (height)
@@ -41,13 +41,12 @@ export class Cube extends Phaser.GameObjects.Container {
   private topPolygon: Phaser.GameObjects.Polygon;
   private bottomPolygon: Phaser.GameObjects.Polygon;
   // Cache for screen center projection (used for container position and depth)
-  private _screenCenter: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
 
   private dirty: boolean = true;
 
   constructor(
     gameScene: GameScene,
-    worldCenter: Phaser.Math.Vector3,
     sizeXMeters: number,
     sizeYMeters: number,
     sizeZMeters: number,
@@ -55,7 +54,6 @@ export class Cube extends Phaser.GameObjects.Container {
   ) {
     super(gameScene, 0, 0);
     this.gameScene = gameScene;
-    this.worldCenter = worldCenter.clone();
     this.worldRotationZ = worldRotationZ; // Default rotation
 
     // Calculate sizes in world units
@@ -115,7 +113,6 @@ export class Cube extends Phaser.GameObjects.Container {
 
     // Initial calculation of world state and rendering
     this.calculateWorldVertices();
-    this.updateVisuals(); // First projection and draw
   }
 
   /** Calculates ONLY world vertex positions based on the current worldCenter. */
@@ -150,11 +147,19 @@ export class Cube extends Phaser.GameObjects.Container {
       const rotatedX = local.x * cosR - local.y * sinR;
       const rotatedY = local.x * sinR + local.y * cosR;
       this.worldVertices[i].set(
-        this.worldCenter.x + rotatedX,
-        this.worldCenter.y + rotatedY,
-        this.worldCenter.z + local.z // Add world center Z offset
+        this.world.x + rotatedX,
+        this.world.y + rotatedY,
+        this.world.z + local.z // Add world center Z offset
       );
     }
+  }
+
+  setWorld(world: Phaser.Math.Vector3) {
+    this.world.copy(world);
+    this.screen = this.gameScene.getScreenPosition(this.world, this.screen);
+    this.calculateWorldVertices();
+
+    this.dirty = true;
   }
 
   /**
@@ -163,14 +168,11 @@ export class Cube extends Phaser.GameObjects.Container {
    * This is the ONLY place screen calculations should occur for this class.
    */
   updateVisuals() {
+    this.setPosition(this.screen.x, this.screen.y);
+    this.setRotation(0);
+
     // --- Project Center and Set Container Position/Depth ---
-    const screenCenter = this.gameScene.getScreenPosition(
-      this.worldCenter,
-      this._screenCenter // Use cached vector
-    );
-    this.setPosition(screenCenter.x, screenCenter.y);
-    this.setRotation(0); // Ensure container itself isn't rotated
-    this.setDepth(screenCenter.y); // Use screen Y for depth sorting
+    this.setDepth(this.y); // Use screen Y for depth sorting
 
     // --- Project World Vertices to Screen Space ---
     for (let i = 0; i < this.worldVertices.length; i++) {
@@ -185,8 +187,8 @@ export class Cube extends Phaser.GameObjects.Container {
     const bottomPointsRelative: number[] = [];
     for (let i = 0; i <= 3; i++) {
       bottomPointsRelative.push(
-        this.screenVertices[i].x - screenCenter.x,
-        this.screenVertices[i].y - screenCenter.y
+        this.screenVertices[i].x - this.x,
+        this.screenVertices[i].y - this.y
       );
     }
     this.bottomPolygon.setTo(bottomPointsRelative);
@@ -194,22 +196,23 @@ export class Cube extends Phaser.GameObjects.Container {
     const topPointsRelative: number[] = [];
     for (let i = 4; i <= 7; i++) {
       topPointsRelative.push(
-        this.screenVertices[i].x - screenCenter.x,
-        this.screenVertices[i].y - screenCenter.y
+        this.screenVertices[i].x - this.x,
+        this.screenVertices[i].y - this.y
       );
     }
     this.topPolygon.setTo(topPointsRelative);
   }
 
   preUpdate(time: number, delta: number) {
-    const visible = this.gameScene.inViewport(this);
-    const timerInterval = visible
-      ? VISIBLE_UPDATE_INTERVAL
-      : INVISIBLE_UPDATE_INTERVAL;
-
-    if (this.gameScene.dirty || this.dirty) {
-      this.dirty ||= false;
+    if (this.dirty) {
+      this.dirty = false;
       this.updateVisuals();
     }
+  }
+
+  destroy(): void {
+    this.bottomPolygon.destroy();
+    this.topPolygon.destroy();
+    super.destroy();
   }
 }

@@ -79,6 +79,11 @@ export function bounce(
 const TNT_KG_IN_JOULES = 4.184 * 10e6; // 1 TNT kg = 4.184 MJ
 const INV_TNT_KG_IN_JOULES = 1 / TNT_KG_IN_JOULES;
 
+export interface Collision {
+  energy: number; // Energy in TNT kg eq.
+  velocity: Phaser.Math.Vector3; // Normalized velocity after bounce (for explosion direction)
+}
+
 /**
  * Collides a sphere against height-mapped ground. Calculates bounce magnitude
  * and direction based on impact characteristics and surface properties.
@@ -92,7 +97,7 @@ export function sphereToGroundCollision(
   s: Solid,
   speedSq: number,
   speed?: number
-): number | false {
+): Collision | false {
   const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
 
   // Penetration & Impact Angle Check ---
@@ -135,18 +140,14 @@ export function sphereToGroundCollision(
   const energy =
     explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
 
-  if (bounce_percentage === 0) {
-    // No bounce, just resolve position
-    s.velocity.reset();
-    s.world.z = groundZ;
-    return energy;
-  }
-
   // Push object out along the normal by the penetration depth
   s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
 
   bounce(s.velocity, normal, hardness, speed); // Modifies s.velocity in-place
-  s.velocity.normalize().scale(speed * bounce_percentage); // Set the new speed
+  s.velocity.normalize();
 
-  return energy;
+  const velocity = s.velocity.clone();
+  s.velocity.scale(speed * bounce_percentage); // Set the new speed
+
+  return { energy, velocity };
 }

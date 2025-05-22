@@ -37,6 +37,7 @@ export class GameScene extends Phaser.Scene {
   controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
   map!: Phaser.Tilemaps.Tilemap;
   cannon!: Cannon;
+  cube!: Cube;
   debugGraphics!: Phaser.GameObjects.Graphics;
   score = 0;
   X_FACTOR!: number;
@@ -51,14 +52,12 @@ export class GameScene extends Phaser.Scene {
   coverZoom!: number;
   axonometric: boolean;
   perspective: (typeof PERSPECTIVES)[number];
-  dirty: boolean = true;
 
   constructor() {
     super({ key: "GameScene" });
 
-    this.perspective = "zeldaHigh";
+    this.perspective = "oblique";
     this.axonometric = true;
-    this.setupPerspective();
   }
 
   setupPerspective() {
@@ -102,7 +101,8 @@ export class GameScene extends Phaser.Scene {
       this.Z_FACTOR
     );
 
-    this.dirty = true;
+    this.cannon.setWorld(this.tileToWorldPosition(34, 75));
+    this.cube.setWorld(this.tileToWorldPosition(70, 77));
   }
 
   // Convert tile coordinates to world position
@@ -211,7 +211,7 @@ export class GameScene extends Phaser.Scene {
     this.load.image(CANNON_WHEELS_SPRITE, "wheels.png");
     this.load.atlas(FLARES, "flares.png", "flares.json");
 
-    const bulletRadius = BULLET.radius * this.worldToScreen.x;
+    const bulletRadius = BULLET.radius;
     const cannonRadius = bulletRadius * 1.2;
     const cannonLength = cannonRadius * 8;
 
@@ -282,12 +282,6 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Cannons
-    const cannonWorld = this.tileToWorldPosition(34, 75);
-    this.cannon = new Cannon(this, cannonWorld, 270);
-
-    const cubeWorld = this.tileToWorldPosition(70, 77);
-    new Cube(this, cubeWorld, 5, 5, 5, Math.PI / 4);
-
     this.cannonBlast = new Sound(this, [
       "cannon_blast_1",
       "cannon_blast_2",
@@ -355,6 +349,11 @@ export class GameScene extends Phaser.Scene {
           break;
       }
     });
+
+    // Game
+    this.cannon = new Cannon(this, 270);
+    this.cube = new Cube(this, 5, 5, 5, Math.PI / 4);
+    this.setupPerspective();
   }
 
   setupCamera() {
@@ -419,7 +418,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
-    this.dirty = false;
     this.controls.update(delta);
     const mouseX = this.input.x;
     const mouseY = this.input.y;
