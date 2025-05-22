@@ -19,6 +19,7 @@ import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 import { Sound } from "./lib/sound";
 import { log } from "./lib/log";
+import debounce from "lodash.debounce";
 
 const SCROLL_BOUNDARY = 300; // pixels from edge to start scrolling
 const SCROLL_SPEED = 14; // pixels per frame
@@ -297,11 +298,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.input.on("wheel", (e: WheelEvent) => {
-      if (e.deltaY > 0) {
-        this.changeZoom(1);
-      } else if (e.deltaY < 0) {
-        this.changeZoom(-1);
-      }
+      this.changeZoomContinuous(e.deltaY);
     });
 
     this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
@@ -336,16 +333,16 @@ export class GameScene extends Phaser.Scene {
 
           break;
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
-          this.cannon.requestShoot(this._pointerScreen);
+          this.game.isPaused ? this.game.resume() : this.game.pause();
           break;
         case Phaser.Input.Keyboard.KeyCodes.MINUS:
-          this.changeZoom(-1);
+          this.changeZoomDiscrete(-1);
           break;
         case Phaser.Input.Keyboard.KeyCodes.PLUS:
-          this.changeZoom(1);
+          this.changeZoomDiscrete(1);
           break;
         case Phaser.Input.Keyboard.KeyCodes.F:
-          this.scale.toggleFullscreen({});
+          this.scale.toggleFullscreen();
           break;
       }
     });
@@ -368,18 +365,41 @@ export class GameScene extends Phaser.Scene {
     this.handleResize(this.game.scale.gameSize);
   }
 
-  changeZoom(direction: 1 | -1) {
+  changeZoomDiscrete(direction: 1 | -1) {
     const previousZoom = this.zoom;
-    const previousZoomIndex = this.zooms.indexOf(previousZoom);
-    const requestedZoomIndex = Phaser.Math.Clamp(
-      previousZoomIndex + direction,
-      0,
-      this.zooms.length - 1
-    );
+    let requestedZoomIndex = -1;
 
-    if (requestedZoomIndex !== previousZoomIndex) {
-      this.zoom = this.zooms[requestedZoomIndex];
+    if (direction > 0) {
+      const index = this.zooms.findIndex((z) => z > previousZoom);
+      requestedZoomIndex = index === -1 ? this.zooms.length - 1 : index;
+    } else {
+      const indexInReversed = [...this.zooms]
+        .reverse()
+        .findIndex((z) => z < previousZoom);
+      requestedZoomIndex =
+        indexInReversed === -1 ? 0 : this.zooms.length - 1 - indexInReversed;
+    }
+
+    const newZoom = this.zooms[requestedZoomIndex];
+
+    if (previousZoom !== newZoom) {
+      this.zoom = newZoom;
       this.cameras.main.zoomTo(this.zoom, 0);
+    }
+  }
+
+  changeZoomContinuous(delta: number) {
+    const previousZoom = this.zoom;
+    const zoomFactor = 0.0015;
+    const zoomDelta = -delta * zoomFactor;
+    const newZoom = Phaser.Math.Clamp(
+      previousZoom + zoomDelta,
+      this.zooms[0],
+      this.zooms[this.zooms.length - 1]
+    );
+    if (newZoom !== previousZoom) {
+      this.zoom = newZoom;
+      this.cameras.main.setZoom(this.zoom);
     }
   }
 

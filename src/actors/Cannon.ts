@@ -12,21 +12,19 @@ import {
   GRAVITY_SI,
 } from "../constants";
 import { GameScene } from "../GameScene";
-import { log } from "../lib/log";
 import { velocityVectorFromAzymuthAndAltitude } from "../lib/trigo";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 500;
-const RECOIL_RETURN_DURATION_MS = 500;
+const RECOIL_RETURN_DURATION_MS = 1500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
 const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
 const INITIAL_ALTITUDE = Phaser.Math.DegToRad(0);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
-const COOLDOWN_MS = 1000; // 1 second cooldown
+const COOLDOWN_MS = 2000; // 2 seconds cooldown
 
 export class Cannon extends Phaser.GameObjects.Image {
-  // cache vectors to avoid creating new ones every frame, do not use directly, use getters
   private _velocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _screenVelocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private _azymuth: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
@@ -35,7 +33,8 @@ export class Cannon extends Phaser.GameObjects.Image {
   private _muzzleWorldOffset: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private _muzzleScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private _targetWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
-  private dirty: boolean = true;
+
+  dirty: boolean = true;
 
   gameScene: GameScene;
   world: Phaser.Math.Vector3 = new Phaser.Math.Vector3();

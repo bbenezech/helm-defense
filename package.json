@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@types/d3-random": "^3.0.3",
+    "@types/lodash.debounce": "^4.0.9",
     "body-parser": "^2.2.0",
     "d3-random": "^3.0.1",
+    "lodash.debounce": "^4.0.8",
     "phaser": "^4.0.0-rc.3",
     "serve": "^14.2.4",
     "vite": "^6.2.6"
