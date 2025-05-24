@@ -204,7 +204,7 @@ export class Cube extends Phaser.GameObjects.Container {
   }
 
   preUpdate(time: number, delta: number) {
-    if (this.dirty) {
+    if (this.dirty || this.gameScene.dirty) {
       this.dirty = false;
       this.updateVisuals();
     }

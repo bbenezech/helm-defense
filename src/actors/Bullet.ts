@@ -189,7 +189,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       this.moveTimer = 0;
     }
 
-    if (this.dirty) {
+    if (this.dirty || this.gameScene.dirty) {
       this.dirty = false;
       this.updateVisuals();
     }

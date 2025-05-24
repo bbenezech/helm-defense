@@ -19,10 +19,8 @@ import { randomNormal } from "./lib/random";
 import { SURFACE_HARDNESS } from "./world/surface";
 import { Sound } from "./lib/sound";
 import { log } from "./lib/log";
-import debounce from "lodash.debounce";
+import { setupPointer } from "./lib/pointer";
 
-const SCROLL_BOUNDARY = 300; // pixels from edge to start scrolling
-const SCROLL_SPEED = 14; // pixels per frame
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
 const TILE_MAP = "map";
@@ -53,6 +51,9 @@ export class GameScene extends Phaser.Scene {
   coverZoom!: number;
   axonometric: boolean;
   perspective: (typeof PERSPECTIVES)[number];
+  updatePointer!: (this: GameScene, time: number, delta: number) => void;
+  selectionGraphics!: Phaser.GameObjects.Graphics;
+  dirty = true;
 
   constructor() {
     super({ key: "GameScene" });
@@ -62,6 +63,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   setupPerspective() {
+    this.dirty = true; // inform objects to update their visuals, because perspective has changed
+
     const camRotation = Phaser.Math.DegToRad(
       PERSPECTIVE_INDEX[this.perspective]
     );
@@ -102,6 +105,8 @@ export class GameScene extends Phaser.Scene {
       this.Z_FACTOR
     );
 
+    // objects are created at world position (0, 0, 0) and moved to their position relative to the projection
+    // if projection changes, we need to update their position
     this.cannon.setWorld(this.tileToWorldPosition(34, 75));
     this.cube.setWorld(this.tileToWorldPosition(70, 77));
   }
@@ -267,6 +272,7 @@ export class GameScene extends Phaser.Scene {
     this.setupCamera();
 
     this.scene.launch("UIScene");
+    this.selectionGraphics = this.add.graphics();
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -291,8 +297,9 @@ export class GameScene extends Phaser.Scene {
       "cannon_blast_5",
     ]);
 
-    // Shoot on mouse click
-    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+    this.updatePointer = setupPointer(this.input);
+    this.input.manager.events.on("click", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.button !== 0) return; // left click
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
       this.cannon.requestShoot(this._pointerScreen);
     });
@@ -384,13 +391,19 @@ export class GameScene extends Phaser.Scene {
 
     if (previousZoom !== newZoom) {
       this.zoom = newZoom;
-      this.cameras.main.zoomTo(this.zoom, 0);
+      this.cameras.main.zoomTo(
+        this.zoom,
+        100,
+        Phaser.Math.Easing.Quadratic.InOut
+      );
+    } else {
+      this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
     }
   }
 
   changeZoomContinuous(delta: number) {
     const previousZoom = this.zoom;
-    const zoomFactor = 0.0015;
+    const zoomFactor = 0.002;
     const zoomDelta = -delta * zoomFactor;
     const newZoom = Phaser.Math.Clamp(
       previousZoom + zoomDelta,
@@ -438,30 +451,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    this.dirty = false;
     this.controls.update(delta);
-    const mouseX = this.input.x;
-    const mouseY = this.input.y;
-    const cam = this.cameras.main;
-
-    if (this.input.isOver && mouseX && mouseY) {
-      if (mouseX < SCROLL_BOUNDARY) {
-        const ratio = (SCROLL_BOUNDARY - mouseX) / SCROLL_BOUNDARY;
-        cam.scrollX -= SCROLL_SPEED * ratio * ratio;
-      } else if (mouseX > this.game.canvas.width - SCROLL_BOUNDARY) {
-        const ratio =
-          (mouseX - (this.game.canvas.width - SCROLL_BOUNDARY)) /
-          SCROLL_BOUNDARY;
-        cam.scrollX += SCROLL_SPEED * ratio * ratio;
-      }
-      if (mouseY < SCROLL_BOUNDARY) {
-        const ratio = (SCROLL_BOUNDARY - mouseY) / SCROLL_BOUNDARY;
-        cam.scrollY -= SCROLL_SPEED * ratio * ratio;
-      } else if (mouseY > this.game.canvas.height - SCROLL_BOUNDARY) {
-        const ratio =
-          (mouseY - (this.game.canvas.height - SCROLL_BOUNDARY)) /
-          SCROLL_BOUNDARY;
-        cam.scrollY += SCROLL_SPEED * ratio * ratio;
-      }
-    }
+    this.updatePointer(time, delta);
   }
 }

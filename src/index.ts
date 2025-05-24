@@ -10,6 +10,7 @@ const game = new Phaser.Game({
     mode: Phaser.Scale.RESIZE,
     autoRound: true,
   },
+  disableContextMenu: true,
 });
 
 const title = document.title;
