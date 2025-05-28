@@ -66,7 +66,7 @@ export class GameScene extends Phaser.Scene {
     this.dirty = true; // inform objects to update their visuals, because perspective has changed
 
     const camRotation = Phaser.Math.DegToRad(
-      PERSPECTIVE_INDEX[this.perspective]
+      PERSPECTIVE_INDEX[this.perspective],
     );
 
     const cosCam = Math.cos(camRotation);
@@ -88,21 +88,21 @@ export class GameScene extends Phaser.Scene {
     this.screenToWorldHorizontal = new Phaser.Math.Vector3(
       1,
       1 / this.Y_FACTOR,
-      0
+      0,
     );
 
     // if Y is constant
     this.screenToWorldVertical = new Phaser.Math.Vector3(
       1,
       0,
-      1 / this.Z_FACTOR
+      1 / this.Z_FACTOR,
     );
 
     // convert a world unit to screen pixels on all 3 axes
     this.worldToScreen = new Phaser.Math.Vector3(
       1,
       this.Y_FACTOR,
-      this.Z_FACTOR
+      this.Z_FACTOR,
     );
 
     // objects are created at world position (0, 0, 0) and moved to their position relative to the projection
@@ -123,7 +123,7 @@ export class GameScene extends Phaser.Scene {
 
     const world = this.getSurfaceWorldPosition(
       screen,
-      new Phaser.Math.Vector3()
+      new Phaser.Math.Vector3(),
     );
 
     if (screen.x === null || screen.y === null)
@@ -145,7 +145,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   getSurfaceNormalFromWorldPosition(
-    world: Phaser.Math.Vector3
+    world: Phaser.Math.Vector3,
   ): Phaser.Math.Vector3 {
     return GROUND_NORMAL;
   }
@@ -171,7 +171,7 @@ export class GameScene extends Phaser.Scene {
 
     world.z = surfaceZ; // set z to the surface height to get the screen position of the world at surface level
     const projectedSurfaceZ = this.getSurfaceZFromScreenPosition(
-      this.getScreenPosition(world, this._projectedSurfaceZ)
+      this.getScreenPosition(world, this._projectedSurfaceZ),
     );
 
     world.z = oldWorldZ;
@@ -197,7 +197,7 @@ export class GameScene extends Phaser.Scene {
   // Get the world position of the given screen position
   getSurfaceWorldPosition(
     screen: Phaser.Types.Math.Vector2Like,
-    output: Phaser.Math.Vector3
+    output: Phaser.Math.Vector3,
   ) {
     const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
 
@@ -227,7 +227,7 @@ export class GameScene extends Phaser.Scene {
       CANNON_SPRITE,
       0x444444,
       cannonLength,
-      cannonRadius * 2
+      cannonRadius * 2,
     );
     createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletRadius * 2);
 
@@ -250,7 +250,7 @@ export class GameScene extends Phaser.Scene {
       16,
       16,
       0,
-      0
+      0,
     );
     const dungeonTilesetImage = this.map.addTilesetImage(
       DUNGEON_SPRITE,
@@ -258,7 +258,7 @@ export class GameScene extends Phaser.Scene {
       16,
       16,
       0,
-      0
+      0,
     );
 
     if (!townTilesetImage || !dungeonTilesetImage)
@@ -320,7 +320,7 @@ export class GameScene extends Phaser.Scene {
           log(
             `Perspective changed to ${this.perspective} (${
               PERSPECTIVE_INDEX[this.perspective]
-            }°)`
+            }°)`,
           );
           break;
         case Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET:
@@ -335,7 +335,7 @@ export class GameScene extends Phaser.Scene {
           log(
             `Perspective changed to ${this.perspective} (${
               PERSPECTIVE_INDEX[this.perspective]
-            }°)`
+            }°)`,
           );
 
           break;
@@ -394,7 +394,7 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.zoomTo(
         this.zoom,
         100,
-        Phaser.Math.Easing.Quadratic.InOut
+        Phaser.Math.Easing.Quadratic.InOut,
       );
     } else {
       this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
@@ -408,7 +408,7 @@ export class GameScene extends Phaser.Scene {
     const newZoom = Phaser.Math.Clamp(
       previousZoom + zoomDelta,
       this.zooms[0],
-      this.zooms[this.zooms.length - 1]
+      this.zooms[this.zooms.length - 1],
     );
     if (newZoom !== previousZoom) {
       this.zoom = newZoom;
@@ -426,7 +426,7 @@ export class GameScene extends Phaser.Scene {
     this.coverZoom = Math.max(scaleToFitWidth, scaleToFitHeight);
     this.cameras.main.setSize(width, height);
     this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter(
-      (zoom) => zoom > this.coverZoom + 0.1
+      (zoom) => zoom > this.coverZoom + 0.1,
     );
     this.zooms.unshift(this.coverZoom);
     if (!this.zooms.includes(this.zoom)) {

@@ -5,7 +5,7 @@ export function sphereToSphereCollision(
   b: Solid,
   combinedSqRadius: number, // = (radiusA + radiusB)², cached by caller
   restitution: number, // 0..1 0= perfectly inelastic, 1 = perfectly elastic
-  computeDamage: boolean
+  computeDamage: boolean,
 ): number {
   const dx = b.world.x - a.world.x;
   const dy = b.world.y - a.world.y;
