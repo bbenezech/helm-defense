@@ -70,7 +70,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
       const lastPoint = pointerHistory[pointerHistory.length - 1];
       const firstRelevantPointIndex = Math.max(
         0,
-        pointerHistory.length - pointerHistorySize
+        pointerHistory.length - pointerHistorySize,
       );
       const firstPoint = pointerHistory[firstRelevantPointIndex];
       const timeDeltaSeconds = (lastPoint.time - firstPoint.time) / 1000.0;
@@ -102,7 +102,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
     isSelectionDragging = false;
 
     console.log(
-      `Selection rect world: x ${selectionRect.x}, y ${selectionRect.y}, width ${selectionRect.width}, height ${selectionRect.height}`
+      `Selection rect world: x ${selectionRect.x}, y ${selectionRect.y}, width ${selectionRect.width}, height ${selectionRect.height}`,
     );
     pointer.manager.events.emit("selection", selectionRect);
     pointer.manager.setDefaultCursor("auto");
@@ -114,10 +114,10 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
       button === 0
         ? "left"
         : button === 1
-        ? "middle"
-        : button === 2
-        ? "right"
-        : button;
+          ? "middle"
+          : button === 2
+            ? "right"
+            : button;
 
     if (!moved) {
       console.log(`${buttonName} ${press ? "press" : "click"}`, pointer);
@@ -240,6 +240,7 @@ function update(input: Phaser.Input.InputPlugin) {
           (input.x - (camera.width - SCROLL_BOUNDARY)) / SCROLL_BOUNDARY;
         camera.scrollX += SCROLL_SPEED * ratio * ratio;
       }
+
       if (input.y < SCROLL_BOUNDARY) {
         const ratio = (SCROLL_BOUNDARY - input.y) / SCROLL_BOUNDARY;
         camera.scrollY -= SCROLL_SPEED * ratio * ratio;
@@ -275,7 +276,7 @@ function update(input: Phaser.Input.InputPlugin) {
         Math.min(worldStartX, worldEndX),
         Math.min(worldStartY, worldEndY),
         Math.abs(worldStartX - worldEndX),
-        Math.abs(worldStartY - worldEndY)
+        Math.abs(worldStartY - worldEndY),
       );
       this.selectionGraphics.lineStyle(2, 0x00ff00, 0.8);
       this.selectionGraphics.fillStyle(0x00ff00, 0.15);

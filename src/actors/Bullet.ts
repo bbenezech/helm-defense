@@ -43,7 +43,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   constructor(
     gameScene: GameScene,
     world: Phaser.Math.Vector3,
-    normalizedVelocity: Phaser.Math.Vector3
+    normalizedVelocity: Phaser.Math.Vector3,
   ) {
     super(gameScene, 0, 0, BULLET_SPRITE);
     this.gameScene = gameScene;
@@ -71,7 +71,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
           max: 180 * this.gameScene.worldToScreen.z,
         },
         frequency: -1,
-      }
+      },
     );
   }
 
@@ -85,7 +85,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
     this.shadowScreen = this.gameScene.getScreenPosition(
       this.shadowWorld,
-      this.shadowScreen
+      this.shadowScreen,
     );
 
     this.dirty = true;
@@ -153,7 +153,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     if (this.explosion !== false) {
       const screenVelocity = this.gameScene.getScreenPosition(
         this.explosion.velocity,
-        this._screenVelocity
+        this._screenVelocity,
       );
       const rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
 
@@ -162,13 +162,13 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
       const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
         rotation,
-        Math.PI / 2
+        Math.PI / 2,
       );
 
       this.explosionEmitter
         .setParticleGravity(
           gravity * Math.cos(rotationToGround),
-          gravity * Math.sin(rotationToGround)
+          gravity * Math.sin(rotationToGround),
         )
         .setPosition(this.screen.x, this.screen.y)
         .setRotation(rotation)

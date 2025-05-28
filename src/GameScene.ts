@@ -57,7 +57,6 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super({ key: "GameScene" });
-
     this.perspective = "oblique";
     this.axonometric = true;
   }

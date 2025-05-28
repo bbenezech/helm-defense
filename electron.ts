@@ -27,12 +27,7 @@ let nonFullScreenBounds: {
   height: number;
   x?: number;
   y?: number;
-} = {
-  width: 1280,
-  height: 720,
-  x: undefined,
-  y: undefined,
-};
+} = { width: 1280, height: 720, x: undefined, y: undefined };
 
 function enterImmersiveFullScreen() {
   if (!mainWindow) return;
@@ -51,7 +46,7 @@ function enterImmersiveFullScreen() {
 function exitImmersiveFullScreen() {
   if (!mainWindow) return;
   log.info(
-    `Exiting immersive fullscreen: ${nonFullScreenBounds.width}x${nonFullScreenBounds.height}`
+    `Exiting immersive fullscreen: ${nonFullScreenBounds.width}x${nonFullScreenBounds.height}`,
   );
 
   mainWindow.setKiosk(false);

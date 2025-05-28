@@ -95,16 +95,13 @@ export class Cannon extends Phaser.GameObjects.Image {
       0,
       PARTICLE_SPRITE,
       {
-        speed: {
-          min: BULLET.speed * 0.2,
-          max: BULLET.speed * 1,
-        },
+        speed: { min: BULLET.speed * 0.2, max: BULLET.speed * 1 },
         lifespan: { min: 400, max: 1000 },
         blendMode: "ADD",
         angle: { min: -7, max: 7 },
         frequency: -1,
         quantity: 70,
-      }
+      },
     );
 
     this.muzzleFlashEmitter = this.gameScene.add.particles(0, 0, FLARES, {
@@ -281,7 +278,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.cannonWorld.z = this.world.z + CANNON_GROUND_CLEARANCE;
     this.cannonScreen = this.gameScene.getScreenPosition(
       this.cannonWorld,
-      this.cannonScreen
+      this.cannonScreen,
     );
 
     this.dirty = true;
@@ -290,12 +287,12 @@ export class Cannon extends Phaser.GameObjects.Image {
   setRequestedAzymuth(targetScreen: Phaser.Types.Math.Vector2Like) {
     const targetWorld = this.gameScene.getSurfaceWorldPosition(
       targetScreen,
-      this._targetWorld
+      this._targetWorld,
     );
 
     this.requestedAzymuth = Phaser.Math.Angle.BetweenPoints(
       this.cannonWorld,
-      targetWorld
+      targetWorld,
     );
   }
 
@@ -310,7 +307,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     return velocityVectorFromAzymuthAndAltitude(
       this.azymuth,
       this.altitude,
-      this._velocity
+      this._velocity,
     );
   }
 
@@ -328,7 +325,7 @@ export class Cannon extends Phaser.GameObjects.Image {
 
     const muzzleScreen = this.gameScene.getScreenPosition(
       muzzleWorld,
-      this._muzzleScreen
+      this._muzzleScreen,
     );
 
     const gravity =
@@ -336,13 +333,13 @@ export class Cannon extends Phaser.GameObjects.Image {
 
     const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
       this.rotation,
-      Math.PI / 2
+      Math.PI / 2,
     );
 
     this.muzzleParticleEmitter
       .setParticleGravity(
         gravity * Math.cos(rotationToGround),
-        gravity * Math.sin(rotationToGround)
+        gravity * Math.sin(rotationToGround),
       )
       .setPosition(muzzleScreen.x, muzzleScreen.y)
       .setRotation(this.rotation)
@@ -373,7 +370,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       this.azymuth = Phaser.Math.Angle.RotateTo(
         this.azymuth,
         this.requestedAzymuth,
-        TURN_RATE_RADIANS_PER_SECOND * (delta / 1000.0)
+        TURN_RATE_RADIANS_PER_SECOND * (delta / 1000.0),
       );
 
       this.dirty = true;
@@ -382,7 +379,7 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   updateVisuals() {
     this.setPosition(this.cannonScreen.x, this.cannonScreen.y).setDepth(
-      this.cannonScreen.y
+      this.cannonScreen.y,
     );
     this.shadow
       .setPosition(this.screen.x, this.screen.y)
@@ -396,12 +393,12 @@ export class Cannon extends Phaser.GameObjects.Image {
     // rotate the cannon shadow to the azymuth and the cannon to the azymuth + altitude
     const screenVelocity = this.gameScene.getScreenPosition(
       velocity,
-      this._screenVelocity
+      this._screenVelocity,
     );
 
     const screenAzymuth = this.gameScene.getScreenPosition(
       this._azymuth.set(Math.cos(this.azymuth), Math.sin(this.azymuth), 0),
-      this._screenAzymuth
+      this._screenAzymuth,
     );
     const screenAzymuthRotation = Math.atan2(screenAzymuth.y, screenAzymuth.x);
     const screenRotation = Math.atan2(screenVelocity.y, screenVelocity.x);
@@ -410,13 +407,13 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.shadow.setRotation(screenAzymuthRotation); // azymuth projection only
     this.wheels.setRotation(
       // azymuth projection only + sprite rotation to zero it out to the right
-      CANNON_WHEELS_SPRITE_ROTATION + screenAzymuthRotation
+      CANNON_WHEELS_SPRITE_ROTATION + screenAzymuthRotation,
     );
 
     // scale the length of the cannon to the distance between the cannon and the muzzle
     const muzzleScreen = this.gameScene.getScreenPosition(
       this.getMuzzleWorld(velocity),
-      this._muzzleScreen
+      this._muzzleScreen,
     );
     const scaleX =
       Phaser.Math.Distance.BetweenPoints(this.cannonScreen, muzzleScreen) /
