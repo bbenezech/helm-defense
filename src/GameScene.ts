@@ -53,6 +53,7 @@ export class GameScene extends Phaser.Scene {
   perspective: (typeof PERSPECTIVES)[number];
   updatePointer!: (this: GameScene, time: number, delta: number) => void;
   selectionGraphics!: Phaser.GameObjects.Graphics;
+  // Used to track if the perspective has changed and objects need to update their visuals
   dirty = true;
 
   constructor() {
@@ -64,9 +65,7 @@ export class GameScene extends Phaser.Scene {
   setupPerspective() {
     this.dirty = true; // inform objects to update their visuals, because perspective has changed
 
-    const camRotation = Phaser.Math.DegToRad(
-      PERSPECTIVE_INDEX[this.perspective],
-    );
+    const camRotation = Phaser.Math.DegToRad(PERSPECTIVE_INDEX[this.perspective]);
 
     const cosCam = Math.cos(camRotation);
     const sinCam = Math.sin(camRotation);
@@ -84,25 +83,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     // if Z is constant
-    this.screenToWorldHorizontal = new Phaser.Math.Vector3(
-      1,
-      1 / this.Y_FACTOR,
-      0,
-    );
+    this.screenToWorldHorizontal = new Phaser.Math.Vector3(1, 1 / this.Y_FACTOR, 0);
 
     // if Y is constant
-    this.screenToWorldVertical = new Phaser.Math.Vector3(
-      1,
-      0,
-      1 / this.Z_FACTOR,
-    );
+    this.screenToWorldVertical = new Phaser.Math.Vector3(1, 0, 1 / this.Z_FACTOR);
 
     // convert a world unit to screen pixels on all 3 axes
-    this.worldToScreen = new Phaser.Math.Vector3(
-      1,
-      this.Y_FACTOR,
-      this.Z_FACTOR,
-    );
+    this.worldToScreen = new Phaser.Math.Vector3(1, this.Y_FACTOR, this.Z_FACTOR);
 
     // objects are created at world position (0, 0, 0) and moved to their position relative to the projection
     // if projection changes, we need to update their position
@@ -120,13 +107,9 @@ export class GameScene extends Phaser.Scene {
     // this.debugGraphics.fillStyle(0x00ff00, 1);
     // this.debugGraphics.fillRect(screen.x - 4, screen.y - 4, 8, 8);
 
-    const world = this.getSurfaceWorldPosition(
-      screen,
-      new Phaser.Math.Vector3(),
-    );
+    const world = this.getSurfaceWorldPosition(screen, new Phaser.Math.Vector3());
 
-    if (screen.x === null || screen.y === null)
-      throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
+    if (screen.x === null || screen.y === null) throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
 
     return world;
   }
@@ -143,9 +126,7 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
-  getSurfaceNormalFromWorldPosition(
-    world: Phaser.Math.Vector3,
-  ): Phaser.Math.Vector3 {
+  getSurfaceNormalFromWorldPosition(world: Phaser.Math.Vector3): Phaser.Math.Vector3 {
     return GROUND_NORMAL;
   }
 
@@ -194,10 +175,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Get the world position of the given screen position
-  getSurfaceWorldPosition(
-    screen: Phaser.Types.Math.Vector2Like,
-    output: Phaser.Math.Vector3,
-  ) {
+  getSurfaceWorldPosition(screen: Phaser.Types.Math.Vector2Like, output: Phaser.Math.Vector3) {
     const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
 
     output.x = screen.x / this.X_FACTOR;
@@ -221,13 +199,7 @@ export class GameScene extends Phaser.Scene {
     const cannonLength = cannonRadius * 8;
 
     createParticleTexture(this, PARTICLE_SPRITE);
-    createCannonTexture(
-      this,
-      CANNON_SPRITE,
-      0x444444,
-      cannonLength,
-      cannonRadius * 2,
-    );
+    createCannonTexture(this, CANNON_SPRITE, 0x444444, cannonLength, cannonRadius * 2);
     createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletRadius * 2);
 
     this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
@@ -243,25 +215,10 @@ export class GameScene extends Phaser.Scene {
 
     // Create the tilemap
     this.map = this.make.tilemap({ key: TILE_MAP });
-    const townTilesetImage = this.map.addTilesetImage(
-      TOWN_SPRITE,
-      TOWN_SPRITE,
-      16,
-      16,
-      0,
-      0,
-    );
-    const dungeonTilesetImage = this.map.addTilesetImage(
-      DUNGEON_SPRITE,
-      DUNGEON_SPRITE,
-      16,
-      16,
-      0,
-      0,
-    );
+    const townTilesetImage = this.map.addTilesetImage(TOWN_SPRITE, TOWN_SPRITE, 16, 16, 0, 0);
+    const dungeonTilesetImage = this.map.addTilesetImage(DUNGEON_SPRITE, DUNGEON_SPRITE, 16, 16, 0, 0);
 
-    if (!townTilesetImage || !dungeonTilesetImage)
-      throw new Error("Missing asset");
+    if (!townTilesetImage || !dungeonTilesetImage) throw new Error("Missing asset");
 
     this.map.createLayer(0, townTilesetImage, 0, 0, true)!;
     this.map.createLayer(1, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
@@ -296,7 +253,7 @@ export class GameScene extends Phaser.Scene {
       "cannon_blast_5",
     ]);
 
-    this.updatePointer = setupPointer(this.input);
+    this.updatePointer = setupPointer(this);
     this.input.manager.events.on("click", (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return; // left click
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
@@ -310,32 +267,16 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
       switch (e.keyCode) {
         case Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET:
-          this.perspective =
-            PERSPECTIVES[
-              (PERSPECTIVES.indexOf(this.perspective) + 1) % PERSPECTIVES.length
-            ];
+          this.perspective = PERSPECTIVES[(PERSPECTIVES.indexOf(this.perspective) + 1) % PERSPECTIVES.length];
 
           this.setupPerspective();
-          log(
-            `Perspective changed to ${this.perspective} (${
-              PERSPECTIVE_INDEX[this.perspective]
-            }°)`,
-          );
+          log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
           break;
         case Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET:
           this.perspective =
-            PERSPECTIVES[
-              (PERSPECTIVES.indexOf(this.perspective) -
-                1 +
-                PERSPECTIVES.length) %
-                PERSPECTIVES.length
-            ];
+            PERSPECTIVES[(PERSPECTIVES.indexOf(this.perspective) - 1 + PERSPECTIVES.length) % PERSPECTIVES.length];
           this.setupPerspective();
-          log(
-            `Perspective changed to ${this.perspective} (${
-              PERSPECTIVE_INDEX[this.perspective]
-            }°)`,
-          );
+          log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
 
           break;
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
@@ -379,22 +320,15 @@ export class GameScene extends Phaser.Scene {
       const index = this.zooms.findIndex((z) => z > previousZoom);
       requestedZoomIndex = index === -1 ? this.zooms.length - 1 : index;
     } else {
-      const indexInReversed = [...this.zooms]
-        .reverse()
-        .findIndex((z) => z < previousZoom);
-      requestedZoomIndex =
-        indexInReversed === -1 ? 0 : this.zooms.length - 1 - indexInReversed;
+      const indexInReversed = [...this.zooms].reverse().findIndex((z) => z < previousZoom);
+      requestedZoomIndex = indexInReversed === -1 ? 0 : this.zooms.length - 1 - indexInReversed;
     }
 
     const newZoom = this.zooms[requestedZoomIndex];
 
     if (previousZoom !== newZoom) {
       this.zoom = newZoom;
-      this.cameras.main.zoomTo(
-        this.zoom,
-        100,
-        Phaser.Math.Easing.Quadratic.InOut,
-      );
+      this.cameras.main.zoomTo(this.zoom, 100, Phaser.Math.Easing.Quadratic.InOut);
     } else {
       this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
     }
@@ -404,11 +338,7 @@ export class GameScene extends Phaser.Scene {
     const previousZoom = this.zoom;
     const zoomFactor = 0.002;
     const zoomDelta = -delta * zoomFactor;
-    const newZoom = Phaser.Math.Clamp(
-      previousZoom + zoomDelta,
-      this.zooms[0],
-      this.zooms[this.zooms.length - 1],
-    );
+    const newZoom = Phaser.Math.Clamp(previousZoom + zoomDelta, this.zooms[0], this.zooms[this.zooms.length - 1]);
     if (newZoom !== previousZoom) {
       this.zoom = newZoom;
       this.cameras.main.setZoom(this.zoom);
@@ -424,16 +354,12 @@ export class GameScene extends Phaser.Scene {
     const scaleToFitHeight = height / mapPixelHeight;
     this.coverZoom = Math.max(scaleToFitWidth, scaleToFitHeight);
     this.cameras.main.setSize(width, height);
-    this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter(
-      (zoom) => zoom > this.coverZoom + 0.1,
-    );
+    this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter((zoom) => zoom > this.coverZoom + 0.1);
     this.zooms.unshift(this.coverZoom);
     if (!this.zooms.includes(this.zoom)) {
       if (this.zoom === undefined) this.zoom = this.zooms[0];
       else {
-        this.zoom =
-          [...this.zooms].reverse().find((z) => z <= this.zoom) ??
-          this.zooms[0];
+        this.zoom = [...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0];
       }
     }
     this.cameras.main.setZoom(this.zoom);

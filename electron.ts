@@ -1,12 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  Menu,
-  dialog,
-  screen,
-  globalShortcut,
-  ipcMain,
-} from "electron";
+import { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } from "electron";
 import path from "path";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater; // https://github.com/electron-userland/electron-builder/issues/7976
@@ -15,40 +7,30 @@ import log from "electron-log";
 log.transports.file.level = "info"; // Set log level to info
 autoUpdater.logger = log;
 
-const DEVTOOLS = true;
+const DEVTOOLS = false;
 const __dirname = path.resolve();
 
 let mainWindow: BrowserWindow | null = null;
 let isInImmersiveFullScreen = true; // Start in this mode
 
 // Store initial non-fullscreen bounds for restoration
-let nonFullScreenBounds: {
-  width: number;
-  height: number;
-  x?: number;
-  y?: number;
-} = { width: 1280, height: 720, x: undefined, y: undefined };
+let nonFullScreenBounds: { width: number; height: number; x?: number; y?: number } = {
+  width: 1280,
+  height: 720,
+  x: undefined,
+  y: undefined,
+};
 
 function enterImmersiveFullScreen() {
   if (!mainWindow) return;
   const currentBounds = mainWindow.getBounds();
-  if (currentBounds.width > 100 && currentBounds.height > 100) {
-    // Avoid storing tiny initial bounds
-    nonFullScreenBounds = currentBounds;
-  }
-  log.info(`Entering immersive fullscreen`);
-
+  if (currentBounds.width > 100 && currentBounds.height > 100) nonFullScreenBounds = currentBounds;
   mainWindow.setKiosk(true);
-
   isInImmersiveFullScreen = true;
 }
 
 function exitImmersiveFullScreen() {
   if (!mainWindow) return;
-  log.info(
-    `Exiting immersive fullscreen: ${nonFullScreenBounds.width}x${nonFullScreenBounds.height}`,
-  );
-
   mainWindow.setKiosk(false);
   mainWindow.setBounds({
     width: nonFullScreenBounds.width,
@@ -57,13 +39,7 @@ function exitImmersiveFullScreen() {
     y: nonFullScreenBounds.y,
   });
 
-  if (
-    typeof nonFullScreenBounds.x === "undefined" ||
-    typeof nonFullScreenBounds.y === "undefined"
-  ) {
-    mainWindow.center();
-  }
-
+  if (typeof nonFullScreenBounds.x === "undefined" || typeof nonFullScreenBounds.y === "undefined") mainWindow.center();
   isInImmersiveFullScreen = false;
 }
 
@@ -94,10 +70,7 @@ function createWindow() {
   // Enter immersive fullscreen shortly after window is ready
   // to ensure all screen information is available.
   mainWindow.once("ready-to-show", () => {
-    if (isInImmersiveFullScreen) {
-      // If we intend to start fullscreen
-      enterImmersiveFullScreen();
-    }
+    if (isInImmersiveFullScreen) enterImmersiveFullScreen();
   });
 
   if (DEVTOOLS) mainWindow.webContents.openDevTools();
@@ -112,15 +85,6 @@ function createWindow() {
 app.on("ready", () => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify();
-
-  globalShortcut.register("Escape", () => {
-    // if (isInImmersiveFullScreen) exitImmersiveFullScreen();
-    toggleImmersiveFullScreen();
-  });
-
-  globalShortcut.register("F11", () => {
-    toggleImmersiveFullScreen();
-  });
 
   ipcMain.on("quit-app", () => {
     app.quit();
@@ -143,6 +107,24 @@ app.on("activate", () => {
   if (mainWindow === null) {
     createWindow();
   }
+});
+
+app.on("browser-window-focus", () => {
+  globalShortcut.register("Escape", () => {
+    if (isInImmersiveFullScreen) exitImmersiveFullScreen();
+  });
+
+  globalShortcut.register("F11", () => {
+    toggleImmersiveFullScreen();
+  });
+
+  globalShortcut.register("f", () => {
+    toggleImmersiveFullScreen();
+  });
+});
+
+app.on("browser-window-blur", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("will-quit", () => {
@@ -172,13 +154,7 @@ autoUpdater.on("error", (err) => {
 autoUpdater.on("download-progress", (progressObj) => {
   let log_message = "Download speed: " + progressObj.bytesPerSecond;
   log_message = log_message + " - Downloaded " + progressObj.percent + "%";
-  log_message =
-    log_message +
-    " (" +
-    progressObj.transferred +
-    "/" +
-    progressObj.total +
-    ")";
+  log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")";
   log.info(log_message);
   // mainWindow.webContents.send('update-message', `Downloading: ${Math.round(progressObj.percent)}%`);
 });
@@ -191,8 +167,7 @@ autoUpdater.on("update-downloaded", (info) => {
       buttons: ["Restart", "Later"],
       title: "Application Update",
       message: info.version,
-      detail:
-        "A new version has been downloaded. Restart the application to apply the updates.",
+      detail: "A new version has been downloaded. Restart the application to apply the updates.",
     })
     .then((returnValue) => {
       if (returnValue.response === 0) autoUpdater.quitAndInstall();

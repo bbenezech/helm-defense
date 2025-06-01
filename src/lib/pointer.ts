@@ -1,25 +1,23 @@
 import { GameScene } from "../GameScene";
+import { UIScene } from "../UIScene";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
-const SCROLL_SPEED = 14; // pixels per frame
-
+const SCROLL_SPEED = 2;
+const USE_POINTER_LOCK = true;
 const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for dragging
+
+const _world = new Phaser.Math.Vector2();
 
 // Pointer dragging state
 let startX = 0;
 let startY = 0;
-let endX = 0;
-let endY = 0;
 let worldStartX = 0;
-let worldEndX = 0;
 let worldStartY = 0;
-let worldEndY = 0;
 
 // Selection dragging state
 const SELECTION_DRAG_BUTTON = 0; // Left mouse button
 let isSelectionPointerDown = false;
 let isSelectionDragging = false;
-let isSelectionGraphicsOnScreen = false;
 let selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
 
 // Camera dragging state
@@ -35,13 +33,14 @@ let CLICK_DURATION_THRESHOLD = 200; // Max ms pointer can be down for a quick cl
 
 // Inertia state
 let isInertiaScrolling = false;
+let x = 0; // Pointer screen position
+let y = 0; // Pointer screen position
 let velocityX = 0; // Velocity in pixels per second
 let velocityY = 0;
 let dampingFactor = 0.95; // Damping factor for inertia in squared pixels per minute
 let minInertiaStartVelocitySquared = 100 * 100;
 let minInertiaStopVelocitySquared = 5 * 5;
 
-// Pointer history
 let pointerHistory: { x: number; y: number; time: number }[] = [];
 let pointerHistorySize = 5;
 
@@ -53,25 +52,19 @@ function addToPointerHistory(x: number, y: number) {
 function onPointerUp(pointer: Phaser.Input.Pointer) {
   isCameraPointerDown = false;
   isSelectionPointerDown = false;
-  worldEndX = pointer.worldX;
-  worldEndY = pointer.worldY;
-  endX = pointer.x;
-  endY = pointer.y;
-  const diffX = pointer.x - startX;
-  const diffY = pointer.y - startY;
+  const diffX = x - startX;
+  const diffY = y - startY;
   const magDiff = diffX * diffX + diffY * diffY;
   const moved = magDiff > CLICK_MOVE_THRESHOLD_SQUARED;
 
   if (isCameraDragging) {
     isCameraDragging = false; // End dragging state
-    pointer.manager.setDefaultCursor("auto");
+    const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
+    uiScene.changeCursor(pointer, "default");
 
     if (pointerHistory.length >= 2) {
       const lastPoint = pointerHistory[pointerHistory.length - 1];
-      const firstRelevantPointIndex = Math.max(
-        0,
-        pointerHistory.length - pointerHistorySize,
-      );
+      const firstRelevantPointIndex = Math.max(0, pointerHistory.length - pointerHistorySize);
       const firstPoint = pointerHistory[firstRelevantPointIndex];
       const timeDeltaSeconds = (lastPoint.time - firstPoint.time) / 1000.0;
 
@@ -87,10 +80,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
       velocityY = 0;
     }
 
-    if (
-      velocityX * velocityX + velocityY * velocityY >
-      minInertiaStartVelocitySquared
-    ) {
+    if (velocityX * velocityX + velocityY * velocityY > minInertiaStartVelocitySquared) {
       isInertiaScrolling = true;
     } else {
       velocityX = 0;
@@ -100,28 +90,23 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
     pointerHistory = [];
   } else if (isSelectionDragging) {
     isSelectionDragging = false;
+    const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
+    uiScene.changeCursor(pointer, "default");
 
-    console.log(
-      `Selection rect world: x ${selectionRect.x}, y ${selectionRect.y}, width ${selectionRect.width}, height ${selectionRect.height}`,
-    );
     pointer.manager.events.emit("selection", selectionRect);
-    pointer.manager.setDefaultCursor("auto");
   } else {
     const duration = pointer.getDuration();
-    const button = pointer.button;
     const press = duration > CLICK_DURATION_THRESHOLD;
-    const buttonName =
-      button === 0
-        ? "left"
-        : button === 1
-          ? "middle"
-          : button === 2
-            ? "right"
-            : button;
 
-    if (!moved) {
-      console.log(`${buttonName} ${press ? "press" : "click"}`, pointer);
-      pointer.manager.events.emit(press ? "press" : "click", pointer);
+    if (!moved && !press) {
+      if (pointer.locked) {
+        const world = pointer.camera.getWorldPoint(x, y, _world);
+        pointer.x = x;
+        pointer.y = y;
+        pointer.worldX = world.x;
+        pointer.worldY = world.y;
+      }
+      pointer.manager.events.emit("click", pointer);
     }
   }
 }
@@ -131,22 +116,17 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   isCameraPointerDown = false;
   isCameraDragging = false;
   isInertiaScrolling = false;
-  worldStartX = pointer.worldX;
-  worldStartY = pointer.worldY;
-  worldEndX = pointer.worldX;
-  worldEndY = pointer.worldY;
-  startX = pointer.x;
-  startY = pointer.y;
-  endX = pointer.x;
-  endY = pointer.y;
+  startX = x;
+  startY = y;
+  const world = pointer.camera.getWorldPoint(x, y, _world);
+  worldStartX = world.x;
+  worldStartY = world.y;
 
-  if (
-    pointer.button === CAMERA_DRAG_BUTTON ||
-    (TOUCH_DRAG_ACTION === "camera" && pointer.wasTouch)
-  ) {
+  if (!pointer.locked && USE_POINTER_LOCK && pointer.button === 0) pointer.manager.mouse?.requestPointerLock();
+
+  if (pointer.button === CAMERA_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "camera" && pointer.wasTouch)) {
     isCameraPointerDown = true;
     isCameraDragging = false;
-    pointer.manager.setDefaultCursor("auto");
     isInertiaScrolling = false;
     velocityX = 0;
     velocityY = 0;
@@ -155,24 +135,20 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
     cameraInitialScrollY = pointer.camera.scrollY;
 
     pointerHistory = [];
-    addToPointerHistory(pointer.x, pointer.y);
-  } else if (
-    pointer.button === SELECTION_DRAG_BUTTON ||
-    (TOUCH_DRAG_ACTION === "selection" && pointer.wasTouch)
-  ) {
+    addToPointerHistory(x, y);
+  } else if (pointer.button === SELECTION_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "selection" && pointer.wasTouch)) {
     isSelectionPointerDown = true;
     isSelectionDragging = false;
   }
 }
 
 function onPointerMove(pointer: Phaser.Input.Pointer) {
+  x = Phaser.Math.Clamp(pointer.locked ? x + pointer.movementX : pointer.x, 0, pointer.camera.width);
+  y = Phaser.Math.Clamp(pointer.locked ? y + pointer.movementY : pointer.y, 0, pointer.camera.height);
+
   if (isCameraPointerDown || isSelectionPointerDown) {
-    worldEndX = pointer.worldX;
-    worldEndY = pointer.worldY;
-    endX = pointer.x;
-    endY = pointer.y;
-    const diffX = endX - startX;
-    const diffY = endY - startY;
+    const diffX = x - startX;
+    const diffY = y - startY;
     const magDiff = diffX * diffX + diffY * diffY;
     const moved = magDiff > CLICK_MOVE_THRESHOLD_SQUARED;
 
@@ -186,108 +162,113 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
     }
 
     if (isCameraPointerDown) {
-      addToPointerHistory(pointer.x, pointer.y);
+      addToPointerHistory(x, y);
 
       if (isCameraDragging) {
         // no-op, already dragging
       } else if (moved) {
         isCameraDragging = true;
-        pointer.manager.setDefaultCursor("grab");
+        const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
+        uiScene.changeCursor(pointer, "grab");
       }
     } else if (isSelectionPointerDown) {
       if (isSelectionDragging) {
         // no-op, already dragging
       } else if (moved) {
         isSelectionDragging = true;
-        pointer.manager.setDefaultCursor("crosshair");
+        const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
+        uiScene.changeCursor(pointer, "crosshair");
       }
     }
   }
 }
 
 function update(input: Phaser.Input.InputPlugin) {
+  const camera = input.cameras.main;
+
   return function (this: GameScene, time: number, delta: number) {
-    const camera = input.cameras.main;
-    if (isInertiaScrolling) {
-      const deltaTimeSeconds = delta / 1000.0;
-      const damping = Math.pow(dampingFactor, deltaTimeSeconds * 60);
-      camera.scrollX -= (velocityX / camera.zoom) * deltaTimeSeconds;
-      camera.scrollY -= (velocityY / camera.zoom) * deltaTimeSeconds;
-      endX = input.x;
-      endY = input.y;
-      const worldPoint = camera.getWorldPoint(input.x, input.y);
-      worldEndX = worldPoint.x;
-      worldEndY = worldPoint.y;
-
-      velocityX *= damping;
-      velocityY *= damping;
-      if (
-        velocityX * velocityX + velocityY * velocityY <
-        minInertiaStopVelocitySquared
-      ) {
-        isInertiaScrolling = false;
-        velocityX = 0;
-        velocityY = 0;
-      }
-    }
-
-    if (input.isOver && !isCameraDragging && !isCameraPointerDown) {
-      if (input.x < SCROLL_BOUNDARY) {
-        const ratio = (SCROLL_BOUNDARY - input.x) / SCROLL_BOUNDARY;
-        camera.scrollX -= SCROLL_SPEED * ratio * ratio;
-      } else if (input.x > camera.width - SCROLL_BOUNDARY) {
-        const ratio =
-          (input.x - (camera.width - SCROLL_BOUNDARY)) / SCROLL_BOUNDARY;
-        camera.scrollX += SCROLL_SPEED * ratio * ratio;
-      }
-
-      if (input.y < SCROLL_BOUNDARY) {
-        const ratio = (SCROLL_BOUNDARY - input.y) / SCROLL_BOUNDARY;
-        camera.scrollY -= SCROLL_SPEED * ratio * ratio;
-      } else if (input.y > camera.height - SCROLL_BOUNDARY) {
-        const ratio =
-          (input.y - (camera.height - SCROLL_BOUNDARY)) / SCROLL_BOUNDARY;
-        camera.scrollY += SCROLL_SPEED * ratio * ratio;
-      }
-
-      endX = input.x;
-      endY = input.y;
-      const worldPoint = camera.getWorldPoint(input.x, input.y);
-      worldEndX = worldPoint.x;
-      worldEndY = worldPoint.y;
-    }
+    let scrollXDiff = 0;
+    let scrollYDiff = 0;
 
     if (isCameraDragging) {
-      const diffX = endX - startX;
-      const diffY = endY - startY;
+      const diffX = x - startX;
+      const diffY = y - startY;
       const deltaX = diffX / camera.zoom;
       const deltaY = diffY / camera.zoom;
       camera.scrollX = cameraInitialScrollX - deltaX;
       camera.scrollY = cameraInitialScrollY - deltaY;
-    }
+    } else {
+      if (isInertiaScrolling) {
+        const deltaTimeSeconds = delta / 1000.0;
+        const damping = Math.pow(dampingFactor, deltaTimeSeconds * 60);
+        scrollXDiff += -(velocityX / camera.zoom) * deltaTimeSeconds;
+        scrollYDiff += -(velocityY / camera.zoom) * deltaTimeSeconds;
 
-    if (isSelectionGraphicsOnScreen) {
-      this.selectionGraphics.clear();
-      isSelectionGraphicsOnScreen = false;
+        velocityX *= damping;
+        velocityY *= damping;
+        if (velocityX * velocityX + velocityY * velocityY < minInertiaStopVelocitySquared) {
+          isInertiaScrolling = false;
+          velocityX = 0;
+          velocityY = 0;
+        }
+      }
+
+      // edge scrolling
+      let scrollXRatio = 0;
+      let scrollYRatio = 0;
+
+      if (x < SCROLL_BOUNDARY) {
+        scrollXRatio = -(SCROLL_BOUNDARY - x) / SCROLL_BOUNDARY;
+      } else if (x > camera.width - SCROLL_BOUNDARY) {
+        scrollXRatio = (x - (camera.width - SCROLL_BOUNDARY)) / SCROLL_BOUNDARY;
+      }
+
+      if (scrollXRatio !== 0)
+        scrollXDiff += (scrollXRatio >= 0 ? 1 : -1) * scrollXRatio * scrollXRatio * delta * SCROLL_SPEED;
+
+      if (y < SCROLL_BOUNDARY) {
+        scrollYRatio = -(SCROLL_BOUNDARY - y) / SCROLL_BOUNDARY;
+      } else if (y > camera.height - SCROLL_BOUNDARY) {
+        scrollYRatio = (y - (camera.height - SCROLL_BOUNDARY)) / SCROLL_BOUNDARY;
+      }
+
+      if (scrollYRatio !== 0)
+        scrollYDiff += (scrollYRatio >= 0 ? 1 : -1) * scrollYRatio * scrollYRatio * delta * SCROLL_SPEED;
+
+      if (scrollXDiff !== 0 || scrollYDiff !== 0)
+        camera.setScroll(camera.scrollX + scrollXDiff, camera.scrollY + scrollYDiff);
     }
 
     if (isSelectionDragging) {
+      const world = camera.getWorldPoint(x, y, _world);
+      const worldX = world.x;
+      const worldY = world.y;
+
+      if (!this.selectionGraphics.visible) this.selectionGraphics.setVisible(true).setDepth(1000000);
+
       selectionRect.setTo(
-        Math.min(worldStartX, worldEndX),
-        Math.min(worldStartY, worldEndY),
-        Math.abs(worldStartX - worldEndX),
-        Math.abs(worldStartY - worldEndY),
+        Math.min(worldStartX, worldX),
+        Math.min(worldStartY, worldY),
+        Math.abs(worldStartX - worldX),
+        Math.abs(worldStartY - worldY),
       );
-      this.selectionGraphics.lineStyle(2, 0x00ff00, 0.8);
-      this.selectionGraphics.fillStyle(0x00ff00, 0.15);
-      this.selectionGraphics.fillRectShape(selectionRect);
-      this.selectionGraphics.strokeRectShape(selectionRect);
-      isSelectionGraphicsOnScreen = true;
+      this.selectionGraphics
+        .clear()
+        .lineStyle(2, 0x00ff00, 0.8)
+        .fillStyle(0x00ff00, 0.15)
+        .fillRectShape(selectionRect)
+        .strokeRectShape(selectionRect);
+    } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);
+
+    if (input.mouse?.locked) {
+      const uiScene = input.scene.game.scene.getScene("UIScene") as UIScene;
+      uiScene.moveLockedCursor(input.activePointer, x, y);
     }
   };
 }
 
-export function setupPointer(input: Phaser.Input.InputPlugin) {
+export function setupPointer(scene: GameScene) {
+  const input = scene.input;
   input.on("pointerdown", onPointerDown);
   input.on("pointermove", onPointerMove);
   input.on("pointerup", onPointerUp);

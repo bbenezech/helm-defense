@@ -5,7 +5,7 @@ export function createCannonTexture(
   key: string,
   color: number,
   width: number, // cannon is laid horizontally
-  height: number
+  height: number,
 ) {
   // 1. Create temporary Graphics object
   const graphics = gameScene.make.graphics({}, false);

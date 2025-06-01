@@ -24,7 +24,7 @@ export function createPixelCannonTexture(
   key: string,
   colors: PixelCannonColors,
   pixelWidth: number, // e.g., 24
-  pixelHeight: number // e.g., 12 (should be even for radius calc)
+  pixelHeight: number, // e.g., 12 (should be even for radius calc)
 ): void {
   // Returns void as it adds texture to cache
 
@@ -37,11 +37,7 @@ export function createPixelCannonTexture(
   // A. Shadow/Outline Layer (Optional but adds depth)
   // Draw the full shape slightly offset (e.g., 1 pixel down)
   graphics.fillStyle(colors.shadow, 1);
-  const shadowPoints: Phaser.Math.Vector2[] = calculateCannonPoints(
-    pixelWidth,
-    pixelHeight,
-    1
-  );
+  const shadowPoints: Phaser.Math.Vector2[] = calculateCannonPoints(pixelWidth, pixelHeight, 1);
   graphics.fillPoints(shadowPoints, true);
 
   // B. Base Color Layer
@@ -49,7 +45,7 @@ export function createPixelCannonTexture(
   const basePoints: Phaser.Math.Vector2[] = calculateCannonPoints(
     pixelWidth,
     pixelHeight,
-    0 // No offset
+    0, // No offset
   );
   graphics.fillPoints(basePoints, true);
 
@@ -62,7 +58,7 @@ export function createPixelCannonTexture(
     pixelHeight, // Start partway into the arc
     0, // At the top
     pixelWidth - pixelHeight - 1, // Leave 1px margin at the end
-    highlightHeight
+    highlightHeight,
   );
 
   // 5. Generate the texture FROM THE SMALL DRAWING
@@ -79,7 +75,7 @@ export function createPixelCannonTexture(
 function calculateCannonPoints(
   width: number,
   height: number,
-  offsetY: number // Vertical offset for shadow
+  offsetY: number, // Vertical offset for shadow
 ): Phaser.Math.Vector2[] {
   const radius = height / 2;
   const circleCenterX = radius;

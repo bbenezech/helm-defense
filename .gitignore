@@ -129,8 +129,8 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-*.DS_Store
 *.tiled-project
 *.tiled-session
 dist
 build
+.DS_Store
