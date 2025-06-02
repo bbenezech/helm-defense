@@ -7,7 +7,8 @@ import log from "electron-log";
 log.transports.file.level = "info"; // Set log level to info
 autoUpdater.logger = log;
 
-const DEVTOOLS = false;
+log.info("App starting...", process.env.NODE_ENV);
+const DEVTOOLS = process.env.NODE_ENV === "development";
 const __dirname = path.resolve();
 
 let mainWindow: BrowserWindow | null = null;
@@ -25,13 +26,13 @@ function enterImmersiveFullScreen() {
   if (!mainWindow) return;
   const currentBounds = mainWindow.getBounds();
   if (currentBounds.width > 100 && currentBounds.height > 100) nonFullScreenBounds = currentBounds;
-  mainWindow.setKiosk(true);
+  mainWindow.setFullScreen(true);
   isInImmersiveFullScreen = true;
 }
 
 function exitImmersiveFullScreen() {
   if (!mainWindow) return;
-  mainWindow.setKiosk(false);
+  mainWindow.setFullScreen(false);
   mainWindow.setBounds({
     width: nonFullScreenBounds.width,
     height: nonFullScreenBounds.height,

@@ -8,6 +8,9 @@ const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for 
 
 const _world = new Phaser.Math.Vector2();
 
+let x = 0; // Pointer screen position
+let y = 0; // Pointer screen position
+
 // Pointer dragging state
 let startX = 0;
 let startY = 0;
@@ -32,13 +35,9 @@ let CLICK_MOVE_THRESHOLD_SQUARED = 2 * 2;
 let CLICK_DURATION_THRESHOLD = 200; // Max ms pointer can be down for a quick click
 
 // Inertia state
-let isInertiaScrolling = false;
-let x = 0; // Pointer screen position
-let y = 0; // Pointer screen position
-let velocityX = 0; // Velocity in pixels per second
+let velocityX = 0; // Scroll velocity in pixels per second
 let velocityY = 0;
 let dampingFactor = 0.95; // Damping factor for inertia in squared pixels per minute
-let minInertiaStartVelocitySquared = 100 * 100;
 let minInertiaStopVelocitySquared = 5 * 5;
 
 let pointerHistory: { x: number; y: number; time: number }[] = [];
@@ -80,13 +79,6 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
       velocityY = 0;
     }
 
-    if (velocityX * velocityX + velocityY * velocityY > minInertiaStartVelocitySquared) {
-      isInertiaScrolling = true;
-    } else {
-      velocityX = 0;
-      velocityY = 0;
-    }
-
     pointerHistory = [];
   } else if (isSelectionDragging) {
     isSelectionDragging = false;
@@ -115,7 +107,6 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   isSelectionPointerDown = false;
   isCameraPointerDown = false;
   isCameraDragging = false;
-  isInertiaScrolling = false;
   startX = x;
   startY = y;
   const world = pointer.camera.getWorldPoint(x, y, _world);
@@ -127,7 +118,6 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   if (pointer.button === CAMERA_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "camera" && pointer.wasTouch)) {
     isCameraPointerDown = true;
     isCameraDragging = false;
-    isInertiaScrolling = false;
     velocityX = 0;
     velocityY = 0;
 
@@ -185,6 +175,7 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
 
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
+  const uiScene = input.scene.game.scene.getScene("UIScene") as UIScene;
 
   return function (this: GameScene, time: number, delta: number) {
     let scrollXDiff = 0;
@@ -198,7 +189,7 @@ function update(input: Phaser.Input.InputPlugin) {
       camera.scrollX = cameraInitialScrollX - deltaX;
       camera.scrollY = cameraInitialScrollY - deltaY;
     } else {
-      if (isInertiaScrolling) {
+      if (velocityX !== 0 || velocityY !== 0) {
         const deltaTimeSeconds = delta / 1000.0;
         const damping = Math.pow(dampingFactor, deltaTimeSeconds * 60);
         scrollXDiff += -(velocityX / camera.zoom) * deltaTimeSeconds;
@@ -206,8 +197,8 @@ function update(input: Phaser.Input.InputPlugin) {
 
         velocityX *= damping;
         velocityY *= damping;
-        if (velocityX * velocityX + velocityY * velocityY < minInertiaStopVelocitySquared) {
-          isInertiaScrolling = false;
+        const squaredVelocity = velocityX * velocityX + velocityY * velocityY;
+        if (squaredVelocity < minInertiaStopVelocitySquared) {
           velocityX = 0;
           velocityY = 0;
         }
@@ -260,10 +251,7 @@ function update(input: Phaser.Input.InputPlugin) {
         .strokeRectShape(selectionRect);
     } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);
 
-    if (input.mouse?.locked) {
-      const uiScene = input.scene.game.scene.getScene("UIScene") as UIScene;
-      uiScene.moveLockedCursor(input.activePointer, x, y);
-    }
+    if (input.mouse?.locked) uiScene.moveLockedCursor(input.activePointer, x, y);
   };
 }
 

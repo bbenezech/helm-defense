@@ -9,12 +9,10 @@
     "build:gh": "vite build --mode gh-pages",
     "preview": "vite preview --port 8080",
     "serve": "vite serve",
-    "electron": "npm run build && NODE_OPTIONS=\"--import tsx\" electron ./electron.ts"
+    "electron": "npm run build && NODE_ENV=development NODE_OPTIONS=\"--import tsx\" electron ./electron.ts"
   },
   "dependencies": {
     "@swc-node/register": "^1.10.10",
-    "@types/d3-random": "^3.0.3",
-    "@types/lodash.debounce": "^4.0.9",
     "body-parser": "^2.2.0",
     "d3-random": "^3.0.1",
     "electron": "^36.3.2",
@@ -29,6 +27,8 @@
     "vite": "^6.3.5"
   },
   "devDependencies": {
+    "@types/d3-random": "^3.0.3",
+    "@types/lodash.debounce": "^4.0.9",
     "@types/node": "^22.15.29"
   },
   "build": {

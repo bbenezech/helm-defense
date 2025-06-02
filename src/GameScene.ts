@@ -239,9 +239,9 @@ export class GameScene extends Phaser.Scene {
       right: cursors.right,
       up: cursors.up,
       down: cursors.down,
-      acceleration: 1,
-      drag: 1,
-      maxSpeed: 1,
+      acceleration: 0.1,
+      drag: 0.002,
+      maxSpeed: 2,
     });
 
     // Cannons
