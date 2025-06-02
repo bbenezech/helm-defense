@@ -1,8 +1,8 @@
 const USE_UI_CURSOR = true; // Use UI pointer even when pointer lock is false
 
 const cursorIndex = {
-  default: { filename: "cursor_none", origin: { x: 0.2, y: 0.1 } },
-  pointer: { filename: "hand_point", origin: { x: 0.2, y: 0.1 } },
+  default: { filename: "cursor_none", origin: { x: 0.3, y: 0.15 } },
+  pointer: { filename: "hand_point", origin: { x: 0.25, y: 0.15 } },
   grab: { filename: "hand_open" },
   crosshair: { filename: "target_b" },
 } satisfies Record<string, { filename: string; origin?: { x: number; y: number } }>;
@@ -18,6 +18,9 @@ export class UIScene extends Phaser.Scene {
   focused: boolean = true;
   mousehover: boolean = true;
   fpsUpdateTimer = 0;
+  debugGraphics!: Phaser.GameObjects.Graphics;
+  x = 0;
+  y = 0;
 
   constructor() {
     super({ key: "UIScene" });
@@ -54,6 +57,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   moveCursor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
     if (this.activeUICursor === null) return; // OS cursor is shown, nothing to move
     const cursor = this.getUICursor(this.activeUICursor);
     if (cursor.x === x && cursor.y === y) return;
@@ -86,6 +91,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   create() {
+    this.debugGraphics = this.add.graphics();
+    this.debugGraphics.setDepth(100000000000);
+
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
     this.cameras.main.setBackgroundColor("rgba(0, 0, 0, 0)");
@@ -104,6 +112,10 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    // this.debugGraphics.clear();
+    // this.debugGraphics.fillStyle(0x00ff00, 1);
+    // this.debugGraphics.fillRect(this.x - 2, this.y - 2, 4, 4);
+
     this.fpsUpdateTimer += delta;
     if (this.fpsUpdateTimer >= 100) {
       const fps = this.sys.game.loop.actualFps;

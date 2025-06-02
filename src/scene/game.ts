@@ -105,10 +105,6 @@ export class GameScene extends Phaser.Scene {
     screen.x = this.map.tileToWorldX(tileX)!;
     screen.y = this.map.tileToWorldY(tileY)!;
 
-    // this.debugGraphics.clear();
-    // this.debugGraphics.fillStyle(0x00ff00, 1);
-    // this.debugGraphics.fillRect(screen.x - 4, screen.y - 4, 8, 8);
-
     const world = this.getSurfaceWorldPosition(screen, new Phaser.Math.Vector3());
 
     if (screen.x === null || screen.y === null) throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
@@ -264,6 +260,11 @@ export class GameScene extends Phaser.Scene {
     this.input.manager.events.on("click", (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return; // left click
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
+
+      // this.debugGraphics.clear();
+      // this.debugGraphics.fillStyle(0x00ff00, 1);
+      // this.debugGraphics.fillRect(this._pointerScreen.x - 2, this._pointerScreen.y - 2, 4, 4);
+
       this.cannon.requestShoot(this._pointerScreen);
     });
 

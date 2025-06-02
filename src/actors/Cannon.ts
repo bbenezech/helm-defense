@@ -289,7 +289,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   move(delta: number) {
-    const rotationNeeded = Math.abs(this.azymuth - this.requestedAzymuth) >= 0.01;
+    const rotationNeeded = Math.abs(this.azymuth - this.requestedAzymuth) >= 0.0001;
 
     this.shootCooldown -= delta;
     if (this.shootCooldown <= 0 && !rotationNeeded && this.shootRequested) {
