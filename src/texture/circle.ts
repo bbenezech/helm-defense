@@ -1,4 +1,4 @@
-import { GameScene } from "../GameScene";
+import { GameScene } from "../scene/game";
 
 export function createCircleTexture(gameScene: GameScene, key: string, color: number, diameter: number) {
   const graphics = gameScene.make.graphics({}, false);

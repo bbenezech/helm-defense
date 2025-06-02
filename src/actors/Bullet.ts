@@ -8,12 +8,8 @@ import {
   BULLET,
   GRAVITY_SI,
 } from "../constants";
-import { GameScene } from "../GameScene";
-import {
-  Collision,
-  Solid,
-  sphereToGroundCollision,
-} from "../collision/sphereToGround"; // Import the collision function
+import { GameScene } from "../scene/game";
+import { Collision, Solid, sphereToGroundCollision } from "../collision/sphereToGround"; // Import the collision function
 
 // canon de 12 livres
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
@@ -40,11 +36,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   explosionEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   explosion: false | Collision = false; // Explosion effect on next frame
 
-  constructor(
-    gameScene: GameScene,
-    world: Phaser.Math.Vector3,
-    normalizedVelocity: Phaser.Math.Vector3,
-  ) {
+  constructor(gameScene: GameScene, world: Phaser.Math.Vector3, normalizedVelocity: Phaser.Math.Vector3) {
     super(gameScene, 0, 0, BULLET_SPRITE);
     this.gameScene = gameScene;
     this.shadow = this.gameScene.add
@@ -54,25 +46,16 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
     this.velocity = normalizedVelocity.clone().scale(BULLET.speed);
     this.setWorld(world);
-    this.dragConstantSI =
-      0.5 * rho * C_d * Math.PI * BULLET.radiusSI * BULLET.radiusSI; // ½ * ρ * v²
+    this.dragConstantSI = 0.5 * rho * C_d * Math.PI * BULLET.radiusSI * BULLET.radiusSI; // ½ * ρ * v²
     this.gameScene.add.existing(this);
     this.mass = BULLET.mass;
     this.invMass = BULLET.invMass;
-    this.explosionEmitter = this.gameScene.add.particles(
-      this.x,
-      this.y,
-      PARTICLE_SPRITE,
-      {
-        lifespan: { min: 800, max: 1600 },
-        angle: { min: -30, max: 30 },
-        speed: {
-          min: 140 * this.gameScene.worldToScreen.z,
-          max: 180 * this.gameScene.worldToScreen.z,
-        },
-        frequency: -1,
-      },
-    );
+    this.explosionEmitter = this.gameScene.add.particles(this.x, this.y, PARTICLE_SPRITE, {
+      lifespan: { min: 800, max: 1600 },
+      angle: { min: -30, max: 30 },
+      speed: { min: 140 * this.gameScene.worldToScreen.z, max: 180 * this.gameScene.worldToScreen.z },
+      frequency: -1,
+    });
   }
 
   setWorld(world: Phaser.Math.Vector3) {
@@ -80,25 +63,19 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     this.screen = this.gameScene.getScreenPosition(this.world, this.screen);
     this.shadowWorld.x = this.world.x;
     this.shadowWorld.y = this.world.y;
-    this.shadowWorld.z =
-      this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
+    this.shadowWorld.z = this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
 
-    this.shadowScreen = this.gameScene.getScreenPosition(
-      this.shadowWorld,
-      this.shadowScreen,
-    );
+    this.shadowScreen = this.gameScene.getScreenPosition(this.shadowWorld, this.shadowScreen);
 
     this.dirty = true;
   }
 
   move(delta: number) {
-    if (this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0)
-      return;
+    if (this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0) return;
     const speedSq = this.velocity.lengthSq();
     if (speedSq < 1) {
       this.velocity.reset();
-      this.world.z =
-        this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
+      this.world.z = this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
       this.setWorld(this.world);
     }
 
@@ -116,8 +93,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       const dragForceMagnitudeSI = this.dragConstantSI * speedSI * speedSI;
 
       // Calculate Drag Acceleration magnitude
-      const dragAccelerationMagnitude =
-        dragForceMagnitudeSI * this.invMass * WORLD_UNIT_PER_METER;
+      const dragAccelerationMagnitude = dragForceMagnitudeSI * this.invMass * WORLD_UNIT_PER_METER;
 
       const axDrag = dragAccelerationMagnitude * (this.velocity.x / speed);
       const ayDrag = dragAccelerationMagnitude * (this.velocity.y / speed);
@@ -125,8 +101,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
       this.velocity.x += -axDrag * dragDeltaSeconds;
       this.velocity.y += -ayDrag * dragDeltaSeconds;
-      this.velocity.z +=
-        (-azDrag - GRAVITY_SI * WORLD_UNIT_PER_METER) * dragDeltaSeconds;
+      this.velocity.z += (-azDrag - GRAVITY_SI * WORLD_UNIT_PER_METER) * dragDeltaSeconds;
     }
 
     const deltaSeconds = delta / 1000; // Convert ms to seconds for physics
@@ -145,31 +120,19 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       this.shadow.setVisible(false);
     } else {
       if (this.shadow.visible === false) this.shadow.setVisible(true);
-      this.shadow
-        .setPosition(this.shadowScreen.x, this.shadowScreen.y)
-        .setDepth(this.shadowScreen.y);
+      this.shadow.setPosition(this.shadowScreen.x, this.shadowScreen.y).setDepth(this.shadowScreen.y);
     }
 
     if (this.explosion !== false) {
-      const screenVelocity = this.gameScene.getScreenPosition(
-        this.explosion.velocity,
-        this._screenVelocity,
-      );
+      const screenVelocity = this.gameScene.getScreenPosition(this.explosion.velocity, this._screenVelocity);
       const rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
 
-      const gravity =
-        GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
+      const gravity = GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
 
-      const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
-        rotation,
-        Math.PI / 2,
-      );
+      const rotationToGround = Phaser.Math.Angle.GetShortestDistance(rotation, Math.PI / 2);
 
       this.explosionEmitter
-        .setParticleGravity(
-          gravity * Math.cos(rotationToGround),
-          gravity * Math.sin(rotationToGround),
-        )
+        .setParticleGravity(gravity * Math.cos(rotationToGround), gravity * Math.sin(rotationToGround))
         .setPosition(this.screen.x, this.screen.y)
         .setRotation(rotation)
         .explode(Phaser.Math.Clamp(this.explosion.energy * 20, 1, 20));
@@ -179,9 +142,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
   preUpdate(time: number, delta: number) {
     const visible = this.gameScene.inViewport(this);
-    const timerInterval = visible
-      ? VISIBLE_UPDATE_INTERVAL
-      : INVISIBLE_UPDATE_INTERVAL;
+    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL : INVISIBLE_UPDATE_INTERVAL;
 
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {

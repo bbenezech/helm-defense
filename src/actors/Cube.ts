@@ -1,9 +1,5 @@
-import { GameScene } from "../GameScene";
-import {
-  INVISIBLE_UPDATE_INTERVAL,
-  VISIBLE_UPDATE_INTERVAL,
-  WORLD_UNIT_PER_METER,
-} from "../constants";
+import { GameScene } from "../scene/game";
+import { INVISIBLE_UPDATE_INTERVAL, VISIBLE_UPDATE_INTERVAL, WORLD_UNIT_PER_METER } from "../constants";
 
 // Colors for the two squares
 const TOP_COLOR = {
@@ -50,7 +46,7 @@ export class Cube extends Phaser.GameObjects.Container {
     sizeXMeters: number,
     sizeYMeters: number,
     sizeZMeters: number,
-    worldRotationZ: number
+    worldRotationZ: number,
   ) {
     super(gameScene, 0, 0);
     this.gameScene = gameScene;
@@ -64,15 +60,9 @@ export class Cube extends Phaser.GameObjects.Container {
     this.halfSizeY = sizeY / 2;
 
     // Initialize world vertices array
-    this.worldVertices = Array.from(
-      { length: 8 },
-      () => new Phaser.Math.Vector3()
-    );
+    this.worldVertices = Array.from({ length: 8 }, () => new Phaser.Math.Vector3());
     // Initialize screen vertices array (will be populated in updateVisuals)
-    this.screenVertices = Array.from(
-      { length: 8 },
-      () => new Phaser.Math.Vector2()
-    );
+    this.screenVertices = Array.from({ length: 8 }, () => new Phaser.Math.Vector2());
 
     // --- Create Container ---
     // Initial position will be set in the first updateVisuals call
@@ -86,7 +76,7 @@ export class Cube extends Phaser.GameObjects.Container {
       0,
       [0, 0, 0, 1, 1, 1], // Placeholder points
       BOTTOM_COLOR.fill,
-      BOTTOM_COLOR.alpha
+      BOTTOM_COLOR.alpha,
     );
     this.bottomPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.bottomPolygon.isFilled = true;
@@ -101,7 +91,7 @@ export class Cube extends Phaser.GameObjects.Container {
       0,
       [0, 0, 0, 1, 1, 1], // Placeholder points
       TOP_COLOR.fill,
-      TOP_COLOR.alpha
+      TOP_COLOR.alpha,
     );
     this.topPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.topPolygon.isFilled = true;
@@ -149,7 +139,7 @@ export class Cube extends Phaser.GameObjects.Container {
       this.worldVertices[i].set(
         this.world.x + rotatedX,
         this.world.y + rotatedY,
-        this.world.z + local.z // Add world center Z offset
+        this.world.z + local.z, // Add world center Z offset
       );
     }
   }
@@ -178,7 +168,7 @@ export class Cube extends Phaser.GameObjects.Container {
     for (let i = 0; i < this.worldVertices.length; i++) {
       this.gameScene.getScreenPosition(
         this.worldVertices[i],
-        this.screenVertices[i] // Update the screen vertices array
+        this.screenVertices[i], // Update the screen vertices array
       );
     }
 
@@ -186,19 +176,13 @@ export class Cube extends Phaser.GameObjects.Container {
     // Calculate points relative to the container's origin (screenCenter)
     const bottomPointsRelative: number[] = [];
     for (let i = 0; i <= 3; i++) {
-      bottomPointsRelative.push(
-        this.screenVertices[i].x - this.x,
-        this.screenVertices[i].y - this.y
-      );
+      bottomPointsRelative.push(this.screenVertices[i].x - this.x, this.screenVertices[i].y - this.y);
     }
     this.bottomPolygon.setTo(bottomPointsRelative);
 
     const topPointsRelative: number[] = [];
     for (let i = 4; i <= 7; i++) {
-      topPointsRelative.push(
-        this.screenVertices[i].x - this.x,
-        this.screenVertices[i].y - this.y
-      );
+      topPointsRelative.push(this.screenVertices[i].x - this.x, this.screenVertices[i].y - this.y);
     }
     this.topPolygon.setTo(topPointsRelative);
   }

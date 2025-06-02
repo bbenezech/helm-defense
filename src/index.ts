@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { GameScene } from "./GameScene";
-import { UIScene } from "./UIScene";
+import { GameScene } from "./scene/game";
+import { UIScene } from "./scene/ui";
 
 const game = new Phaser.Game({
   type: Phaser.WEBGL,

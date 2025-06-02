@@ -1,5 +1,5 @@
 import { ENEMY_SPRITE } from "../constants";
-import { GameScene } from "../GameScene";
+import { GameScene } from "../scene/game";
 import { Solid } from "../collision/sphereToGround";
 
 const ENNEMY_MASS_KG = 100;

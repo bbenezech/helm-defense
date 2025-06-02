@@ -1,9 +1,10 @@
-import { GameScene } from "../GameScene";
-import { UIScene } from "../UIScene";
+import { GameScene } from "../scene/game";
+import { Cursor, UIScene } from "../scene/ui";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;
 const USE_POINTER_LOCK = true;
+const USE_UI_POINTER = true; // Use UI pointer even when pointer lock is false
 const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for dragging
 
 const _world = new Phaser.Math.Vector2();
@@ -43,6 +44,8 @@ let minInertiaStopVelocitySquared = 5 * 5;
 let pointerHistory: { x: number; y: number; time: number }[] = [];
 let pointerHistorySize = 5;
 
+let uiScene: UIScene;
+
 function addToPointerHistory(x: number, y: number) {
   pointerHistory.push({ x: x, y: y, time: Date.now() });
   if (pointerHistory.length > pointerHistorySize) pointerHistory.shift();
@@ -58,8 +61,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
 
   if (isCameraDragging) {
     isCameraDragging = false; // End dragging state
-    const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
-    uiScene.changeCursor(pointer, "default");
+    uiScene.updateCursor("default");
 
     if (pointerHistory.length >= 2) {
       const lastPoint = pointerHistory[pointerHistory.length - 1];
@@ -82,8 +84,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
     pointerHistory = [];
   } else if (isSelectionDragging) {
     isSelectionDragging = false;
-    const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
-    uiScene.changeCursor(pointer, "default");
+    uiScene.updateCursor("default");
 
     pointer.manager.events.emit("selection", selectionRect);
   } else {
@@ -113,7 +114,9 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   worldStartX = world.x;
   worldStartY = world.y;
 
-  if (!pointer.locked && USE_POINTER_LOCK && pointer.button === 0) pointer.manager.mouse?.requestPointerLock();
+  if (USE_POINTER_LOCK && !pointer.locked && pointer.button === 0) {
+    pointer.manager.mouse?.requestPointerLock();
+  }
 
   if (pointer.button === CAMERA_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "camera" && pointer.wasTouch)) {
     isCameraPointerDown = true;
@@ -143,7 +146,7 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
     const moved = magDiff > CLICK_MOVE_THRESHOLD_SQUARED;
 
     if (!pointer.isDown) {
-      console.log("No pointer down detected, resetting pointer drag state");
+      console.warn("No pointer down detected, resetting pointer drag state");
       onPointerUp(pointer);
     }
     if (!pointer.camera) {
@@ -158,24 +161,25 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
         // no-op, already dragging
       } else if (moved) {
         isCameraDragging = true;
-        const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
-        uiScene.changeCursor(pointer, "grab");
+        uiScene.updateCursor("grab");
       }
     } else if (isSelectionPointerDown) {
       if (isSelectionDragging) {
         // no-op, already dragging
       } else if (moved) {
         isSelectionDragging = true;
-        const uiScene = pointer.camera.scene.game.scene.getScene("UIScene") as UIScene;
-        uiScene.changeCursor(pointer, "crosshair");
+        uiScene.updateCursor("crosshair");
       }
     }
   }
 }
 
+function onPointerLockChange() {
+  uiScene.updateCursor("default");
+}
+
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
-  const uiScene = input.scene.game.scene.getScene("UIScene") as UIScene;
 
   return function (this: GameScene, time: number, delta: number) {
     let scrollXDiff = 0;
@@ -251,18 +255,18 @@ function update(input: Phaser.Input.InputPlugin) {
         .strokeRectShape(selectionRect);
     } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);
 
-    if (input.mouse?.locked) uiScene.moveLockedCursor(input.activePointer, x, y);
+    uiScene.moveCursor(x, y);
   };
 }
 
 export function setupPointer(scene: GameScene) {
-  const input = scene.input;
-  input.on("pointerdown", onPointerDown);
-  input.on("pointermove", onPointerMove);
-  input.on("pointerup", onPointerUp);
-  input.on("pointerupoutside", onPointerUp);
+  uiScene = scene.game.scene.getScene("UIScene") as UIScene;
+  scene = scene;
+  scene.input.on("pointerdown", onPointerDown);
+  scene.input.on("pointermove", onPointerMove);
+  scene.input.on("pointerup", onPointerUp);
+  scene.input.on("pointerupoutside", onPointerUp);
+  scene.input.manager.events.on("pointerlockchange", onPointerLockChange);
 
-  input.setDefaultCursor("auto");
-
-  return update(input);
+  return update(scene.input);
 }

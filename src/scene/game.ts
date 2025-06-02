@@ -1,5 +1,5 @@
-import { Cannon } from "./actors/Cannon";
-import { Cube } from "./actors/Cube";
+import { Cannon } from "../actors/Cannon";
+import { Cube } from "../actors/Cube";
 import {
   BULLET_SPRITE,
   CANNON_SPRITE,
@@ -11,15 +11,15 @@ import {
   BULLET,
   PERSPECTIVE_INDEX,
   PERSPECTIVES,
-} from "./constants";
-import { createCannonTexture } from "./texture/cannon";
-import { createCircleTexture } from "./texture/circle";
-import { createParticleTexture } from "./texture/particle";
-import { randomNormal } from "./lib/random";
-import { SURFACE_HARDNESS } from "./world/surface";
-import { Sound } from "./lib/sound";
-import { log } from "./lib/log";
-import { setupPointer } from "./lib/pointer";
+} from "../constants";
+import { createCannonTexture } from "../texture/cannon";
+import { createCircleTexture } from "../texture/circle";
+import { createParticleTexture } from "../texture/particle";
+import { randomNormal } from "../lib/random";
+import { SURFACE_HARDNESS } from "../world/surface";
+import { Sound } from "../lib/sound";
+import { log } from "../lib/log";
+import { setupPointer } from "../lib/pointer";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";

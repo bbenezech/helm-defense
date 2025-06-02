@@ -11,7 +11,7 @@ import {
   BULLET,
   GRAVITY_SI,
 } from "../constants";
-import { GameScene } from "../GameScene";
+import { GameScene } from "../scene/game";
 import { velocityVectorFromAzymuthAndAltitude } from "../lib/trigo";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
@@ -78,10 +78,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setAlpha(0.3)
       .setOrigin(originX, originY);
 
-    this.wheels = this.gameScene.add
-      .sprite(0, 0, CANNON_WHEELS_SPRITE)
-      .setScale(3)
-      .setOrigin(0.5, 0.5);
+    this.wheels = this.gameScene.add.sprite(0, 0, CANNON_WHEELS_SPRITE).setScale(3).setOrigin(0.5, 0.5);
 
     this.gameScene.add.existing(this);
 
@@ -90,19 +87,14 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.requestedAzymuth = this.azymuth = Phaser.Math.DegToRad(rotationDeg); // Pointing to the top
     this.shootRequested = false;
 
-    this.muzzleParticleEmitter = this.gameScene.add.particles(
-      0,
-      0,
-      PARTICLE_SPRITE,
-      {
-        speed: { min: BULLET.speed * 0.2, max: BULLET.speed * 1 },
-        lifespan: { min: 400, max: 1000 },
-        blendMode: "ADD",
-        angle: { min: -7, max: 7 },
-        frequency: -1,
-        quantity: 70,
-      },
-    );
+    this.muzzleParticleEmitter = this.gameScene.add.particles(0, 0, PARTICLE_SPRITE, {
+      speed: { min: BULLET.speed * 0.2, max: BULLET.speed * 1 },
+      lifespan: { min: 400, max: 1000 },
+      blendMode: "ADD",
+      angle: { min: -7, max: 7 },
+      frequency: -1,
+      quantity: 70,
+    });
 
     this.muzzleFlashEmitter = this.gameScene.add.particles(0, 0, FLARES, {
       color: [0xfacc22, 0xf89800, 0xf83600, 0x040404],
@@ -127,21 +119,13 @@ export class Cannon extends Phaser.GameObjects.Image {
               ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
               duration: RECOIL_DURATION_MS,
               getStart: () => this.cannonScreen.x,
-              getEnd: () =>
-                this.cannonScreen.x +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  Math.cos(this.rotation + Math.PI),
+              getEnd: () => this.cannonScreen.x + this.cannonLength * RECOIL_FACTOR * Math.cos(this.rotation + Math.PI),
             },
             y: {
               ease: Phaser.Math.Easing.Expo.Out,
               duration: RECOIL_DURATION_MS,
               getStart: () => this.cannonScreen.y,
-              getEnd: () =>
-                this.cannonScreen.y +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  Math.sin(this.rotation + Math.PI),
+              getEnd: () => this.cannonScreen.y + this.cannonLength * RECOIL_FACTOR * Math.sin(this.rotation + Math.PI),
             },
           },
         },
@@ -177,36 +161,20 @@ export class Cannon extends Phaser.GameObjects.Image {
               ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
               duration: RECOIL_DURATION_MS,
               getStart: () => this.screen.x,
-              getEnd: () =>
-                this.screen.x +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  Math.cos(this.azymuth + Math.PI),
+              getEnd: () => this.screen.x + this.cannonLength * RECOIL_FACTOR * Math.cos(this.azymuth + Math.PI),
             },
             y: {
               ease: Phaser.Math.Easing.Expo.Out,
               duration: RECOIL_DURATION_MS,
               getStart: () => this.screen.y,
-              getEnd: () =>
-                this.screen.y +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  Math.sin(this.azymuth + Math.PI),
+              getEnd: () => this.screen.y + this.cannonLength * RECOIL_FACTOR * Math.sin(this.azymuth + Math.PI),
             },
           },
         },
         {
           props: {
-            x: {
-              ease: Phaser.Math.Easing.Linear,
-              duration: RECOIL_RETURN_DURATION_MS,
-              getEnd: () => this.screen.x,
-            },
-            y: {
-              ease: Phaser.Math.Easing.Linear,
-              duration: RECOIL_RETURN_DURATION_MS,
-              getEnd: () => this.screen.y,
-            },
+            x: { ease: Phaser.Math.Easing.Linear, duration: RECOIL_RETURN_DURATION_MS, getEnd: () => this.screen.x },
+            y: { ease: Phaser.Math.Easing.Linear, duration: RECOIL_RETURN_DURATION_MS, getEnd: () => this.screen.y },
           },
         },
       ],
@@ -228,24 +196,14 @@ export class Cannon extends Phaser.GameObjects.Image {
               ease: Phaser.Math.Easing.Expo.Out, // https://phaser.io/examples/v3.85.0/tweens/eases/view/ease-equations
               duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
               getStart: () => this.screen.x,
-              getEnd: () =>
-                this.screen.x +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  0.5 *
-                  Math.cos(this.azymuth + Math.PI),
+              getEnd: () => this.screen.x + this.cannonLength * RECOIL_FACTOR * 0.5 * Math.cos(this.azymuth + Math.PI),
             },
             y: {
               delay: PRE_WHEELS_RECOIL_DURATION_MS,
               ease: Phaser.Math.Easing.Expo.Out,
               duration: RECOIL_DURATION_MS - PRE_WHEELS_RECOIL_DURATION_MS,
               getStart: () => this.screen.y,
-              getEnd: () =>
-                this.screen.y +
-                this.cannonLength *
-                  RECOIL_FACTOR *
-                  0.5 *
-                  Math.sin(this.azymuth + Math.PI),
+              getEnd: () => this.screen.y + this.cannonLength * RECOIL_FACTOR * 0.5 * Math.sin(this.azymuth + Math.PI),
             },
           },
         },
@@ -276,39 +234,24 @@ export class Cannon extends Phaser.GameObjects.Image {
 
     this.cannonWorld.copy(this.world);
     this.cannonWorld.z = this.world.z + CANNON_GROUND_CLEARANCE;
-    this.cannonScreen = this.gameScene.getScreenPosition(
-      this.cannonWorld,
-      this.cannonScreen,
-    );
+    this.cannonScreen = this.gameScene.getScreenPosition(this.cannonWorld, this.cannonScreen);
 
     this.dirty = true;
   }
 
   setRequestedAzymuth(targetScreen: Phaser.Types.Math.Vector2Like) {
-    const targetWorld = this.gameScene.getSurfaceWorldPosition(
-      targetScreen,
-      this._targetWorld,
-    );
+    const targetWorld = this.gameScene.getSurfaceWorldPosition(targetScreen, this._targetWorld);
 
-    this.requestedAzymuth = Phaser.Math.Angle.BetweenPoints(
-      this.cannonWorld,
-      targetWorld,
-    );
+    this.requestedAzymuth = Phaser.Math.Angle.BetweenPoints(this.cannonWorld, targetWorld);
   }
 
   getMuzzleWorld(velocity: Phaser.Math.Vector3) {
-    const worldOffset = this._muzzleWorldOffset
-      .copy(velocity)
-      .scale(this.barrelLength);
+    const worldOffset = this._muzzleWorldOffset.copy(velocity).scale(this.barrelLength);
     return this._muzzleWorld.addVectors(this.cannonWorld, worldOffset);
   }
 
   getVelocity() {
-    return velocityVectorFromAzymuthAndAltitude(
-      this.azymuth,
-      this.altitude,
-      this._velocity,
-    );
+    return velocityVectorFromAzymuthAndAltitude(this.azymuth, this.altitude, this._velocity);
   }
 
   shoot() {
@@ -323,24 +266,14 @@ export class Cannon extends Phaser.GameObjects.Image {
       this.wheelsRecoilTween.restart();
     }
 
-    const muzzleScreen = this.gameScene.getScreenPosition(
-      muzzleWorld,
-      this._muzzleScreen,
-    );
+    const muzzleScreen = this.gameScene.getScreenPosition(muzzleWorld, this._muzzleScreen);
 
-    const gravity =
-      GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
+    const gravity = GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
 
-    const rotationToGround = Phaser.Math.Angle.GetShortestDistance(
-      this.rotation,
-      Math.PI / 2,
-    );
+    const rotationToGround = Phaser.Math.Angle.GetShortestDistance(this.rotation, Math.PI / 2);
 
     this.muzzleParticleEmitter
-      .setParticleGravity(
-        gravity * Math.cos(rotationToGround),
-        gravity * Math.sin(rotationToGround),
-      )
+      .setParticleGravity(gravity * Math.cos(rotationToGround), gravity * Math.sin(rotationToGround))
       .setPosition(muzzleScreen.x, muzzleScreen.y)
       .setRotation(this.rotation)
       .setDepth(muzzleScreen.y)
@@ -356,8 +289,7 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   move(delta: number) {
-    const rotationNeeded =
-      Math.abs(this.azymuth - this.requestedAzymuth) >= 0.01;
+    const rotationNeeded = Math.abs(this.azymuth - this.requestedAzymuth) >= 0.01;
 
     this.shootCooldown -= delta;
     if (this.shootCooldown <= 0 && !rotationNeeded && this.shootRequested) {
@@ -378,23 +310,14 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   updateVisuals() {
-    this.setPosition(this.cannonScreen.x, this.cannonScreen.y).setDepth(
-      this.cannonScreen.y,
-    );
-    this.shadow
-      .setPosition(this.screen.x, this.screen.y)
-      .setDepth(this.cannonScreen.y - 1);
-    this.wheels
-      .setPosition(this.screen.x, this.screen.y)
-      .setDepth(this.cannonScreen.y - 2);
+    this.setPosition(this.cannonScreen.x, this.cannonScreen.y).setDepth(this.cannonScreen.y);
+    this.shadow.setPosition(this.screen.x, this.screen.y).setDepth(this.cannonScreen.y - 1);
+    this.wheels.setPosition(this.screen.x, this.screen.y).setDepth(this.cannonScreen.y - 2);
 
     const velocity = this.getVelocity();
 
     // rotate the cannon shadow to the azymuth and the cannon to the azymuth + altitude
-    const screenVelocity = this.gameScene.getScreenPosition(
-      velocity,
-      this._screenVelocity,
-    );
+    const screenVelocity = this.gameScene.getScreenPosition(velocity, this._screenVelocity);
 
     const screenAzymuth = this.gameScene.getScreenPosition(
       this._azymuth.set(Math.cos(this.azymuth), Math.sin(this.azymuth), 0),
@@ -411,13 +334,8 @@ export class Cannon extends Phaser.GameObjects.Image {
     );
 
     // scale the length of the cannon to the distance between the cannon and the muzzle
-    const muzzleScreen = this.gameScene.getScreenPosition(
-      this.getMuzzleWorld(velocity),
-      this._muzzleScreen,
-    );
-    const scaleX =
-      Phaser.Math.Distance.BetweenPoints(this.cannonScreen, muzzleScreen) /
-      this.barrelLength;
+    const muzzleScreen = this.gameScene.getScreenPosition(this.getMuzzleWorld(velocity), this._muzzleScreen);
+    const scaleX = Phaser.Math.Distance.BetweenPoints(this.cannonScreen, muzzleScreen) / this.barrelLength;
 
     this.scaleX = scaleX;
     this.shadow.scaleX = scaleX;
@@ -430,9 +348,7 @@ export class Cannon extends Phaser.GameObjects.Image {
 
   preUpdate(time: number, delta: number) {
     const visible = this.gameScene.inViewport(this);
-    const timerInterval = visible
-      ? VISIBLE_UPDATE_INTERVAL
-      : INVISIBLE_UPDATE_INTERVAL;
+    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL : INVISIBLE_UPDATE_INTERVAL;
 
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {

@@ -1,14 +1,12 @@
 import { PLAY_SOUNDS } from "../constants";
-import { GameScene } from "../GameScene";
+import { GameScene } from "../scene/game";
 import { randomNormal } from "./random";
 import { cameraHeight } from "./trigo";
 
 export class Sound {
   private gameScene: GameScene;
   private keys: string[] = [];
-  private pool: {
-    [key: string]: Phaser.Sound.WebAudioSound[];
-  } = {};
+  private pool: { [key: string]: Phaser.Sound.WebAudioSound[] } = {};
   private lastKeyIndex: number | null = null;
   private invMaxDistance: number;
   private invMaxWidth: number;
@@ -20,7 +18,7 @@ export class Sound {
     const maxDistance = Math.sqrt(
       this.gameScene.map.widthInPixels * this.gameScene.map.widthInPixels +
         this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels +
-        elevationInPixels * elevationInPixels
+        elevationInPixels * elevationInPixels,
     );
 
     this.invMaxDistance = 1 / maxDistance;

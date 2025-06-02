@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GameScene } from "../GameScene"; // Assuming GameScene has the methods
+import { GameScene } from "../scene/game"; // Assuming GameScene has the methods
 import { BULLET } from "../constants";
 
 export interface Solid {
@@ -34,7 +34,7 @@ export function bounce(
   velocity: Phaser.Math.Vector3,
   normal: Phaser.Math.Vector3, // unit-length
   hardnessFactor: number,
-  initialSpeed: number
+  initialSpeed: number,
 ) {
   // 1. Calculate the dot product of velocity and normal.
   // This represents the component of velocity projecting onto the normal.
@@ -93,11 +93,7 @@ export interface Collision {
  * @param radius Sphere radius (center to lowest point).
  * @returns Splash energy in TNT kg eq. (number), or false if no collision.
  */
-export function sphereToGroundCollision(
-  s: Solid,
-  speedSq: number,
-  speed?: number
-): Collision | false {
+export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: number): Collision | false {
   const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
 
   // Penetration & Impact Angle Check ---
@@ -125,7 +121,7 @@ export function sphereToGroundCollision(
   const impactBouncePotential = Phaser.Math.Clamp(
     parallelFactor * fastFactor, // Higher for fast, grazing impacts
     0.0,
-    1.0
+    1.0,
   );
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
@@ -137,8 +133,7 @@ export function sphereToGroundCollision(
   if (bounce_percentage < MIN_BOUNCE_THRESHOLD) bounce_percentage = 0.0;
 
   const explosion_percentage = 1.0 - bounce_percentage;
-  const energy =
-    explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
+  const energy = explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
 
   // Push object out along the normal by the penetration depth
   s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
