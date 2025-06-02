@@ -19,7 +19,8 @@ import { randomNormal } from "../lib/random";
 import { SURFACE_HARDNESS } from "../world/surface";
 import { Sound } from "../lib/sound";
 import { log } from "../lib/log";
-import { setupPointer } from "../lib/pointer";
+import { createPointer } from "../lib/pointer";
+import { UIScene } from "./ui";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
@@ -52,6 +53,7 @@ export class GameScene extends Phaser.Scene {
   axonometric: boolean;
   perspective: (typeof PERSPECTIVES)[number];
   updatePointer!: (this: GameScene, time: number, delta: number) => void;
+  destroyPointer!: (this: GameScene) => void;
   selectionGraphics!: Phaser.GameObjects.Graphics;
   // Used to track if the perspective has changed and objects need to update their visuals
   dirty = true;
@@ -210,6 +212,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(100000000000);
 
@@ -253,7 +257,10 @@ export class GameScene extends Phaser.Scene {
       "cannon_blast_5",
     ]);
 
-    this.updatePointer = setupPointer(this);
+    const { updatePointer, destroyPointer } = createPointer(this);
+    this.destroyPointer = destroyPointer;
+    this.updatePointer = updatePointer;
+
     this.input.manager.events.on("click", (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return; // left click
       this._pointerScreen.set(pointer.worldX, pointer.worldY);
@@ -379,5 +386,9 @@ export class GameScene extends Phaser.Scene {
     this.dirty = false;
     this.controls.update(delta);
     this.updatePointer(time, delta);
+  }
+
+  shutdown() {
+    this.destroyPointer();
   }
 }

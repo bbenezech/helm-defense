@@ -1,10 +1,9 @@
 import { GameScene } from "../scene/game";
-import { Cursor, UIScene } from "../scene/ui";
+import { UIScene } from "../scene/ui";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;
 const USE_POINTER_LOCK = true;
-const USE_UI_POINTER = true; // Use UI pointer even when pointer lock is false
 const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for dragging
 
 const _world = new Phaser.Math.Vector2();
@@ -182,6 +181,8 @@ function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
 
   return function (this: GameScene, time: number, delta: number) {
+    uiScene.moveCursor(x, y);
+
     let scrollXDiff = 0;
     let scrollYDiff = 0;
 
@@ -254,19 +255,25 @@ function update(input: Phaser.Input.InputPlugin) {
         .fillRectShape(selectionRect)
         .strokeRectShape(selectionRect);
     } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);
-
-    uiScene.moveCursor(x, y);
   };
 }
 
-export function setupPointer(scene: GameScene) {
+export function createPointer(scene: GameScene) {
   uiScene = scene.game.scene.getScene("UIScene") as UIScene;
-  scene = scene;
   scene.input.on("pointerdown", onPointerDown);
   scene.input.on("pointermove", onPointerMove);
   scene.input.on("pointerup", onPointerUp);
   scene.input.on("pointerupoutside", onPointerUp);
   scene.input.manager.events.on("pointerlockchange", onPointerLockChange);
 
-  return update(scene.input);
+  const updatePointer = update(scene.input);
+  function destroyPointer(this: GameScene) {
+    this.input.off("pointerdown", onPointerDown);
+    this.input.off("pointermove", onPointerMove);
+    this.input.off("pointerup", onPointerUp);
+    this.input.off("pointerupoutside", onPointerUp);
+    this.input.manager.events.off("pointerlockchange", onPointerLockChange);
+  }
+
+  return { updatePointer, destroyPointer };
 }
