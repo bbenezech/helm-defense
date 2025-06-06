@@ -9,9 +9,8 @@ import {
   GRAVITY_SI,
 } from "../constants";
 import { GameScene } from "../scene/game";
-import { Collision, Solid, sphereToGroundCollision } from "../collision/sphereToGround"; // Import the collision function
+import { sphereToGroundCollision, type Collision, type Solid } from "../collision/sphereToGround"; // Import the collision function
 
-// canon de 12 livres
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
 
@@ -141,7 +140,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     }
   }
 
-  preUpdate(time: number, delta: number) {
+  preUpdate(_time: number, delta: number) {
     delta = delta * this.gameScene.timeScale;
     this.explosionEmitter.timeScale = this.gameScene.timeScale;
 
@@ -160,7 +159,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     }
   }
 
-  destroy(): void {
+  override destroy(): void {
     this.shadow.destroy();
     super.destroy();
   }

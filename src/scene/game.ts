@@ -20,7 +20,6 @@ import { SURFACE_HARDNESS } from "../world/surface";
 import { Sound } from "../lib/sound";
 import { log } from "../lib/log";
 import { createPointer } from "../lib/pointer";
-import { UIScene } from "./ui";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
@@ -122,11 +121,11 @@ export class GameScene extends Phaser.Scene {
 
   // 0 => mud
   // 1 => iron
-  getSurfaceHardnessFromWorldPosition(world: Phaser.Math.Vector3): number {
+  getSurfaceHardnessFromWorldPosition(_world: Phaser.Math.Vector3): number {
     return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
-  getSurfaceNormalFromWorldPosition(world: Phaser.Math.Vector3): Phaser.Math.Vector3 {
+  getSurfaceNormalFromWorldPosition(_world: Phaser.Math.Vector3): Phaser.Math.Vector3 {
     return GROUND_NORMAL;
   }
 
@@ -401,7 +400,7 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  update(time: number, delta: number) {
+  override update(time: number, delta: number) {
     this.dirty = false;
     this.controls.update(delta);
     this.updatePointer(time, delta);

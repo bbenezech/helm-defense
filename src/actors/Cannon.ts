@@ -285,7 +285,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setDepth(muzzleScreen.y)
       .explode();
 
-    this.gameScene.cameras.main.shake(50, 0.002);
+    this.gameScene.nudge();
   }
 
   move(delta: number) {
@@ -346,7 +346,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.setRequestedAzymuth(targetScreen);
   }
 
-  preUpdate(time: number, delta: number) {
+  preUpdate(_time: number, delta: number) {
     delta = delta * this.gameScene.timeScale;
     this.muzzleParticleEmitter.timeScale = this.gameScene.timeScale;
     this.muzzleFlashEmitter.timeScale = this.gameScene.timeScale;
@@ -369,7 +369,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     }
   }
 
-  destroy(): void {
+  override destroy(): void {
     this.muzzleParticleEmitter.destroy();
     this.muzzleFlashEmitter.destroy();
     this.shadow.destroy();

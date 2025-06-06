@@ -1,7 +1,7 @@
 {
   "name": "cannon-defense-phaser",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "start": "vite",
@@ -9,7 +9,7 @@
     "build:gh": "vite build --mode gh-pages",
     "preview": "vite preview --port 8080",
     "serve": "vite serve",
-    "electron": "npm run build && NODE_ENV=development NODE_OPTIONS=\"--import tsx\" electron ./electron.ts"
+    "electron:dev": "npm run build && NODE_OPTIONS=\"--import tsx\" electron ./electron.ts"
   },
   "dependencies": {
     "@swc-node/register": "^1.10.10",

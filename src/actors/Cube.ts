@@ -1,5 +1,5 @@
 import { GameScene } from "../scene/game";
-import { INVISIBLE_UPDATE_INTERVAL_MS, VISIBLE_UPDATE_INTERVAL_MS, WORLD_UNIT_PER_METER } from "../constants";
+import { WORLD_UNIT_PER_METER } from "../constants";
 
 // Colors for the two squares
 const TOP_COLOR = {
@@ -187,7 +187,7 @@ export class Cube extends Phaser.GameObjects.Container {
     this.topPolygon.setTo(topPointsRelative);
   }
 
-  preUpdate(time: number, delta: number) {
+  preUpdate(_time: number, _delta: number) {
     if (this.dirty || this.gameScene.dirty) {
       this.dirty = false;
       this.updateVisuals();
