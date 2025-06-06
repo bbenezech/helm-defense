@@ -1,9 +1,9 @@
 import * as Phaser from "phaser";
 import {
   BULLET_SPRITE,
-  INVISIBLE_UPDATE_INTERVAL,
+  INVISIBLE_UPDATE_INTERVAL_MS,
   WORLD_UNIT_PER_METER,
-  VISIBLE_UPDATE_INTERVAL,
+  VISIBLE_UPDATE_INTERVAL_MS,
   PARTICLE_SPRITE,
   BULLET,
   GRAVITY_SI,
@@ -136,13 +136,17 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
         .setPosition(this.screen.x, this.screen.y)
         .setRotation(rotation)
         .explode(Phaser.Math.Clamp(this.explosion.energy * 20, 1, 20));
+
       this.explosion = false;
     }
   }
 
   preUpdate(time: number, delta: number) {
+    delta = delta * this.gameScene.timeScale;
+    this.explosionEmitter.timeScale = this.gameScene.timeScale;
+
     const visible = this.gameScene.inViewport(this);
-    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL : INVISIBLE_UPDATE_INTERVAL;
+    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL_MS : INVISIBLE_UPDATE_INTERVAL_MS;
 
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {

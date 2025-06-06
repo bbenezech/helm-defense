@@ -1,5 +1,5 @@
 import { GameScene } from "../scene/game";
-import { INVISIBLE_UPDATE_INTERVAL, VISIBLE_UPDATE_INTERVAL, WORLD_UNIT_PER_METER } from "../constants";
+import { INVISIBLE_UPDATE_INTERVAL_MS, VISIBLE_UPDATE_INTERVAL_MS, WORLD_UNIT_PER_METER } from "../constants";
 
 // Colors for the two squares
 const TOP_COLOR = {

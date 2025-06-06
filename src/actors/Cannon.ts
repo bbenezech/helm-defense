@@ -6,8 +6,8 @@ import {
   CANNON_WHEELS_SPRITE,
   FLARES,
   CANNON_WHEELS_SPRITE_ROTATION,
-  INVISIBLE_UPDATE_INTERVAL,
-  VISIBLE_UPDATE_INTERVAL,
+  INVISIBLE_UPDATE_INTERVAL_MS,
+  VISIBLE_UPDATE_INTERVAL_MS,
   BULLET,
   GRAVITY_SI,
 } from "../constants";
@@ -347,8 +347,15 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   preUpdate(time: number, delta: number) {
+    delta = delta * this.gameScene.timeScale;
+    this.muzzleParticleEmitter.timeScale = this.gameScene.timeScale;
+    this.muzzleFlashEmitter.timeScale = this.gameScene.timeScale;
+    this.recoilTween.timeScale = this.gameScene.timeScale;
+    this.shadowRecoilTween.timeScale = this.gameScene.timeScale;
+    this.wheelsRecoilTween.timeScale = this.gameScene.timeScale;
+
     const visible = this.gameScene.inViewport(this);
-    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL : INVISIBLE_UPDATE_INTERVAL;
+    const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL_MS : INVISIBLE_UPDATE_INTERVAL_MS;
 
     this.moveTimer += delta;
     if (this.moveTimer >= timerInterval) {

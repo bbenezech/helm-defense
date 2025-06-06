@@ -11,11 +11,7 @@ export const FLARES = "flares";
 export const PLAY_SOUNDS: boolean = true;
 export const GRAVITY_SI = 9.81;
 
-const TWELVE_POUND_BULLET_SI = {
-  speed: 440,
-  mass: 6,
-  radius: 0.06,
-};
+const TWELVE_POUND_BULLET_SI = { speed: 440, mass: 6, radius: 0.06 };
 
 const SLOW_BALLISTIC_FACTOR = 8; // slower ballistics so that it looks fun
 
@@ -23,14 +19,7 @@ const SLOW_BALLISTIC_FACTOR = 8; // slower ballistics so that it looks fun
 // - speed is scaled down by factor
 // - mass is scaled up by factor^2 to compensate for the slower speed on impact
 // - radius is scaled up by factor^2/3 to keep the impact visually realistic with the fake mass
-function getBullet(
-  bulletSI: {
-    speed: number;
-    mass: number;
-    radius: number;
-  },
-  factor: number
-) {
+function getBullet(bulletSI: { speed: number; mass: number; radius: number }, factor: number) {
   const speedSI = bulletSI.speed / factor;
   const speed = speedSI * WORLD_UNIT_PER_METER;
   const mass = bulletSI.mass * factor * factor;
@@ -39,21 +28,13 @@ function getBullet(
   const sqRadius = radius * radius;
   const invMass = 1 / mass;
 
-  return {
-    speedSI,
-    speed,
-    mass,
-    radiusSI,
-    radius,
-    sqRadius,
-    invMass,
-  };
+  return { speedSI, speed, mass, radiusSI, radius, sqRadius, invMass };
 }
 
 export const BULLET = getBullet(TWELVE_POUND_BULLET_SI, SLOW_BALLISTIC_FACTOR);
 
-export const VISIBLE_UPDATE_INTERVAL = 0; // Target max FPS when visible
-export const INVISIBLE_UPDATE_INTERVAL = 100; // Target 10 FPS when invisible
+export const VISIBLE_UPDATE_INTERVAL_MS = 1; // Target 120 FPS when visible
+export const INVISIBLE_UPDATE_INTERVAL_MS = 100; // Target 10 FPS when invisible
 
 // Angle (θ): The camera's pitch angle measured downwards from the horizontal plane (0° = horizontal, 90° = straight down).
 
@@ -91,6 +72,4 @@ export const PERSPECTIVE_INDEX = {
   platformer: 10,
 };
 
-export const PERSPECTIVES = Object.keys(
-  PERSPECTIVE_INDEX
-) as (keyof typeof PERSPECTIVE_INDEX)[];
+export const PERSPECTIVES = Object.keys(PERSPECTIVE_INDEX) as (keyof typeof PERSPECTIVE_INDEX)[];

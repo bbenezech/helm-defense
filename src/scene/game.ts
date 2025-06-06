@@ -57,6 +57,8 @@ export class GameScene extends Phaser.Scene {
   selectionGraphics!: Phaser.GameObjects.Graphics;
   // Used to track if the perspective has changed and objects need to update their visuals
   dirty = true;
+  timeScales: number[] = [0, 0.25, 0.5, 1, 2, 4]; // Game speed multipliers
+  timeScale = 1; // Game speed multiplier
 
   constructor() {
     super({ key: "GameScene" });
@@ -274,27 +276,39 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
       switch (e.keyCode) {
-        case Phaser.Input.Keyboard.KeyCodes.OPEN_BRACKET:
-          this.perspective = PERSPECTIVES[(PERSPECTIVES.indexOf(this.perspective) + 1) % PERSPECTIVES.length];
-
+        case Phaser.Input.Keyboard.KeyCodes.W:
+          this.perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) + 1];
+          if (this.perspective === undefined) this.nudge();
+          this.perspective ||= PERSPECTIVES[PERSPECTIVES.length - 1];
           this.setupPerspective();
           log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
           break;
-        case Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET:
-          this.perspective =
-            PERSPECTIVES[(PERSPECTIVES.indexOf(this.perspective) - 1 + PERSPECTIVES.length) % PERSPECTIVES.length];
+        case Phaser.Input.Keyboard.KeyCodes.S:
+          this.perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) - 1];
+
+          if (this.perspective === undefined) this.nudge();
+          this.perspective ||= PERSPECTIVES[0];
           this.setupPerspective();
           log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
-
           break;
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
-          this.game.isPaused ? this.game.resume() : this.game.pause();
+          this.timeScale = this.timeScale === 0 ? 1 : 0; // Toggle pause
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.A:
+          this.timeScale = this.timeScales[this.timeScales.indexOf(this.timeScale) - 1];
+          if (this.timeScale === undefined) this.nudge();
+          this.timeScale ||= this.timeScales[0];
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.D:
+          this.timeScale = this.timeScales[this.timeScales.indexOf(this.timeScale) + 1];
+          if (this.timeScale === undefined) this.nudge();
+          this.timeScale ||= this.timeScales[this.timeScales.length - 1];
           break;
         case Phaser.Input.Keyboard.KeyCodes.MINUS:
-          this.changeZoomDiscrete(-1);
+          if (!this.changeZoomDiscrete(-1)) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.PLUS:
-          this.changeZoomDiscrete(1);
+          if (!this.changeZoomDiscrete(1)) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.F:
           this.scale.toggleFullscreen();
@@ -320,6 +334,10 @@ export class GameScene extends Phaser.Scene {
     this.handleResize(this.game.scale.gameSize);
   }
 
+  nudge() {
+    this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
+  }
+
   changeZoomDiscrete(direction: 1 | -1) {
     const previousZoom = this.zoom;
     let requestedZoomIndex = -1;
@@ -334,12 +352,12 @@ export class GameScene extends Phaser.Scene {
 
     const newZoom = this.zooms[requestedZoomIndex];
 
-    if (previousZoom !== newZoom) {
-      this.zoom = newZoom;
-      this.cameras.main.zoomTo(this.zoom, 100, Phaser.Math.Easing.Quadratic.InOut);
-    } else {
-      this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
-    }
+    if (newZoom === previousZoom) return false;
+
+    this.zoom = newZoom;
+    this.cameras.main.zoomTo(this.zoom, 100, Phaser.Math.Easing.Quadratic.InOut);
+
+    return true;
   }
 
   changeZoomContinuous(delta: number) {
