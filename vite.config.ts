@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import bodyParser from "body-parser";
-import { sourceMapsEnabled } from "process";
+import react from "@vitejs/plugin-react";
 
 const prod = process.env.NODE_ENV === "production";
 const dev = !prod;
@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host,
     port,
-    open: true,
+    open: mode === "web",
     strictPort: true,
     sourcemapIgnoreList: () => true,
     watch: {
@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => ({
   esbuild: { sourcemap: false },
   plugins: dev
     ? [
+        react(),
         {
           name: "log-viewer-middleware",
           configureServer(server) {
@@ -50,5 +51,5 @@ export default defineConfig(({ mode }) => ({
           },
         },
       ]
-    : [],
+    : [react()],
 }));

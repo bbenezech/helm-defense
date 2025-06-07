@@ -1,46 +1,69 @@
-import { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from "electron";
 import path from "path";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater; // https://github.com/electron-userland/electron-builder/issues/7976
 import log from "electron-log";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 log.transports.file.level = "info"; // Set log level to info
 autoUpdater.logger = log;
 
-log.info("App starting...", process.env.NODE_ENV);
-const DEVTOOLS = process.env.NODE_ENV === "development";
-const __dirname = path.resolve();
+log.info(`App starting from ${__dirname}...`, process.env["NODE_ENV"]);
+const DEVTOOLS = process.env["NODE_ENV"] === "development";
 
-let mainWindow: BrowserWindow | null = null;
-let isInImmersiveFullScreen = true; // Start in this mode
-
-// Store initial non-fullscreen bounds for restoration
-let nonFullScreenBounds: { width: number; height: number; x?: number; y?: number } = {
-  width: 1280,
-  height: 720,
-  x: undefined,
-  y: undefined,
-};
+/** @type {null | BrowserWindow} */
+let mainWindow = null;
+let isInImmersiveFullScreen = true;
+let mac = process.platform === "darwin";
+/** @type {null | {width:number; height: number,x: number; y:number}} */
+let nonFullScreenBounds = null;
 
 function enterImmersiveFullScreen() {
   if (!mainWindow) return;
   const currentBounds = mainWindow.getBounds();
   if (currentBounds.width > 100 && currentBounds.height > 100) nonFullScreenBounds = currentBounds;
-  mainWindow.setFullScreen(true);
+  log.info("enterImmersiveFullScreen nonFullScreenBounds", nonFullScreenBounds);
+
+  if (mac) {
+    mainWindow.setFullScreen(true);
+    mainWindow.setSimpleFullScreen(true);
+    mainWindow.setKiosk(true);
+
+    mainWindow.setEnabled(false);
+    mainWindow.setEnabled(true);
+    mainWindow.focusOnWebView();
+  } else {
+    mainWindow.setFullScreen(true);
+  }
+
   isInImmersiveFullScreen = true;
 }
 
 function exitImmersiveFullScreen() {
   if (!mainWindow) return;
-  mainWindow.setFullScreen(false);
-  mainWindow.setBounds({
-    width: nonFullScreenBounds.width,
-    height: nonFullScreenBounds.height,
-    x: nonFullScreenBounds.x, // May be undefined initially, center will handle
-    y: nonFullScreenBounds.y,
-  });
+  if (mainWindow.kiosk) mainWindow.setKiosk(false);
+  if (mainWindow.simpleFullScreen) mainWindow.setSimpleFullScreen(false);
+  if (mainWindow.fullScreen) mainWindow.setFullScreen(false);
 
-  if (typeof nonFullScreenBounds.x === "undefined" || typeof nonFullScreenBounds.y === "undefined") mainWindow.center();
+  if (mac) {
+    mainWindow.setEnabled(false);
+    mainWindow.setEnabled(true);
+    mainWindow.focusOnWebView();
+  }
+
+  log.info("exitImmersiveFullScreen nonFullScreenBounds", nonFullScreenBounds);
+
+  if (nonFullScreenBounds)
+    mainWindow.setBounds({
+      width: nonFullScreenBounds.width,
+      height: nonFullScreenBounds.height,
+      x: nonFullScreenBounds.x,
+      y: nonFullScreenBounds.y,
+    });
+
   isInImmersiveFullScreen = false;
 }
 
@@ -54,63 +77,81 @@ function toggleImmersiveFullScreen() {
 }
 
 function createWindow() {
+  const webPreferences = {
+    preload: path.join(__dirname, "../electron/preload.js"),
+    nodeIntegration: false,
+    contextIsolation: true,
+    devTools: DEVTOOLS,
+    disableHtmlFullscreenWindowResize: true,
+  };
+
   mainWindow = new BrowserWindow({
     frame: false,
-    width: nonFullScreenBounds.width,
-    height: nonFullScreenBounds.height,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      devTools: DEVTOOLS,
-      disableHtmlFullscreenWindowResize: true,
-    },
+    kiosk: false,
+    fullscreen: false,
+    simpleFullscreen: false,
+    fullscreenable: false,
+    webPreferences,
   });
 
-  mainWindow.loadFile(path.join(__dirname, "dist/index.html"));
+  if (isInImmersiveFullScreen) {
+    log.info("Creating window in immersive full screen mode");
+    enterImmersiveFullScreen();
+  }
 
-  // Enter immersive fullscreen shortly after window is ready
-  // to ensure all screen information is available.
-  mainWindow.once("ready-to-show", () => {
-    if (isInImmersiveFullScreen) enterImmersiveFullScreen();
-  });
+  if (app.isPackaged) {
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+  } else {
+    mainWindow.loadURL("http://localhost:9000");
+  }
 
   if (DEVTOOLS) mainWindow.webContents.openDevTools();
 
   mainWindow.on("closed", () => {
+    log.info("mainWindow closed");
     mainWindow = null;
   });
-
-  Menu.setApplicationMenu(null);
 }
 
-app.on("ready", () => {
+app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify();
 
   ipcMain.on("quit-app", () => {
+    log.info("ipcMain quit-app");
     app.quit();
   });
 
   ipcMain.on("toggle-fullscreen", () => {
+    log.info("ipcMain toggle-fullscreen");
     toggleImmersiveFullScreen();
   });
 
   ipcMain.handle("is-fullscreen-status", () => {
+    log.info("ipcMain is-fullscreen-status");
     return isInImmersiveFullScreen;
   });
+});
+
+app.on("will-quit", () => {
+  log.info("will-quit");
+  globalShortcut.unregisterAll();
+});
+
+app.on("before-quit", () => {
+  log.info("before-quit");
+});
+
+app.on("quit", () => {
+  log.info("quit");
 });
 
 app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on("activate", () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
-});
-
 app.on("browser-window-focus", () => {
+  log.info("browser-window-focus");
   globalShortcut.register("Escape", () => {
     if (isInImmersiveFullScreen) exitImmersiveFullScreen();
   });
@@ -125,10 +166,7 @@ app.on("browser-window-focus", () => {
 });
 
 app.on("browser-window-blur", () => {
-  globalShortcut.unregisterAll();
-});
-
-app.on("will-quit", () => {
+  log.info("browser-window-blur");
   globalShortcut.unregisterAll();
 });
 

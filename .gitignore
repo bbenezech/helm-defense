@@ -133,4 +133,5 @@ dist
 *.tiled-session
 dist
 build
+release
 .DS_Store

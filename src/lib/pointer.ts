@@ -3,7 +3,7 @@ import { UIScene } from "../scene/ui";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;
-const USE_POINTER_LOCK = true;
+const USE_POINTER_LOCK = false;
 const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for dragging
 
 const _world = new Phaser.Math.Vector2();
@@ -180,7 +180,7 @@ function onPointerLockChange() {
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
 
-  return function (this: GameScene, time: number, delta: number) {
+  return function (this: GameScene, _time: number, delta: number) {
     uiScene.moveCursor(x, y);
 
     let scrollXDiff = 0;
@@ -262,6 +262,7 @@ export function createPointer(scene: GameScene) {
   uiScene = scene.game.scene.getScene("UIScene") as UIScene;
   scene.input.on("pointerdown", onPointerDown);
   scene.input.on("pointermove", onPointerMove);
+
   scene.input.on("pointerup", onPointerUp);
   scene.input.on("pointerupoutside", onPointerUp);
   scene.input.manager.events.on("pointerlockchange", onPointerLockChange);

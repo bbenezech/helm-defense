@@ -11,7 +11,7 @@ const game = new Phaser.Game({
   type: Phaser.WEBGL,
   scene: [GameScene, UIScene],
   scale: { mode: Phaser.Scale.RESIZE, autoRound: true },
-  disableContextMenu: import.meta.env.PROD,
+  disableContextMenu: true,
   parent: "game-container",
   title,
   url,

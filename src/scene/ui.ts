@@ -1,4 +1,4 @@
-const USE_UI_CURSOR = true; // Use UI pointer even when pointer lock is false
+const USE_UI_CURSOR = false; // Use UI pointer even when pointer lock is false
 
 const cursorIndex = {
   default: { filename: "cursor_none", origin: { x: 0.3, y: 0.15 } },
@@ -111,7 +111,7 @@ export class UIScene extends Phaser.Scene {
     this.scale.on("resize", this.handleResize, this);
   }
 
-  update(time: number, delta: number) {
+  override update(_time: number, delta: number) {
     // this.debugGraphics.clear();
     // this.debugGraphics.fillStyle(0x00ff00, 1);
     // this.debugGraphics.fillRect(this.x - 2, this.y - 2, 4, 4);
