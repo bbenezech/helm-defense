@@ -1,5 +1,5 @@
-import { GameScene } from "../scene/game";
 import { WORLD_UNIT_PER_METER } from "../constants";
+import type { GameScene } from "../scene/game";
 
 // Colors for the two squares
 const TOP_COLOR = {
@@ -194,7 +194,7 @@ export class Cube extends Phaser.GameObjects.Container {
     }
   }
 
-  destroy(): void {
+  override destroy(): void {
     this.bottomPolygon.destroy();
     this.topPolygon.destroy();
     super.destroy();

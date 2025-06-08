@@ -75,7 +75,7 @@ export function createPixelCannonTexture(
 function calculateCannonPoints(
   width: number,
   height: number,
-  offsetY: number, // Vertical offset for shadow
+  _offsetY: number, // Vertical offset for shadow
 ): Phaser.Math.Vector2[] {
   const radius = height / 2;
   const circleCenterX = radius;

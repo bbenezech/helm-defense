@@ -20,6 +20,7 @@ import { SURFACE_HARDNESS } from "../world/surface";
 import { Sound } from "../lib/sound";
 import { log } from "../lib/log";
 import { createPointer } from "../lib/pointer";
+import fpsBus from "../../store/fps";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
@@ -310,8 +311,7 @@ export class GameScene extends Phaser.Scene {
           if (!this.changeZoomDiscrete(1)) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.F:
-          this.scale.toggleFullscreen();
-          break;
+          document.body.requestFullscreen({ navigationUI: "hide" });
       }
     });
 
@@ -404,6 +404,7 @@ export class GameScene extends Phaser.Scene {
     this.dirty = false;
     this.controls.update(delta);
     this.updatePointer(time, delta);
+    fpsBus.emitDebounced(Number(this.sys.game.loop.actualFps.toFixed(0)));
   }
 
   shutdown() {

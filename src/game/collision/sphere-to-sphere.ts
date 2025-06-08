@@ -1,4 +1,4 @@
-import { Solid } from "./sphereToGround";
+import type { Solid } from "./sphere-to-ground";
 
 export function sphereToSphereCollision(
   a: Solid,

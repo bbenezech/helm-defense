@@ -9,7 +9,7 @@ import {
   GRAVITY_SI,
 } from "../constants";
 import { GameScene } from "../scene/game";
-import { sphereToGroundCollision, type Collision, type Solid } from "../collision/sphereToGround"; // Import the collision function
+import { sphereToGroundCollision, type Collision, type Solid } from "../collision/sphere-to-ground"; // Import the collision function
 
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³

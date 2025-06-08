@@ -1,6 +1,6 @@
+import type { Solid } from "../collision/sphere-to-ground";
 import { ENEMY_SPRITE } from "../constants";
-import { GameScene } from "../scene/game";
-import { Solid } from "../collision/sphereToGround";
+import type { GameScene } from "../scene/game";
 
 const ENNEMY_MASS_KG = 100;
 
@@ -27,7 +27,7 @@ export class Enemy extends Phaser.GameObjects.Image implements Solid {
       .setScale(this.gameScene.worldToScreen.x, this.gameScene.worldToScreen.y);
   }
 
-  destroy(): void {
+  override destroy(): void {
     super.destroy();
     this.shadow.destroy();
   }

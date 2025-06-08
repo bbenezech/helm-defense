@@ -11,8 +11,6 @@ export type Cursor = keyof typeof cursorIndex;
 const svgRasterSize = { width: 20, height: 20 };
 
 export class UIScene extends Phaser.Scene {
-  scoreText!: Phaser.GameObjects.Text;
-  fpsText!: Phaser.GameObjects.Text;
   UIcursors: Partial<Record<Cursor, Phaser.GameObjects.Image>> = {};
   activeUICursor: Cursor | null = null;
   focused: boolean = true;
@@ -82,14 +80,6 @@ export class UIScene extends Phaser.Scene {
     this.updateCursor("default");
   }
 
-  scoreUpdateListener(score: number) {
-    this.scoreText.setText(`Score: ${score}`);
-  }
-
-  handleResize(gameSize: Phaser.Structs.Size) {
-    this.scoreText.x = gameSize.width - 10;
-  }
-
   create() {
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(100000000000);
@@ -97,31 +87,17 @@ export class UIScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
     this.cameras.main.setBackgroundColor("rgba(0, 0, 0, 0)");
-    this.fpsText = this.add.text(10, 10, "FPS: --", { font: "16px Courier", color: "#00ff00" });
-
-    this.scoreText = this.add
-      .text(this.cameras.main.width - 10, 10, "Score: 0", { font: "16px Arial", color: "#ffffff", align: "right" })
-      .setOrigin(1, 0);
 
     this.input.on(Phaser.Input.Events.GAME_OVER, this.onMouseEnter, this);
     this.input.on(Phaser.Input.Events.GAME_OUT, this.onMouseLeave, this);
     this.sys.game.events.on(Phaser.Core.Events.FOCUS, this.onFocus, this);
     this.sys.game.events.on(Phaser.Core.Events.BLUR, this.onBlur, this);
-    this.game.events.on("updateScore", this.scoreUpdateListener, this);
-    this.scale.on("resize", this.handleResize, this);
   }
 
-  override update(_time: number, delta: number) {
+  override update(_time: number, _delta: number) {
     // this.debugGraphics.clear();
     // this.debugGraphics.fillStyle(0x00ff00, 1);
     // this.debugGraphics.fillRect(this.x - 2, this.y - 2, 4, 4);
-
-    this.fpsUpdateTimer += delta;
-    if (this.fpsUpdateTimer >= 100) {
-      const fps = this.sys.game.loop.actualFps;
-      this.fpsText.setText(`${fps.toFixed(0)} FPS`);
-      this.fpsUpdateTimer = 0;
-    }
   }
 
   shutdown() {
@@ -129,7 +105,5 @@ export class UIScene extends Phaser.Scene {
     this.input.off(Phaser.Input.Events.GAME_OUT, this.onMouseLeave, this);
     this.sys.game.events.off(Phaser.Core.Events.FOCUS, this.onFocus, this);
     this.sys.game.events.off(Phaser.Core.Events.BLUR, this.onBlur, this);
-    this.game.events.off("updateScore", this.scoreUpdateListener, this);
-    this.scale.off("resize", this.handleResize, this);
   }
 }
