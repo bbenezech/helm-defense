@@ -20,6 +20,9 @@ let isInImmersiveFullScreen = true;
 let mac = process.platform === "darwin";
 /** @type {null | {width:number; height: number,x: number; y:number}} */
 let nonFullScreenBounds = null;
+let isQuitting = false;
+/** @type {null|AbortController} */
+let dialogAbortController = null;
 
 function enterImmersiveFullScreen() {
   if (!mainWindow) return;
@@ -31,12 +34,14 @@ function enterImmersiveFullScreen() {
     mainWindow.setFullScreen(true);
     mainWindow.setSimpleFullScreen(true);
     mainWindow.setKiosk(true);
+  } else {
+    mainWindow.setFullScreen(true);
+  }
 
+  if (mac) {
     mainWindow.setEnabled(false);
     mainWindow.setEnabled(true);
     mainWindow.focusOnWebView();
-  } else {
-    mainWindow.setFullScreen(true);
   }
 
   isInImmersiveFullScreen = true;
@@ -44,15 +49,9 @@ function enterImmersiveFullScreen() {
 
 function exitImmersiveFullScreen() {
   if (!mainWindow) return;
-  if (mainWindow.kiosk) mainWindow.setKiosk(false);
-  if (mainWindow.simpleFullScreen) mainWindow.setSimpleFullScreen(false);
-  if (mainWindow.fullScreen) mainWindow.setFullScreen(false);
-
-  if (mac) {
-    mainWindow.setEnabled(false);
-    mainWindow.setEnabled(true);
-    mainWindow.focusOnWebView();
-  }
+  if (mainWindow.isKiosk()) mainWindow.setKiosk(false);
+  if (mainWindow.isSimpleFullScreen()) mainWindow.setSimpleFullScreen(false);
+  if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
 
   log.info("exitImmersiveFullScreen nonFullScreenBounds", nonFullScreenBounds);
 
@@ -63,6 +62,12 @@ function exitImmersiveFullScreen() {
       x: nonFullScreenBounds.x,
       y: nonFullScreenBounds.y,
     });
+
+  if (mac) {
+    mainWindow.setEnabled(false);
+    mainWindow.setEnabled(true);
+    mainWindow.focusOnWebView();
+  }
 
   isInImmersiveFullScreen = false;
 }
@@ -106,6 +111,35 @@ function createWindow() {
   }
 
   if (DEVTOOLS) mainWindow.webContents.openDevTools();
+
+  mainWindow.on("close", (event) => {
+    log.info("mainWindow close");
+    if (isQuitting) return; // Allow quitting if isQuitting is true
+
+    event.preventDefault(); // Prevent the default close action
+
+    if (!mainWindow || isQuitting) return;
+    dialogAbortController = new AbortController();
+    dialog
+      .showMessageBox(mainWindow, {
+        type: "question",
+        buttons: ["Cancel", "Quit Game"],
+        defaultId: 0,
+        title: "Confirm Quit",
+        message: "Are you sure you want to quit?",
+        cancelId: 0,
+        signal: dialogAbortController.signal,
+      })
+      .then((choice) => {
+        if (choice.response === 1) {
+          isQuitting = true;
+          app.quit();
+        }
+      })
+      .finally(() => {
+        dialogAbortController = null;
+      });
+  });
 
   mainWindow.on("closed", () => {
     log.info("mainWindow closed");
@@ -153,15 +187,28 @@ app.on("window-all-closed", () => {
 app.on("browser-window-focus", () => {
   log.info("browser-window-focus");
   globalShortcut.register("Escape", () => {
-    if (isInImmersiveFullScreen) exitImmersiveFullScreen();
+    if (!mainWindow || isQuitting) return;
+
+    if (dialogAbortController) {
+      dialogAbortController.abort();
+      dialogAbortController = null;
+      return;
+    }
+
+    if (isInImmersiveFullScreen) {
+      exitImmersiveFullScreen();
+      return;
+    } else {
+      mainWindow.close();
+    }
   });
 
   globalShortcut.register("F11", () => {
-    toggleImmersiveFullScreen();
+    if (!dialogAbortController) toggleImmersiveFullScreen();
   });
 
   globalShortcut.register("f", () => {
-    toggleImmersiveFullScreen();
+    if (!dialogAbortController) toggleImmersiveFullScreen();
   });
 });
 
@@ -200,15 +247,21 @@ autoUpdater.on("download-progress", (progressObj) => {
 
 autoUpdater.on("update-downloaded", (info) => {
   log.info("Update downloaded. Will install on next restart.", info);
+  if (!mainWindow || isQuitting || dialogAbortController) return;
+  dialogAbortController = new AbortController();
   dialog
-    .showMessageBox({
+    .showMessageBox(mainWindow, {
       type: "info",
       buttons: ["Restart", "Later"],
       title: "Application Update",
       message: info.version,
       detail: "A new version has been downloaded. Restart the application to apply the updates.",
+      signal: dialogAbortController.signal,
     })
     .then((returnValue) => {
       if (returnValue.response === 0) autoUpdater.quitAndInstall();
+    })
+    .finally(() => {
+      dialogAbortController = null;
     });
 });
