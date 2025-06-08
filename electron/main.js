@@ -12,11 +12,11 @@ log.transports.file.level = "info"; // Set log level to info
 autoUpdater.logger = log;
 
 log.info(`App starting from ${__dirname}...`, process.env["NODE_ENV"]);
-const DEVTOOLS = process.env["NODE_ENV"] === "development";
+const devTools = process.env["NODE_ENV"] === "development";
 
 /** @type {null | BrowserWindow} */
 let mainWindow = null;
-let isInImmersiveFullScreen = true;
+let isFullScreen = true;
 let mac = process.platform === "darwin";
 /** @type {null | {width:number; height: number,x: number; y:number}} */
 let nonFullScreenBounds = null;
@@ -44,7 +44,7 @@ function enterImmersiveFullScreen() {
     mainWindow.focusOnWebView();
   }
 
-  isInImmersiveFullScreen = true;
+  isFullScreen = true;
 }
 
 function exitImmersiveFullScreen() {
@@ -69,12 +69,12 @@ function exitImmersiveFullScreen() {
     mainWindow.focusOnWebView();
   }
 
-  isInImmersiveFullScreen = false;
+  isFullScreen = false;
 }
 
-function toggleImmersiveFullScreen() {
+function toggleFullScreen() {
   if (!mainWindow) return;
-  if (isInImmersiveFullScreen) {
+  if (isFullScreen) {
     exitImmersiveFullScreen();
   } else {
     enterImmersiveFullScreen();
@@ -82,24 +82,21 @@ function toggleImmersiveFullScreen() {
 }
 
 function createWindow() {
-  const webPreferences = {
-    preload: path.join(__dirname, "../electron/preload.js"),
-    nodeIntegration: false,
-    contextIsolation: true,
-    devTools: DEVTOOLS,
-    disableHtmlFullscreenWindowResize: true,
-  };
-
   mainWindow = new BrowserWindow({
     frame: false,
     kiosk: false,
     fullscreen: false,
     simpleFullscreen: false,
     fullscreenable: false,
-    webPreferences,
+    webPreferences: {
+      devTools,
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "../electron/preload.js"),
+    },
   });
 
-  if (isInImmersiveFullScreen) {
+  if (isFullScreen) {
     log.info("Creating window in immersive full screen mode");
     enterImmersiveFullScreen();
   }
@@ -110,7 +107,7 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:9000");
   }
 
-  if (DEVTOOLS) mainWindow.webContents.openDevTools();
+  if (devTools) mainWindow.webContents.openDevTools({ mode: "right" });
 
   mainWindow.on("close", (event) => {
     log.info("mainWindow close");
@@ -156,14 +153,18 @@ app.whenReady().then(() => {
     app.quit();
   });
 
-  ipcMain.on("toggle-fullscreen", () => {
-    log.info("ipcMain toggle-fullscreen");
-    toggleImmersiveFullScreen();
+  ipcMain.on("toggle-full-screen", () => {
+    log.info("ipcMain toggle-full-screen");
+    toggleFullScreen();
   });
 
-  ipcMain.handle("is-fullscreen-status", () => {
-    log.info("ipcMain is-fullscreen-status");
-    return isInImmersiveFullScreen;
+  ipcMain.handle("is-full-screen", () => {
+    log.info("ipcMain is-full-screen");
+    return isFullScreen;
+  });
+
+  ipcMain.on("log", (_event, ...messages) => {
+    log.info("[Renderer]", ...messages);
   });
 });
 
@@ -195,7 +196,7 @@ app.on("browser-window-focus", () => {
       return;
     }
 
-    if (isInImmersiveFullScreen) {
+    if (isFullScreen) {
       exitImmersiveFullScreen();
       return;
     } else {
@@ -204,11 +205,11 @@ app.on("browser-window-focus", () => {
   });
 
   globalShortcut.register("F11", () => {
-    if (!dialogAbortController) toggleImmersiveFullScreen();
+    if (!dialogAbortController) toggleFullScreen();
   });
 
   globalShortcut.register("f", () => {
-    if (!dialogAbortController) toggleImmersiveFullScreen();
+    if (!dialogAbortController) toggleFullScreen();
   });
 });
 
