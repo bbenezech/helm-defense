@@ -1,5 +1,4 @@
 import { GameScene } from "../scene/game";
-import { UIScene } from "../scene/ui";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;
@@ -43,8 +42,6 @@ let minInertiaStopVelocitySquared = 5 * 5;
 let pointerHistory: { x: number; y: number; time: number }[] = [];
 let pointerHistorySize = 5;
 
-let uiScene: UIScene;
-
 function addToPointerHistory(x: number, y: number) {
   pointerHistory.push({ x: x, y: y, time: Date.now() });
   if (pointerHistory.length > pointerHistorySize) pointerHistory.shift();
@@ -60,7 +57,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
 
   if (isCameraDragging) {
     isCameraDragging = false; // End dragging state
-    uiScene.updateCursor("default");
+    pointer.manager.setDefaultCursor("default");
 
     if (pointerHistory.length >= 2) {
       const lastPoint = pointerHistory[pointerHistory.length - 1];
@@ -83,8 +80,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
     pointerHistory = [];
   } else if (isSelectionDragging) {
     isSelectionDragging = false;
-    uiScene.updateCursor("default");
-
+    pointer.manager.setDefaultCursor("default");
     pointer.manager.events.emit("selection", selectionRect);
   } else {
     const duration = pointer.getDuration();
@@ -135,8 +131,8 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
 }
 
 function onPointerMove(pointer: Phaser.Input.Pointer) {
-  x = Phaser.Math.Clamp(pointer.locked ? x + pointer.movementX : pointer.x, 0, pointer.camera.width);
-  y = Phaser.Math.Clamp(pointer.locked ? y + pointer.movementY : pointer.y, 0, pointer.camera.height);
+  x = pointer.x;
+  y = pointer.y;
 
   if (isCameraPointerDown || isSelectionPointerDown) {
     const diffX = x - startX;
@@ -160,29 +156,23 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
         // no-op, already dragging
       } else if (moved) {
         isCameraDragging = true;
-        uiScene.updateCursor("grab");
+        pointer.manager.setDefaultCursor("grab");
       }
     } else if (isSelectionPointerDown) {
       if (isSelectionDragging) {
         // no-op, already dragging
       } else if (moved) {
         isSelectionDragging = true;
-        uiScene.updateCursor("crosshair");
+        pointer.manager.setDefaultCursor("crosshair");
       }
     }
   }
-}
-
-function onPointerLockChange() {
-  uiScene.updateCursor("default");
 }
 
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
 
   return function (this: GameScene, _time: number, delta: number) {
-    uiScene.moveCursor(x, y);
-
     let scrollXDiff = 0;
     let scrollYDiff = 0;
 
@@ -259,13 +249,11 @@ function update(input: Phaser.Input.InputPlugin) {
 }
 
 export function createPointer(scene: GameScene) {
-  uiScene = scene.game.scene.getScene("UIScene") as UIScene;
   scene.input.on("pointerdown", onPointerDown);
   scene.input.on("pointermove", onPointerMove);
 
   scene.input.on("pointerup", onPointerUp);
   scene.input.on("pointerupoutside", onPointerUp);
-  scene.input.manager.events.on("pointerlockchange", onPointerLockChange);
 
   const updatePointer = update(scene.input);
   function destroyPointer(this: GameScene) {
@@ -273,7 +261,6 @@ export function createPointer(scene: GameScene) {
     this.input.off("pointermove", onPointerMove);
     this.input.off("pointerup", onPointerUp);
     this.input.off("pointerupoutside", onPointerUp);
-    this.input.manager.events.off("pointerlockchange", onPointerLockChange);
   }
 
   return { updatePointer, destroyPointer };

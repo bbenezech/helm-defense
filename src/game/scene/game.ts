@@ -228,8 +228,6 @@ export class GameScene extends Phaser.Scene {
     this.map.createLayer(3, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
 
     this.setupCamera();
-
-    this.scene.launch("UIScene");
     this.selectionGraphics = this.add.graphics();
 
     const keyboard = this.input.keyboard!;
@@ -246,7 +244,6 @@ export class GameScene extends Phaser.Scene {
       maxSpeed: 2,
     });
 
-    // Cannons
     this.cannonBlast = new Sound(this, [
       "cannon_blast_1",
       "cannon_blast_2",
@@ -274,7 +271,7 @@ export class GameScene extends Phaser.Scene {
       this.changeZoomContinuous(e.deltaY);
     });
 
-    this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
+    this.input.keyboard?.on("keydown", async (e: KeyboardEvent) => {
       switch (e.keyCode) {
         case Phaser.Input.Keyboard.KeyCodes.W:
           this.perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) + 1];
@@ -311,7 +308,21 @@ export class GameScene extends Phaser.Scene {
           if (!this.changeZoomDiscrete(1)) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.F:
-          document.body.requestFullscreen({ navigationUI: "hide" });
+          if (window.electron) {
+            window.electron.toggleFullScreen();
+          } else {
+            window.document.body.requestFullscreen({ navigationUI: "hide" });
+          }
+          break;
+        case Phaser.Input.Keyboard.KeyCodes.ESC:
+          if (window.electron) {
+            if (await window.electron.isFullScreen()) {
+              window.electron.toggleFullScreen();
+            } else {
+              window.electron.quitApp();
+            }
+          }
+          break;
       }
     });
 

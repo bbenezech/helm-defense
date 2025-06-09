@@ -21,8 +21,6 @@ let mac = process.platform === "darwin";
 /** @type {null | {width:number; height: number,x: number; y:number}} */
 let nonFullScreenBounds = null;
 let isQuitting = false;
-/** @type {null|AbortController} */
-let dialogAbortController = null;
 
 function enterImmersiveFullScreen() {
   if (!mainWindow) return;
@@ -41,7 +39,9 @@ function enterImmersiveFullScreen() {
   if (mac) {
     mainWindow.setEnabled(false);
     mainWindow.setEnabled(true);
-    mainWindow.focusOnWebView();
+    setTimeout(() => {
+      mainWindow?.webContents.focus();
+    }, 200);
   }
 
   isFullScreen = true;
@@ -66,7 +66,9 @@ function exitImmersiveFullScreen() {
   if (mac) {
     mainWindow.setEnabled(false);
     mainWindow.setEnabled(true);
-    mainWindow.focusOnWebView();
+    setTimeout(() => {
+      mainWindow?.webContents.focus();
+    }, 200);
   }
 
   isFullScreen = false;
@@ -111,12 +113,10 @@ function createWindow() {
 
   mainWindow.on("close", (event) => {
     log.info("mainWindow close");
-    if (isQuitting) return; // Allow quitting if isQuitting is true
+    if (!mainWindow || isQuitting) return;
 
     event.preventDefault(); // Prevent the default close action
 
-    if (!mainWindow || isQuitting) return;
-    dialogAbortController = new AbortController();
     dialog
       .showMessageBox(mainWindow, {
         type: "question",
@@ -125,16 +125,12 @@ function createWindow() {
         title: "Confirm Quit",
         message: "Are you sure you want to quit?",
         cancelId: 0,
-        signal: dialogAbortController.signal,
       })
       .then((choice) => {
         if (choice.response === 1) {
           isQuitting = true;
           app.quit();
         }
-      })
-      .finally(() => {
-        dialogAbortController = null;
       });
   });
 
@@ -182,35 +178,13 @@ app.on("quit", () => {
 });
 
 app.on("window-all-closed", () => {
+  log.info("window-all-closed");
   app.quit();
 });
 
 app.on("browser-window-focus", () => {
   log.info("browser-window-focus");
-  globalShortcut.register("Escape", () => {
-    if (!mainWindow || isQuitting) return;
-
-    if (dialogAbortController) {
-      dialogAbortController.abort();
-      dialogAbortController = null;
-      return;
-    }
-
-    if (isFullScreen) {
-      exitImmersiveFullScreen();
-      return;
-    } else {
-      mainWindow.close();
-    }
-  });
-
-  globalShortcut.register("F11", () => {
-    if (!dialogAbortController) toggleFullScreen();
-  });
-
-  globalShortcut.register("f", () => {
-    if (!dialogAbortController) toggleFullScreen();
-  });
+  // Register global shortcuts when the window is focused
 });
 
 app.on("browser-window-blur", () => {
@@ -219,37 +193,41 @@ app.on("browser-window-blur", () => {
 });
 
 autoUpdater.on("checking-for-update", () => {
+  if (!mainWindow) return;
   log.info("Checking for update...");
-  // mainWindow.webContents.send('update-message', 'Checking for update...');
+  mainWindow.webContents.send("update-message", "Checking for update...");
 });
 
 autoUpdater.on("update-available", (info) => {
+  if (!mainWindow) return;
   log.info("Update available.", info);
-  // mainWindow.webContents.send('update-message', `Update available: ${info.version}`);
+  mainWindow.webContents.send("update-message", `Update available: ${info.version}`);
 });
 
 autoUpdater.on("update-not-available", (info) => {
+  if (!mainWindow) return;
   log.info("Update not available.", info);
-  // mainWindow.webContents.send('update-message', 'You are on the latest version.');
+  mainWindow.webContents.send("update-message", "You are on the latest version.");
 });
 
 autoUpdater.on("error", (err) => {
+  if (!mainWindow) return;
   log.error("Error in auto-updater. " + err);
-  // mainWindow.webContents.send('update-message', `Error in auto-updater: ${err.message}`);
+  mainWindow.webContents.send("update-message", `Error in auto-updater: ${err.message}`);
 });
 
 autoUpdater.on("download-progress", (progressObj) => {
+  if (!mainWindow) return;
   let log_message = "Download speed: " + progressObj.bytesPerSecond;
   log_message = log_message + " - Downloaded " + progressObj.percent + "%";
   log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")";
   log.info(log_message);
-  // mainWindow.webContents.send('update-message', `Downloading: ${Math.round(progressObj.percent)}%`);
+  mainWindow.webContents.send("update-message", `Downloading: ${Math.round(progressObj.percent)}%`);
 });
 
 autoUpdater.on("update-downloaded", (info) => {
+  if (!mainWindow || isQuitting) return;
   log.info("Update downloaded. Will install on next restart.", info);
-  if (!mainWindow || isQuitting || dialogAbortController) return;
-  dialogAbortController = new AbortController();
   dialog
     .showMessageBox(mainWindow, {
       type: "info",
@@ -257,12 +235,8 @@ autoUpdater.on("update-downloaded", (info) => {
       title: "Application Update",
       message: info.version,
       detail: "A new version has been downloaded. Restart the application to apply the updates.",
-      signal: dialogAbortController.signal,
     })
     .then((returnValue) => {
       if (returnValue.response === 0) autoUpdater.quitAndInstall();
-    })
-    .finally(() => {
-      dialogAbortController = null;
     });
 });
