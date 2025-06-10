@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu } from "electron";
 import path from "path";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater; // https://github.com/electron-userland/electron-builder/issues/7976
@@ -98,6 +98,8 @@ function createWindow() {
     },
   });
 
+  Menu.setApplicationMenu(null);
+
   if (isFullScreen) {
     log.info("Creating window in immersive full screen mode");
     enterImmersiveFullScreen();
@@ -184,7 +186,16 @@ app.on("window-all-closed", () => {
 
 app.on("browser-window-focus", () => {
   log.info("browser-window-focus");
-  // Register global shortcuts when the window is focused
+
+  globalShortcut.register("CommandOrControl+R", () => {
+    log.info("CommandOrControl+R is pressed: Shortcut Disabled");
+  });
+  globalShortcut.register("CommandOrControl+Shift+R", () => {
+    log.info("CommandOrControl+Shift+R is pressed: Shortcut Disabled");
+  });
+  globalShortcut.register("F5", () => {
+    log.info("F5 is pressed: Shortcut Disabled");
+  });
 });
 
 app.on("browser-window-blur", () => {

@@ -2,8 +2,6 @@ import { GameScene } from "../scene/game";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;
-const USE_POINTER_LOCK = false;
-const TOUCH_DRAG_ACTION: "camera" | "selection" = "camera"; // Touch action for dragging
 
 const _world = new Phaser.Math.Vector2();
 
@@ -23,7 +21,7 @@ let isSelectionDragging = false;
 let selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
 
 // Camera dragging state
-const CAMERA_DRAG_BUTTON = 2; // Right mouse button
+const CAMERA_DRAG_BUTTON = 1; // Middle mouse button
 let isCameraPointerDown = false;
 let isCameraDragging = false;
 let cameraInitialScrollX = 0;
@@ -42,12 +40,18 @@ let minInertiaStopVelocitySquared = 5 * 5;
 let pointerHistory: { x: number; y: number; time: number }[] = [];
 let pointerHistorySize = 5;
 
-function addToPointerHistory(x: number, y: number) {
+function addToPointerHistory(pointer: Phaser.Input.Pointer) {
+  x = pointer.x;
+  y = pointer.y;
+
   pointerHistory.push({ x: x, y: y, time: Date.now() });
   if (pointerHistory.length > pointerHistorySize) pointerHistory.shift();
 }
 
 function onPointerUp(pointer: Phaser.Input.Pointer) {
+  x = pointer.x;
+  y = pointer.y;
+
   isCameraPointerDown = false;
   isSelectionPointerDown = false;
   const diffX = x - startX;
@@ -100,6 +104,9 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
 }
 
 function onPointerDown(pointer: Phaser.Input.Pointer) {
+  x = pointer.x;
+  y = pointer.y;
+
   isSelectionPointerDown = false;
   isCameraPointerDown = false;
   isCameraDragging = false;
@@ -109,11 +116,7 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   worldStartX = world.x;
   worldStartY = world.y;
 
-  if (USE_POINTER_LOCK && !pointer.locked && pointer.button === 0) {
-    pointer.manager.mouse?.requestPointerLock();
-  }
-
-  if (pointer.button === CAMERA_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "camera" && pointer.wasTouch)) {
+  if (pointer.button === CAMERA_DRAG_BUTTON) {
     isCameraPointerDown = true;
     isCameraDragging = false;
     velocityX = 0;
@@ -123,8 +126,8 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
     cameraInitialScrollY = pointer.camera.scrollY;
 
     pointerHistory = [];
-    addToPointerHistory(x, y);
-  } else if (pointer.button === SELECTION_DRAG_BUTTON || (TOUCH_DRAG_ACTION === "selection" && pointer.wasTouch)) {
+    addToPointerHistory(pointer);
+  } else if (pointer.button === SELECTION_DRAG_BUTTON || pointer.wasTouch) {
     isSelectionPointerDown = true;
     isSelectionDragging = false;
   }
@@ -150,7 +153,7 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
     }
 
     if (isCameraPointerDown) {
-      addToPointerHistory(x, y);
+      addToPointerHistory(pointer);
 
       if (isCameraDragging) {
         // no-op, already dragging
@@ -169,10 +172,33 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
   }
 }
 
+function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
+  pointer.event.preventDefault();
+  const e = pointer.event as WheelEvent;
+  const touchPan =
+    pointer.wasTouch ||
+    ("wheelDeltaY" in e && typeof e.wheelDeltaY === "number"
+      ? Math.abs(e.wheelDeltaY) !== 120 || e.wheelDeltaY === e.deltaY * -3
+      : e.deltaMode === 0);
+  if (pointer.event.ctrlKey) {
+    // pinch very likely
+    this.changeZoomContinuous(pointer.deltaY * 15);
+  } else if (!touchPan && e.deltaX === 0 && e.deltaY !== 0) {
+    // zoom with mouse wheel
+    this.changeZoomContinuous(pointer.deltaY);
+  } else {
+    // pan
+    pointer.camera.scrollX += pointer.deltaX;
+    pointer.camera.scrollY += pointer.deltaY;
+  }
+}
+
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
 
   return function (this: GameScene, _time: number, delta: number) {
+    if (x === 0 && y === 0) return; // pointer not active on the camera yet
+
     let scrollXDiff = 0;
     let scrollYDiff = 0;
 
@@ -240,8 +266,8 @@ function update(input: Phaser.Input.InputPlugin) {
       );
       this.selectionGraphics
         .clear()
-        .lineStyle(2, 0x00ff00, 0.8)
-        .fillStyle(0x00ff00, 0.15)
+        .lineStyle(1 / this.zoom, 0xffffff, 1)
+        .fillStyle(0xffffff, 0.05)
         .fillRectShape(selectionRect)
         .strokeRectShape(selectionRect);
     } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);
@@ -249,18 +275,19 @@ function update(input: Phaser.Input.InputPlugin) {
 }
 
 export function createPointer(scene: GameScene) {
-  scene.input.on("pointerdown", onPointerDown);
-  scene.input.on("pointermove", onPointerMove);
-
-  scene.input.on("pointerup", onPointerUp);
-  scene.input.on("pointerupoutside", onPointerUp);
+  scene.input.on("pointerdown", onPointerDown, scene);
+  scene.input.on("pointermove", onPointerMove, scene);
+  scene.input.on("pointerup", onPointerUp, scene);
+  scene.input.on("pointerupoutside", onPointerUp, scene);
+  scene.input.on("wheel", onWheel, scene);
 
   const updatePointer = update(scene.input);
-  function destroyPointer(this: GameScene) {
-    this.input.off("pointerdown", onPointerDown);
-    this.input.off("pointermove", onPointerMove);
-    this.input.off("pointerup", onPointerUp);
-    this.input.off("pointerupoutside", onPointerUp);
+  function destroyPointer() {
+    scene.input.off("pointerdown", onPointerDown, scene);
+    scene.input.off("pointermove", onPointerMove, scene);
+    scene.input.off("pointerup", onPointerUp, scene);
+    scene.input.off("pointerupoutside", onPointerUp, scene);
+    scene.input.off("wheel", onWheel, scene);
   }
 
   return { updatePointer, destroyPointer };

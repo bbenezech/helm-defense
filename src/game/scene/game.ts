@@ -21,6 +21,7 @@ import { Sound } from "../lib/sound";
 import { log } from "../lib/log";
 import { createPointer } from "../lib/pointer";
 import fpsBus from "../../store/fps";
+import timeScaleStore from "../../store/time-scale";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
@@ -57,8 +58,6 @@ export class GameScene extends Phaser.Scene {
   selectionGraphics!: Phaser.GameObjects.Graphics;
   // Used to track if the perspective has changed and objects need to update their visuals
   dirty = true;
-  timeScales: number[] = [0, 0.25, 0.5, 1, 2, 4]; // Game speed multipliers
-  timeScale = 1; // Game speed multiplier
 
   constructor() {
     super({ key: "GameScene" });
@@ -226,9 +225,9 @@ export class GameScene extends Phaser.Scene {
     this.map.createLayer(1, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
     this.map.createLayer(2, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
     this.map.createLayer(3, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
+    this.selectionGraphics = this.add.graphics();
 
     this.setupCamera();
-    this.selectionGraphics = this.add.graphics();
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -240,7 +239,7 @@ export class GameScene extends Phaser.Scene {
       up: cursors.up,
       down: cursors.down,
       acceleration: 0.1,
-      drag: 0.002,
+      drag: 0.003,
       maxSpeed: 2,
     });
 
@@ -267,10 +266,6 @@ export class GameScene extends Phaser.Scene {
       this.cannon.requestShoot(this._pointerScreen);
     });
 
-    this.input.on("wheel", (e: WheelEvent) => {
-      this.changeZoomContinuous(e.deltaY);
-    });
-
     this.input.keyboard?.on("keydown", async (e: KeyboardEvent) => {
       switch (e.keyCode) {
         case Phaser.Input.Keyboard.KeyCodes.W:
@@ -289,17 +284,13 @@ export class GameScene extends Phaser.Scene {
           log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
           break;
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
-          this.timeScale = this.timeScale === 0 ? 1 : 0; // Toggle pause
+          timeScaleStore.togglePause();
           break;
         case Phaser.Input.Keyboard.KeyCodes.A:
-          this.timeScale = this.timeScales[this.timeScales.indexOf(this.timeScale) - 1];
-          if (this.timeScale === undefined) this.nudge();
-          this.timeScale ||= this.timeScales[0];
+          if (!timeScaleStore.slowDown()) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.D:
-          this.timeScale = this.timeScales[this.timeScales.indexOf(this.timeScale) + 1];
-          if (this.timeScale === undefined) this.nudge();
-          this.timeScale ||= this.timeScales[this.timeScales.length - 1];
+          if (!timeScaleStore.speedUp()) this.nudge();
           break;
         case Phaser.Input.Keyboard.KeyCodes.MINUS:
           if (!this.changeZoomDiscrete(-1)) this.nudge();
@@ -336,10 +327,10 @@ export class GameScene extends Phaser.Scene {
     const mapPixelWidth = this.map.widthInPixels;
     const mapPixelHeight = this.map.heightInPixels;
     const camera = this.cameras.main;
-    camera.scrollX = 0; // Start at the left
-    camera.scrollY = mapPixelHeight - camera.height; // Start at the bottom
     camera.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
     camera.setRoundPixels(true);
+    camera.scrollX = 0; // Start at the left
+    camera.scrollY = mapPixelHeight - camera.height; // Start at the bottom
     this.scale.on("resize", this.handleResize, this);
     this.handleResize(this.game.scale.gameSize);
   }
@@ -415,7 +406,7 @@ export class GameScene extends Phaser.Scene {
     this.dirty = false;
     this.controls.update(delta);
     this.updatePointer(time, delta);
-    fpsBus.emitDebounced(Number(this.sys.game.loop.actualFps.toFixed(0)));
+    fpsBus.emitDebounced(this.sys.game.loop.actualFps);
   }
 
   shutdown() {

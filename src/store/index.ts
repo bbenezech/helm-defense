@@ -5,7 +5,7 @@ type EventCallback<T> = (payload: T) => void;
 type SetStateAction<T> = T | ((prevState: T) => T);
 type Unsubscribe = () => void;
 
-// dumb event bus implementation
+// dumb event bus
 export function bus<T>(): {
   subscribe: (callback: EventCallback<T>) => Unsubscribe;
   use: () => readonly [T | undefined, (payload: T) => void];
@@ -21,9 +21,7 @@ export function bus<T>(): {
     return unsubscribe;
   };
 
-  const emit = (payload: T) => {
-    events.forEach((callback) => callback(payload));
-  };
+  const emit = (payload: T) => events.forEach((callback) => callback(payload));
 
   const emitDebounced = debounce(emit, 100, { leading: true, trailing: true, maxWait: 500 });
 
@@ -36,7 +34,7 @@ export function bus<T>(): {
   return { subscribe, emit, emitDebounced, use };
 }
 
-// zustand-like memory store implementation
+// dumb zustand-like memory store
 export function store<T>(initialState: T): {
   subscribe: (callback: EventCallback<T>) => Unsubscribe;
   get: () => T;

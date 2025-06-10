@@ -10,6 +10,7 @@ import {
 } from "../constants";
 import { GameScene } from "../scene/game";
 import { sphereToGroundCollision, type Collision, type Solid } from "../collision/sphere-to-ground"; // Import the collision function
+import timeScaleStore from "../../store/time-scale";
 
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
@@ -141,8 +142,9 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
   }
 
   preUpdate(_time: number, delta: number) {
-    delta = delta * this.gameScene.timeScale;
-    this.explosionEmitter.timeScale = this.gameScene.timeScale;
+    const timeScale = timeScaleStore.get();
+    delta = delta * timeScale; // Convert to seconds and apply speed multiplier
+    this.explosionEmitter.timeScale = timeScale;
 
     const visible = this.gameScene.inViewport(this);
     const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL_MS : INVISIBLE_UPDATE_INTERVAL_MS;

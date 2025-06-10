@@ -13,6 +13,7 @@ import {
 } from "../constants";
 import { GameScene } from "../scene/game";
 import { velocityVectorFromAzymuthAndAltitude } from "../lib/trigo";
+import timeScaleStore from "../../store/time-scale";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 500;
@@ -20,7 +21,7 @@ const RECOIL_RETURN_DURATION_MS = 1500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
 const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
-const INITIAL_ALTITUDE = Phaser.Math.DegToRad(0);
+const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 const COOLDOWN_MS = 2000; // 2 seconds cooldown
 
@@ -347,12 +348,14 @@ export class Cannon extends Phaser.GameObjects.Image {
   }
 
   preUpdate(_time: number, delta: number) {
-    delta = delta * this.gameScene.timeScale;
-    this.muzzleParticleEmitter.timeScale = this.gameScene.timeScale;
-    this.muzzleFlashEmitter.timeScale = this.gameScene.timeScale;
-    this.recoilTween.timeScale = this.gameScene.timeScale;
-    this.shadowRecoilTween.timeScale = this.gameScene.timeScale;
-    this.wheelsRecoilTween.timeScale = this.gameScene.timeScale;
+    const timeScale = timeScaleStore.get();
+
+    delta = delta * timeScale;
+    this.muzzleParticleEmitter.timeScale = timeScale;
+    this.muzzleFlashEmitter.timeScale = timeScale;
+    this.recoilTween.timeScale = timeScale;
+    this.shadowRecoilTween.timeScale = timeScale;
+    this.wheelsRecoilTween.timeScale = timeScale;
 
     const visible = this.gameScene.inViewport(this);
     const timerInterval = visible ? VISIBLE_UPDATE_INTERVAL_MS : INVISIBLE_UPDATE_INTERVAL_MS;

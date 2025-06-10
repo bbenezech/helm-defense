@@ -1,6 +1,6 @@
 export function log(...messages: any[]) {
   console.log(...messages);
-  if (process.env["NODE_ENV"] === "development") {
+  if (import.meta.env.DEV) {
     // 2. Send the log to the server endpoint
     fetch("/api/log", {
       method: "POST",
