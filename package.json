@@ -62,7 +62,10 @@
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "LSUIPresentationMode": 0
+      }
     },
     "win": {
       "target": "nsis",

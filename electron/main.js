@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } from "electron";
 import path from "path";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater; // https://github.com/electron-userland/electron-builder/issues/7976
 import log from "electron-log";
 import { fileURLToPath } from "url";
+const USE_DANGEROUS_MAC_HACK_FULL_SCREEN = false; // Set to false to disable the hackish full-screen mode for Macs with notches
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,43 +18,70 @@ const devTools = process.env["NODE_ENV"] === "development";
 /** @type {null | BrowserWindow} */
 let mainWindow = null;
 let isFullScreen = true;
-let mac = process.platform === "darwin";
+const fullScreenModes = {
+  classic: {
+    desc: "Regular full-screen mode, best for Windows/Linux",
+    mac: [
+      "menu & dock toggle when edge scrolling top/bottom",
+      "notch area is a mouse dead zone that cannot be handled",
+    ],
+  },
+  kiosk: {
+    desc: "Immersive full-screen mode, best for Macs without notch",
+    mac: ["notch area is a mouse dead zone that cannot be handled"],
+  },
+  "mac-old": {
+    desc: "Simple MacOS full-screen mode (old pre-Lion behavior without workspace)",
+    mac: ["menu & dock toggle when edge scrolling top/bottom"],
+  },
+  "mac-hack": { desc: "Composite kiosk/mac-old mode, best for Silicon MacBook Pros with notches", mac: ["hackish"] },
+};
+// classic: Regular mode, best for Windows/Linux. MacOS issues: menu & dock toggle when edge scrolling top/bottom, notch area is a mouse dead zone that cannot be handled.
+// kiosk: Immersive mode, best for Macs without notch. MacOS issue: notch area is a mouse dead zone that cannot be handled.
+// mac-old: No workspace mode (old pre-Lion behavior). MacOS issue: menu & dock toggle when edge scrolling top/bottom.
+// mac-hack: Composite kiosk/mac-old mode, hackish but best for Macs with notchs when it works.
+/** @type {keyof typeof fullScreenModes} */
+let fullScreenMode = "classic";
 /** @type {null | {width:number; height: number,x: number; y:number}} */
 let nonFullScreenBounds = null;
 let isQuitting = false;
 
-function enterImmersiveFullScreen() {
+function enterFullScreen(/** @type {keyof typeof fullScreenModes} */ mode) {
   if (!mainWindow) return;
   const currentBounds = mainWindow.getBounds();
   if (currentBounds.width > 100 && currentBounds.height > 100) nonFullScreenBounds = currentBounds;
-  log.info("enterImmersiveFullScreen nonFullScreenBounds", nonFullScreenBounds);
+  log.info("enterFullScreen nonFullScreenBounds", nonFullScreenBounds);
 
-  if (mac) {
+  if (mode === "classic") {
+    mainWindow.setFullScreen(true);
+  } else if (mode === "kiosk") {
+    mainWindow.setKiosk(true);
+  } else if (mode === "mac-old") {
+    mainWindow.setSimpleFullScreen(true);
+  } else if (mode === "mac-hack") {
+    // enter crazy town
     mainWindow.setFullScreen(true);
     mainWindow.setSimpleFullScreen(true);
     mainWindow.setKiosk(true);
-  } else {
-    mainWindow.setFullScreen(true);
-  }
-
-  if (mac) {
     mainWindow.setEnabled(false);
     mainWindow.setEnabled(true);
-    setTimeout(() => {
-      mainWindow?.webContents.focus();
-    }, 200);
   }
+
+  // helps with focus issues on macOS
+  setTimeout(() => {
+    mainWindow?.webContents.focus();
+  }, 500);
 
   isFullScreen = true;
 }
 
-function exitImmersiveFullScreen() {
+function exitFullScreen(/** @type {keyof typeof fullScreenModes} */ mode) {
   if (!mainWindow) return;
   if (mainWindow.isKiosk()) mainWindow.setKiosk(false);
   if (mainWindow.isSimpleFullScreen()) mainWindow.setSimpleFullScreen(false);
   if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
 
-  log.info("exitImmersiveFullScreen nonFullScreenBounds", nonFullScreenBounds);
+  log.info("exitFullScreen nonFullScreenBounds", nonFullScreenBounds);
 
   if (nonFullScreenBounds)
     mainWindow.setBounds({
@@ -63,13 +91,14 @@ function exitImmersiveFullScreen() {
       y: nonFullScreenBounds.y,
     });
 
-  if (mac) {
+  if (mode === "mac-hack") {
     mainWindow.setEnabled(false);
     mainWindow.setEnabled(true);
-    setTimeout(() => {
-      mainWindow?.webContents.focus();
-    }, 200);
   }
+
+  setTimeout(() => {
+    mainWindow?.webContents.focus();
+  }, 500);
 
   isFullScreen = false;
 }
@@ -77,32 +106,40 @@ function exitImmersiveFullScreen() {
 function toggleFullScreen() {
   if (!mainWindow) return;
   if (isFullScreen) {
-    exitImmersiveFullScreen();
+    exitFullScreen(fullScreenMode);
   } else {
-    enterImmersiveFullScreen();
+    enterFullScreen(fullScreenMode);
   }
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    frame: false,
-    kiosk: false,
-    fullscreen: false,
-    simpleFullscreen: false,
-    fullscreenable: false,
-    webPreferences: {
-      devTools,
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, "../electron/preload.js"),
-    },
-  });
+  const mac = process.platform === "darwin";
+  const webPreferences = {
+    devTools,
+    contextIsolation: true,
+    nodeIntegration: false,
+    preload: path.join(__dirname, "../electron/preload.js"),
+  };
+  const frame = !mac;
 
-  Menu.setApplicationMenu(null);
+  if (mac) fullScreenMode = "kiosk"; // avoid edge scrolling issues on macOS, other platforms can use classic full screen without issues
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const notched = primaryDisplay.size.height > primaryDisplay.workAreaSize.height;
+  if (mac && notched && USE_DANGEROUS_MAC_HACK_FULL_SCREEN) {
+    fullScreenMode = "mac-hack"; // use insane hacks to cover notch area and avoid edge scrolling issues
+    log.info("Notched Mac detected:", primaryDisplay.size.height, primaryDisplay.workAreaSize.height);
+  }
+
+  mainWindow = new BrowserWindow(
+    fullScreenMode === "mac-hack"
+      ? { frame, webPreferences, kiosk: false, fullscreen: false, simpleFullscreen: false }
+      : { frame, webPreferences },
+  );
 
   if (isFullScreen) {
-    log.info("Creating window in immersive full screen mode");
-    enterImmersiveFullScreen();
+    log.info("Switching window to full screen");
+    enterFullScreen(fullScreenMode);
   }
 
   if (app.isPackaged) {

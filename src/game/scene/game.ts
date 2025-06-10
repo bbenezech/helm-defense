@@ -19,9 +19,9 @@ import { randomNormal } from "../lib/random";
 import { SURFACE_HARDNESS } from "../world/surface";
 import { Sound } from "../lib/sound";
 import { log } from "../lib/log";
-import { createPointer } from "../lib/pointer";
 import fpsBus from "../../store/fps";
 import timeScaleStore from "../../store/time-scale";
+import { createPointer } from "../lib/pointer";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";

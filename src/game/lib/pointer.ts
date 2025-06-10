@@ -5,8 +5,8 @@ const SCROLL_SPEED = 2;
 
 const _world = new Phaser.Math.Vector2();
 
-let x = 0; // Pointer screen position
-let y = 0; // Pointer screen position
+let x = -1; // Pointer screen position
+let y = -1; // Pointer screen position
 
 // Pointer dragging state
 let startX = 0;
@@ -182,7 +182,7 @@ function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
       : e.deltaMode === 0);
   if (pointer.event.ctrlKey) {
     // pinch very likely
-    this.changeZoomContinuous(pointer.deltaY * 15);
+    this.changeZoomContinuous(pointer.deltaY * 10);
   } else if (!touchPan && e.deltaX === 0 && e.deltaY !== 0) {
     // zoom with mouse wheel
     this.changeZoomContinuous(pointer.deltaY);
@@ -193,11 +193,18 @@ function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
   }
 }
 
+function onPointerLeave(this: Phaser.Cameras.Scene2D.Camera, event: MouseEvent) {
+  // Scroll at full speed when pointer leaves the camera
+  x = Phaser.Math.Clamp(event.clientX, 0, this.width);
+  y = Phaser.Math.Clamp(event.clientY, 0, this.height);
+  console.log("Pointer left camera, setting position to", x, y);
+}
+
 function update(input: Phaser.Input.InputPlugin) {
   const camera = input.cameras.main;
 
   return function (this: GameScene, _time: number, delta: number) {
-    if (x === 0 && y === 0) return; // pointer not active on the camera yet
+    if (x === -1 && y === -1) return; // pointer not active on the camera yet
 
     let scrollXDiff = 0;
     let scrollYDiff = 0;
@@ -252,6 +259,7 @@ function update(input: Phaser.Input.InputPlugin) {
     }
 
     if (isSelectionDragging) {
+      console.log("Selection dragging", x, y);
       const world = camera.getWorldPoint(x, y, _world);
       const worldX = world.x;
       const worldY = world.y;
@@ -275,6 +283,11 @@ function update(input: Phaser.Input.InputPlugin) {
 }
 
 export function createPointer(scene: GameScene) {
+  const camera = scene.cameras.main;
+
+  const onMouseLeave = onPointerLeave.bind(camera);
+  document.addEventListener("mouseleave", onMouseLeave);
+  scene.input.on("pointerout", onPointerLeave, scene);
   scene.input.on("pointerdown", onPointerDown, scene);
   scene.input.on("pointermove", onPointerMove, scene);
   scene.input.on("pointerup", onPointerUp, scene);
@@ -283,6 +296,7 @@ export function createPointer(scene: GameScene) {
 
   const updatePointer = update(scene.input);
   function destroyPointer() {
+    document.removeEventListener("mouseleave", onMouseLeave);
     scene.input.off("pointerdown", onPointerDown, scene);
     scene.input.off("pointermove", onPointerMove, scene);
     scene.input.off("pointerup", onPointerUp, scene);

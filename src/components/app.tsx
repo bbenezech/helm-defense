@@ -47,15 +47,17 @@ export function App() {
     <div id="app">
       <PhaserGame ref={gameRef} />
       <div className="hud">
-        <div>SCORE {score}</div>
-        <div
-          className="interactive"
-          onClick={() => timeScaleStore.togglePause()}
-          onDoubleClick={() => timeScaleStore.reset()}
-        >
-          TimeScale {Math.round(timeScale * 100)}%
+        <div className="hud-top">
+          <div>SCORE {score}</div>
+          <div
+            className="interactive"
+            onClick={() => timeScaleStore.togglePause()}
+            onDoubleClick={() => timeScaleStore.reset()}
+          >
+            TimeScale {Math.round(timeScale * 100)}%
+          </div>
+          <div>FPS {fps ? Math.round(fps) : " - "}</div>
         </div>
-        <div>FPS {fps ? Math.round(fps) : " - "}</div>
       </div>
     </div>
   );
