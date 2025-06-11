@@ -21,7 +21,6 @@ let isSelectionDragging = false;
 let selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
 
 // Camera dragging state
-const CAMERA_DRAG_BUTTON = 1; // Middle mouse button
 let isCameraPointerDown = false;
 let isCameraDragging = false;
 let cameraInitialScrollX = 0;
@@ -116,7 +115,7 @@ function onPointerDown(pointer: Phaser.Input.Pointer) {
   worldStartX = world.x;
   worldStartY = world.y;
 
-  if (pointer.button === CAMERA_DRAG_BUTTON) {
+  if (pointer.button !== SELECTION_DRAG_BUTTON) {
     isCameraPointerDown = true;
     isCameraDragging = false;
     velocityX = 0;
@@ -172,24 +171,76 @@ function onPointerMove(pointer: Phaser.Input.Pointer) {
   }
 }
 
+const chromium = (window as any).chrome !== undefined;
+const firefox = (document.body.style as any).MozAppearance !== undefined;
+const safari = (window as any).safari !== undefined;
+
+let lastDetectedScroll: "wheel" | "pan" | undefined;
+let lastLikelyScroll: "wheel" | "pan" | undefined;
+// can be improved by using a frequency analysis of events
+function identifyScrollEvent(event: WheelEvent): "wheel" | "pan" {
+  const e = event as WheelEvent & { wheelDeltaY?: number };
+
+  // 100% sure
+  const wheelCertain = Math.floor(e.deltaY) !== e.deltaY || e.deltaMode !== 0;
+  if (wheelCertain) return (lastDetectedScroll = lastLikelyScroll = "wheel");
+  const panCertain = e.deltaX !== 0 || e.deltaY === 0;
+  if (panCertain) return (lastDetectedScroll = lastLikelyScroll = "pan");
+
+  // e.deltaX is 0, there is a good chance this is a wheel event, but we need to detect vertical panning nonetheless
+
+  // 99% sure
+  const wheelVeryLikely = firefox
+    ? e.wheelDeltaY! % 48 === 0
+    : chromium
+      ? e.wheelDeltaY! % 120 === 0
+      : safari
+        ? e.wheelDeltaY! === 12 || e.wheelDeltaY! === -12
+        : false;
+  const panVeryLikely = Math.abs(e.deltaY) < (firefox ? 16 : 4);
+  const oldLastLikelyScroll = lastLikelyScroll;
+  lastLikelyScroll = panVeryLikely ? "pan" : wheelVeryLikely ? "wheel" : lastLikelyScroll;
+
+  if (wheelVeryLikely && lastDetectedScroll === "wheel") return "wheel";
+  if (wheelVeryLikely && oldLastLikelyScroll === "wheel") return "wheel";
+  if (panVeryLikely && lastDetectedScroll === "pan") return "pan";
+  if (panVeryLikely && oldLastLikelyScroll === "pan") return "pan";
+
+  // prefer continuity with the last detected scroll type
+  if (lastDetectedScroll && lastDetectedScroll === oldLastLikelyScroll) return lastDetectedScroll;
+
+  if (panVeryLikely) return "pan";
+  if (wheelVeryLikely) return "wheel";
+
+  return lastDetectedScroll || lastLikelyScroll || "wheel";
+}
+
 function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
-  pointer.event.preventDefault();
-  const e = pointer.event as WheelEvent;
-  const touchPan =
-    pointer.wasTouch ||
-    ("wheelDeltaY" in e && typeof e.wheelDeltaY === "number"
-      ? Math.abs(e.wheelDeltaY) !== 120 || e.wheelDeltaY === e.deltaY * -3
-      : e.deltaMode === 0);
-  if (pointer.event.ctrlKey) {
-    // pinch very likely
+  const event = pointer.event;
+  event.preventDefault();
+
+  let type: "wheel" | "pan" | "pinch" = "wheel";
+  if (event.ctrlKey) {
+    type = "pinch";
+  } else if (event instanceof WheelEvent) {
+    type = identifyScrollEvent(event);
+  } else if (event instanceof TouchEvent) {
+    console.warn("TouchEvent detected in onWheel, this should not happen");
+    return;
+  } else if (event instanceof MouseEvent) {
+    console.warn("MouseEvent detected in onWheel, this should not happen");
+    return;
+  }
+
+  if (type === "pinch") {
     this.changeZoomContinuous(pointer.deltaY * 10);
-  } else if (!touchPan && e.deltaX === 0 && e.deltaY !== 0) {
-    // zoom with mouse wheel
+  } else if (type === "wheel") {
     this.changeZoomContinuous(pointer.deltaY);
-  } else {
-    // pan
+  } else if (type === "pan") {
     pointer.camera.scrollX += pointer.deltaX;
     pointer.camera.scrollY += pointer.deltaY;
+  } else {
+    throw new Error(type satisfies never);
   }
 }
 
@@ -197,7 +248,6 @@ function onPointerLeave(this: Phaser.Cameras.Scene2D.Camera, event: MouseEvent) 
   // Scroll at full speed when pointer leaves the camera
   x = Phaser.Math.Clamp(event.clientX, 0, this.width);
   y = Phaser.Math.Clamp(event.clientY, 0, this.height);
-  console.log("Pointer left camera, setting position to", x, y);
 }
 
 function update(input: Phaser.Input.InputPlugin) {
@@ -259,7 +309,6 @@ function update(input: Phaser.Input.InputPlugin) {
     }
 
     if (isSelectionDragging) {
-      console.log("Selection dragging", x, y);
       const world = camera.getWorldPoint(x, y, _world);
       const worldX = world.x;
       const worldY = world.y;

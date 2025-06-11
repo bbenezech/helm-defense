@@ -22,24 +22,23 @@ const BOTTOM_COLOR = {
  * Uses GameScene projection and depth sorting via the container.
  */
 export class Cube extends Phaser.GameObjects.Container {
-  private gameScene: GameScene;
+  gameScene: GameScene;
   world: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
-  private halfSizeX: number; // Half size in world units for X
-  private halfSizeY: number; // Half size in world units for Y
-  private sizeZ: number; // Size in world units for Z (height)
+  halfSizeX: number; // Half size in world units for X
+  halfSizeY: number; // Half size in world units for Y
+  sizeZ: number; // Size in world units for Z (height)
   worldRotationZ: number = 0; // Rotation angle in radians around the Z-axis
 
   // --- Geometry (World Space) ---
-  private worldVertices: Phaser.Math.Vector3[];
+  worldVertices: Phaser.Math.Vector3[];
 
   // --- Rendering (Screen Space - Populated ONLY in updateVisuals) ---
-  private screenVertices: Phaser.Math.Vector2[];
-  private topPolygon: Phaser.GameObjects.Polygon;
-  private bottomPolygon: Phaser.GameObjects.Polygon;
+  screenVertices: Phaser.Math.Vector2[];
+  topPolygon: Phaser.GameObjects.Polygon;
+  bottomPolygon: Phaser.GameObjects.Polygon;
   // Cache for screen center projection (used for container position and depth)
-  private screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-
-  private dirty: boolean = true;
+  screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  dirty: boolean = true;
 
   constructor(
     gameScene: GameScene,

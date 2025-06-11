@@ -21,7 +21,7 @@ const RECOIL_RETURN_DURATION_MS = 1500;
 const RECOIL_FACTOR = 0.3;
 const DO_RECOIL = true;
 const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
-const INITIAL_ALTITUDE = Phaser.Math.DegToRad(10);
+const INITIAL_ALTITUDE = Phaser.Math.DegToRad(0);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 const COOLDOWN_MS = 2000; // 2 seconds cooldown
 

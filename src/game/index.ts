@@ -10,7 +10,7 @@ export function start(parent: string) {
     type: Phaser.WEBGL,
     scene: [GameScene],
     scale: { mode: Phaser.Scale.RESIZE, autoRound: true },
-    disableContextMenu: true,
+    disableContextMenu: import.meta.env.PROD,
     title,
     url,
     version,

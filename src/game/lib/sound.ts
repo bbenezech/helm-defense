@@ -27,7 +27,7 @@ export class Sound {
   }
 
   play(screenX: number, screenY: number) {
-    if (PLAY_SOUNDS === false) return;
+    if (PLAY_SOUNDS === false || this.gameScene.sound.locked) return;
 
     let key;
     if (this.keys.length > 1) {
@@ -45,9 +45,8 @@ export class Sound {
     let instance = this.pool[key].find((i) => !i.isPlaying);
     if (instance === undefined) {
       const newInstance = this.gameScene.sound.add(key);
-      if (!(newInstance instanceof Phaser.Sound.WebAudioSound)) {
-        throw new Error(`Failed to create sound instance for key: ${key}`);
-      }
+      if (!(newInstance instanceof Phaser.Sound.WebAudioSound)) return;
+
       this.pool[key].push(newInstance);
       instance = newInstance;
     }

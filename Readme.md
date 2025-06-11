@@ -4,6 +4,10 @@
 
 Not much to see, mostly a tech demo
 
+## Keywords
+
+electron phaser game react top-down edge-scrolling full-screen
+
 ## Tech Roadmap
 
 - [x] Repo setup
@@ -21,6 +25,10 @@ Not much to see, mostly a tech demo
 - [x] shadow rendering
 - [x] shadow occlusion
 - [x] move to Vite
+- [x] add React
+- [x] add electron
+- [x] implement edge scrolling
+- [x] implement pan/zoom
 - [ ] tile heightmap
 - [ ] height rendering
 - [ ] tile collision
@@ -53,8 +61,8 @@ Not much to see, mostly a tech demo
 
 ## Getting Started
 
-- npm install
-- npm start
+- yarn install
+- yarn start
 
 ## License
 
