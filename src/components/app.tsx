@@ -5,9 +5,13 @@ import timeScaleStore from "../store/time-scale";
 import { PhaserGame } from "./phaser-game";
 
 export function App() {
-  const [score] = scoreStore.use();
-  const [fps] = fpsBus.use();
-  const [timeScale] = timeScaleStore.use();
+  const [fsp, setFps] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    return fpsBus.subscribe(setFps);
+  }, []);
+
+  const score = React.useSyncExternalStore(scoreStore.subscribe, scoreStore.get);
+  const timeScale = React.useSyncExternalStore(timeScaleStore.subscribe, timeScaleStore.get);
   const gameRef = React.useRef<Phaser.Game>(null);
 
   React.useLayoutEffect(() => {
@@ -30,7 +34,6 @@ export function App() {
       }
     }
     if (game) {
-      (window as any).game = game;
       window.addEventListener("focus", handleFocus);
       window.addEventListener("blur", handleBlur);
     }
@@ -46,19 +49,21 @@ export function App() {
   return (
     <div id="app">
       <PhaserGame ref={gameRef} />
-      <div className="hud">
-        <div className="hud-top">
-          <div>SCORE {score}</div>
-          <div
-            className="interactive"
-            onClick={() => timeScaleStore.togglePause()}
-            onDoubleClick={() => timeScaleStore.reset()}
-          >
-            TimeScale {Math.round(timeScale * 100)}%
+      <React.StrictMode>
+        <div className="hud">
+          <div className="hud-top">
+            <div>SCORE {score}</div>
+            <div
+              className="interactive"
+              onClick={() => timeScaleStore.togglePause()}
+              onDoubleClick={() => timeScaleStore.reset()}
+            >
+              TimeScale {Math.round(timeScale * 100)}%
+            </div>
+            <div>FPS {fsp ? Math.round(fsp) : " - "}</div>
           </div>
-          <div>FPS {fps ? Math.round(fps) : " - "}</div>
         </div>
-      </div>
+      </React.StrictMode>
     </div>
   );
 }

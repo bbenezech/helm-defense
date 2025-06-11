@@ -1,11 +1,13 @@
 import { defineConfig } from "vite";
 import bodyParser from "body-parser";
 import react from "@vitejs/plugin-react";
+import { IncomingMessage } from "http";
 
 const prod = process.env.NODE_ENV === "production";
 const dev = !prod;
 const host = process.env.HOST || "0.0.0.0";
 const port = parseInt(process.env.PORT || "9000");
+const ReactCompilerConfig = {};
 
 export default defineConfig(({ mode }) => ({
   base: mode === "gh-pages" ? `/helm-defense/` : "./",
@@ -34,14 +36,15 @@ export default defineConfig(({ mode }) => ({
   esbuild: { sourcemap: false },
   plugins: dev
     ? [
-        react(),
+        react({ babel: { plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]] } }),
         {
           name: "log-viewer-middleware",
           configureServer(server) {
             server.middlewares.use(bodyParser.json());
-            server.middlewares.use("/api/log", (req: any, res, next) => {
+            server.middlewares.use("/api/log", (req: IncomingMessage, res, next) => {
               if (req.method === "POST") {
-                console.log("[Client]:", ...req.body.messages);
+                // @ts-expect-error no body in IncomingMessage?
+                console.log("[Client]:", ...(req.body?.messages ?? []));
                 res.statusCode = 200;
                 res.end();
               } else {

@@ -18,6 +18,7 @@ const devTools = process.env["NODE_ENV"] === "development";
 /** @type {null | BrowserWindow} */
 let mainWindow = null;
 let isFullScreen = true;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const fullScreenModes = {
   classic: {
     desc: "Regular full-screen mode, best for Windows/Linux",

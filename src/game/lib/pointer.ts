@@ -18,7 +18,7 @@ let worldStartY = 0;
 const SELECTION_DRAG_BUTTON = 0; // Left mouse button
 let isSelectionPointerDown = false;
 let isSelectionDragging = false;
-let selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
+const selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
 
 // Camera dragging state
 let isCameraPointerDown = false;
@@ -27,17 +27,17 @@ let cameraInitialScrollX = 0;
 let cameraInitialScrollY = 0;
 
 // Click detection state
-let CLICK_MOVE_THRESHOLD_SQUARED = 2 * 2;
-let CLICK_DURATION_THRESHOLD = 200; // Max ms pointer can be down for a quick click
+const CLICK_MOVE_THRESHOLD_SQUARED = 2 * 2;
+const CLICK_DURATION_THRESHOLD = 200; // Max ms pointer can be down for a quick click
 
 // Inertia state
 let velocityX = 0; // Scroll velocity in pixels per second
 let velocityY = 0;
-let dampingFactor = 0.95; // Damping factor for inertia in squared pixels per minute
-let minInertiaStopVelocitySquared = 5 * 5;
+const dampingFactor = 0.95; // Damping factor for inertia in squared pixels per minute
+const minInertiaStopVelocitySquared = 5 * 5;
 
 let pointerHistory: { x: number; y: number; time: number }[] = [];
-let pointerHistorySize = 5;
+const pointerHistorySize = 5;
 
 function addToPointerHistory(pointer: Phaser.Input.Pointer) {
   x = pointer.x;
