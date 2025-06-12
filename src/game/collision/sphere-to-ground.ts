@@ -3,7 +3,7 @@ import { GameScene } from "../scene/game"; // Assuming GameScene has the methods
 import { BULLET } from "../constants";
 
 export interface Solid {
-  world: Phaser.Math.Vector3;
+  position: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3;
   gameScene: GameScene;
   mass: number; // Mass in kg, or +Inf for static objects
@@ -79,11 +79,6 @@ export function bounce(
 const TNT_KG_IN_JOULES = 4.184 * 10e6; // 1 TNT kg = 4.184 MJ
 const INV_TNT_KG_IN_JOULES = 1 / TNT_KG_IN_JOULES;
 
-export interface Collision {
-  energy: number; // Energy in TNT kg eq.
-  velocity: Phaser.Math.Vector3; // Normalized velocity after bounce (for explosion direction)
-}
-
 /**
  * Collides a sphere against height-mapped ground. Calculates bounce magnitude
  * and direction based on impact characteristics and surface properties.
@@ -93,18 +88,18 @@ export interface Collision {
  * @param radius Sphere radius (center to lowest point).
  * @returns Splash energy in TNT kg eq. (number), or false if no collision.
  */
-export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: number): Collision | false {
-  const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.world) ?? 0;
+export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: number): number | false {
+  const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.position) ?? 0;
 
   // Penetration & Impact Angle Check ---
-  const elevation = s.world.z - groundZ; // Elevation above ground
+  const elevation = s.position.z - groundZ; // Elevation above ground
   const penetrationDepth = -elevation;
 
   // Check for penetration
   if (penetrationDepth <= EPSILON) return false; // Not penetrating or just touching
 
   // Check relative direction (velocity vs normal)
-  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.world);
+  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.position);
   const velocityDotNormal = s.velocity.dot(normal);
 
   // Cosine of the angle between -velocity and normal (impact angle relative to normal)
@@ -125,7 +120,7 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   );
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
-  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.world);
+  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.position);
 
   let bounce_percentage = hardness * impactBouncePotential;
 
@@ -136,13 +131,12 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   const energy = explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
 
   // Push object out along the normal by the penetration depth
-  s.world.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
+  s.position.add(targetWorkspace.copy(normal).scale(penetrationDepth + EPSILON)); // Reuse workspace vec
 
   bounce(s.velocity, normal, hardness, speed); // Modifies s.velocity in-place
   s.velocity.normalize();
 
-  const velocity = s.velocity.clone();
   s.velocity.scale(speed * bounce_percentage); // Set the new speed
 
-  return { energy, velocity };
+  return energy;
 }

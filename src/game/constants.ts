@@ -10,6 +10,7 @@ export const CANNON_WHEELS_SPRITE_ROTATION = Math.PI * 1.5; // to make it face r
 export const FLARES = "flares";
 export const PLAY_SOUNDS: boolean = true;
 export const GRAVITY_SI = 9.81;
+export const GRAVITY_WORLD = new Phaser.Math.Vector3(0, 0, -GRAVITY_SI * WORLD_UNIT_PER_METER);
 
 const TWELVE_POUND_BULLET_SI = { speed: 440, mass: 6, radius: 0.06 };
 

@@ -1,3 +1,5 @@
+import "phaser";
+
 // sync with the Electron API exposed in preload.js
 export interface ElectronAPI {
   log: (...args: any[]) => void;
@@ -9,5 +11,7 @@ export interface ElectronAPI {
 declare global {
   interface Window {
     electron?: ElectronAPI;
+    game?: Phaser.Game;
+    app?: React.JSX.Element;
   }
 }

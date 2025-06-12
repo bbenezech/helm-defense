@@ -11,6 +11,7 @@ import {
   BULLET,
   PERSPECTIVE_INDEX,
   PERSPECTIVES,
+  GRAVITY_WORLD,
 } from "../constants";
 import { createCannonTexture } from "../texture/cannon";
 import { createCircleTexture } from "../texture/circle";
@@ -18,10 +19,10 @@ import { createParticleTexture } from "../texture/particle";
 import { randomNormal } from "../lib/random";
 import { SURFACE_HARDNESS } from "../world/surface";
 import { Sound } from "../lib/sound";
-import { log } from "../lib/log";
 import fpsBus from "../../store/fps";
 import timeScaleStore from "../../store/time-scale";
 import { createPointer } from "../lib/pointer";
+import { Coordinates } from "../lib/coordinates";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";
@@ -47,6 +48,7 @@ export class GameScene extends Phaser.Scene {
   screenToWorldHorizontal!: Phaser.Math.Vector3;
   screenToWorldVertical!: Phaser.Math.Vector3;
   worldToScreen!: Phaser.Math.Vector3;
+  gravity!: Coordinates;
   zoom!: number;
   zooms!: number[];
   cannonBlast!: Sound;
@@ -66,10 +68,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   setupPerspective() {
-    this.dirty = true; // inform objects to update their visuals, because perspective has changed
-
+    this.dirty = true;
     const camRotation = Phaser.Math.DegToRad(PERSPECTIVE_INDEX[this.perspective]);
-
     const cosCam = Math.cos(camRotation);
     const sinCam = Math.sin(camRotation);
     const cotCam = cosCam / sinCam;
@@ -93,11 +93,18 @@ export class GameScene extends Phaser.Scene {
 
     // convert a world unit to screen pixels on all 3 axes
     this.worldToScreen = new Phaser.Math.Vector3(1, this.Y_FACTOR, this.Z_FACTOR);
+  }
 
-    // objects are created at world position (0, 0, 0) and moved to their position relative to the projection
+  changePerspective(perspective: (typeof PERSPECTIVES)[number]) {
+    if (this.perspective === perspective) return;
+    this.perspective = perspective;
+    this.setupPerspective();
+
     // if projection changes, we need to update their position
     this.cannon.setWorld(this.tileToWorldPosition(34, 75));
     this.cube.setWorld(this.tileToWorldPosition(70, 77));
+
+    this.events.emit("perspective-change");
   }
 
   // Convert tile coordinates to world position
@@ -228,6 +235,7 @@ export class GameScene extends Phaser.Scene {
     this.selectionGraphics = this.add.graphics();
 
     this.setupCamera();
+    this.setupPerspective();
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -268,21 +276,20 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard?.on("keydown", async (e: KeyboardEvent) => {
       switch (e.keyCode) {
-        case Phaser.Input.Keyboard.KeyCodes.W:
-          this.perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) + 1];
-          if (this.perspective === undefined) this.nudge();
-          this.perspective ||= PERSPECTIVES[PERSPECTIVES.length - 1];
-          this.setupPerspective();
-          log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
+        case Phaser.Input.Keyboard.KeyCodes.W: {
+          const perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) + 1];
+          if (perspective === undefined) {
+            this.nudge();
+          } else this.changePerspective(perspective);
           break;
-        case Phaser.Input.Keyboard.KeyCodes.S:
-          this.perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) - 1];
-
-          if (this.perspective === undefined) this.nudge();
-          this.perspective ||= PERSPECTIVES[0];
-          this.setupPerspective();
-          log(`Perspective changed to ${this.perspective} (${PERSPECTIVE_INDEX[this.perspective]}°)`);
+        }
+        case Phaser.Input.Keyboard.KeyCodes.S: {
+          const perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) - 1];
+          if (perspective === undefined) {
+            this.nudge();
+          } else this.changePerspective(perspective);
           break;
+        }
         case Phaser.Input.Keyboard.KeyCodes.SPACE:
           timeScaleStore.togglePause();
           break;
@@ -317,10 +324,11 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // Game
+    this.gravity = new Coordinates(this, GRAVITY_WORLD);
     this.cannon = new Cannon(this, 270);
+    this.cannon.setWorld(this.tileToWorldPosition(34, 75));
     this.cube = new Cube(this, 5, 5, 5, Math.PI / 4);
-    this.setupPerspective();
+    this.cube.setWorld(this.tileToWorldPosition(70, 77));
   }
 
   setupCamera() {

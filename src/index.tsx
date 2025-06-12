@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "./components/app";
 import "./style.css";
 
+window.app = <App />;
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);
 
 const NODE_ENV = import.meta.env.PROD ? "production" : "development";

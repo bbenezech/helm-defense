@@ -1,4 +1,5 @@
-import { store } from ".";
+import { localStore } from ".";
 
-const score = store(0);
+const score = localStore("score", 0);
+
 export default score;

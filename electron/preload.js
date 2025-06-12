@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+const { contextBridge, ipcRenderer } = require("electron");
 
 // sync with electron.d.ts
 contextBridge.exposeInMainWorld("electron", {

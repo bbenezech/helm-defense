@@ -7,9 +7,9 @@ export function sphereToSphereCollision(
   restitution: number, // 0..1 0= perfectly inelastic, 1 = perfectly elastic
   computeDamage: boolean,
 ): number {
-  const dx = b.world.x - a.world.x;
-  const dy = b.world.y - a.world.y;
-  const dz = b.world.z - a.world.z;
+  const dx = b.position.x - a.position.x;
+  const dy = b.position.y - a.position.y;
+  const dz = b.position.z - a.position.z;
   const distSq = dx * dx + dy * dy + dz * dz;
 
   if (distSq >= combinedSqRadius) return 0; // outside or just touching

@@ -9,32 +9,32 @@ import {
   GRAVITY_SI,
 } from "../constants";
 import { GameScene } from "../scene/game";
-import { sphereToGroundCollision, type Collision, type Solid } from "../collision/sphere-to-ground"; // Import the collision function
+import { sphereToGroundCollision, type Solid } from "../collision/sphere-to-ground"; // Import the collision function
 import timeScaleStore from "../../store/time-scale";
+import { randomNormal } from "../lib/random";
+import { Coordinates } from "../lib/coordinates";
 
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³
+const STATIC_PARTICLE_MS = 3000;
 
 export class Bullet extends Phaser.GameObjects.Image implements Solid {
-  world: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
-  screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-  shadowScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-  shadowWorld: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
-  _screenVelocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  position: Coordinates;
+  shadowPosition: Coordinates;
+  velocity: Coordinates;
 
   private moveTimer = 0;
   private dragTimer = 0;
 
   private dirty: boolean = true;
 
-  velocity: Phaser.Math.Vector3;
   shadow: Phaser.GameObjects.Image;
   gameScene: GameScene;
   mass: number;
   invMass: number;
   dragConstantSI: number;
   explosionEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
-  explosion: false | Collision = false; // Explosion effect on next frame
+  explosion: false | number = false; // Explosion effect on next frame
 
   constructor(gameScene: GameScene, world: Phaser.Math.Vector3, normalizedVelocity: Phaser.Math.Vector3) {
     super(gameScene, 0, 0, BULLET_SPRITE);
@@ -44,39 +44,52 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       .setAlpha(0.5)
       .setScale(this.gameScene.worldToScreen.x, this.gameScene.worldToScreen.y);
 
-    this.velocity = normalizedVelocity.clone().scale(BULLET.speed);
-    this.setWorld(world);
+    this.velocity = new Coordinates(this, normalizedVelocity);
+    this.velocity.scale(BULLET.speed);
+    this.position = new Coordinates(this, world);
+    this.shadowPosition = new Coordinates(this, world);
+
     this.dragConstantSI = 0.5 * rho * C_d * Math.PI * BULLET.radiusSI * BULLET.radiusSI; // ½ * ρ * v²
     this.gameScene.add.existing(this);
     this.mass = BULLET.mass;
     this.invMass = BULLET.invMass;
-    this.explosionEmitter = this.gameScene.add.particles(this.x, this.y, PARTICLE_SPRITE, {
-      lifespan: { min: 800, max: 1600 },
-      angle: { min: -30, max: 30 },
-      speed: { min: 140 * this.gameScene.worldToScreen.z, max: 180 * this.gameScene.worldToScreen.z },
+    this.explosionEmitter = this.gameScene.add.particles(0, 0, PARTICLE_SPRITE, {
       frequency: -1,
+      radial: false,
+      speedX: () => randomNormal(this.velocity.screen.x / 2, 10),
+      speedY: () => randomNormal(this.velocity.screen.y / 2, 10),
+      accelerationX: this.gameScene.gravity.screen.x,
+      accelerationY: this.gameScene.gravity.screen.y,
+      x: {
+        onEmit: () => this.position.screen.x,
+        onUpdate: (particle, _key, _t, value) => {
+          if (particle.velocityY !== 0 && particle.lifeCurrent < STATIC_PARTICLE_MS) {
+            particle.velocityX = 0;
+            particle.velocityY = 0;
+            particle.alpha = 0.7;
+          }
+          return value;
+        },
+      },
+      y: () => this.position.screen.y,
+      lifespan: {
+        onEmit: () =>
+          ((this.velocity.z / 2) * 2 * 1000) / -this.gameScene.gravity.world.z +
+          STATIC_PARTICLE_MS +
+          Math.random() * 500 -
+          250,
+      },
     });
   }
 
-  setWorld(world: Phaser.Math.Vector3) {
-    this.world = this.world.copy(world);
-    this.screen = this.gameScene.getScreenPosition(this.world, this.screen);
-    this.shadowWorld.x = this.world.x;
-    this.shadowWorld.y = this.world.y;
-    this.shadowWorld.z = this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
-
-    this.shadowScreen = this.gameScene.getScreenPosition(this.shadowWorld, this.shadowScreen);
-
-    this.dirty = true;
-  }
-
   move(delta: number) {
+    this.dirty = true;
     if (this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0) return;
     const speedSq = this.velocity.lengthSq();
     if (speedSq < 1) {
       this.velocity.reset();
-      this.world.z = this.gameScene.getSurfaceZFromWorldPosition(this.world) ?? 0;
-      this.setWorld(this.world);
+      this.position.z = this.gameScene.getSurfaceZFromWorldPosition(this.position) ?? 0;
+      return;
     }
 
     // calculate drag every 1/4 of seconds
@@ -105,38 +118,27 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     }
 
     const deltaSeconds = delta / 1000; // Convert ms to seconds for physics
-    this.world.x += this.velocity.x * deltaSeconds;
-    this.world.y += this.velocity.y * deltaSeconds;
-    this.world.z += this.velocity.z * deltaSeconds;
+    this.position.x += this.velocity.x * deltaSeconds;
+    this.position.y += this.velocity.y * deltaSeconds;
+    this.position.z += this.velocity.z * deltaSeconds;
     this.explosion = sphereToGroundCollision(this, speedSq, speed);
-
-    this.setWorld(this.world);
   }
 
   updateVisuals() {
-    this.setPosition(this.screen.x, this.screen.y).setDepth(this.screen.y);
-
-    if (this.gameScene.getSurfaceZFromWorldPosition(this.world) === null) {
+    this.setPosition(this.position.screen.x, this.position.screen.y).setDepth(this.position.screen.y);
+    const surfaceZ = this.gameScene.getSurfaceZFromWorldPosition(this.position);
+    if (surfaceZ === null) {
       this.shadow.setVisible(false);
     } else {
+      this.shadowPosition.set(this.position.x, this.position.y, surfaceZ);
       if (this.shadow.visible === false) this.shadow.setVisible(true);
-      this.shadow.setPosition(this.shadowScreen.x, this.shadowScreen.y).setDepth(this.shadowScreen.y);
+      this.shadow
+        .setPosition(this.shadowPosition.screen.x, this.shadowPosition.screen.y)
+        .setDepth(this.shadowPosition.screen.y);
     }
 
     if (this.explosion !== false) {
-      const screenVelocity = this.gameScene.getScreenPosition(this.explosion.velocity, this._screenVelocity);
-      const rotation = Math.atan2(screenVelocity.y, screenVelocity.x);
-
-      const gravity = GRAVITY_SI * WORLD_UNIT_PER_METER * this.gameScene.worldToScreen.z;
-
-      const rotationToGround = Phaser.Math.Angle.GetShortestDistance(rotation, Math.PI / 2);
-
-      this.explosionEmitter
-        .setParticleGravity(gravity * Math.cos(rotationToGround), gravity * Math.sin(rotationToGround))
-        .setPosition(this.screen.x, this.screen.y)
-        .setRotation(rotation)
-        .explode(Phaser.Math.Clamp(this.explosion.energy * 20, 1, 20));
-
+      this.explosionEmitter.explode(Phaser.Math.Clamp(this.explosion * 30, 1, 30));
       this.explosion = false;
     }
   }

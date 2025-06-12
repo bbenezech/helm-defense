@@ -26,4 +26,10 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off", // allow escape hatch, we use tons of dubiously typed libraries
     },
   },
+  {
+    files: ["**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off", // allow escape hatch, we use tons of dubiously typed libraries
+    },
+  },
 );
