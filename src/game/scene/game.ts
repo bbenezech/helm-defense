@@ -343,8 +343,8 @@ export class GameScene extends Phaser.Scene {
     this.handleResize(this.game.scale.gameSize);
   }
 
-  nudge() {
-    this.cameras.main.shake(200, (1 / this.zoom) * 0.003);
+  nudge(ratio: number = 1) {
+    this.cameras.main.shake(200, (1 / this.zoom) * 0.003 * ratio);
   }
 
   changeZoomDiscrete(direction: 1 | -1) {

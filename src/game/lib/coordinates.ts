@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import { GameScene } from "../scene/game";
 
-export type Coordinates = Phaser.Math.Vector3 & {
+export type Coordinates = {
   readonly screen: Phaser.Math.Vector2;
-  readonly world: Phaser.Math.Vector3;
-};
+  isEmpty(): boolean;
+  length(): number;
+  screenLength(): number;
+} & Phaser.Math.Vector3;
 
 type GameObject = Phaser.GameObjects.GameObject & { gameScene: GameScene };
 
@@ -13,11 +15,16 @@ export interface CoordinatesConstructor {
   new (parent: GameObject | GameScene, coordinates: Phaser.Math.Vector3): Coordinates;
 }
 
-// Phaser.Math.Vector3 with screen coordinates that updates automatically
+const vectorProps = ["x", "y", "z"];
+
+// Phaser.Math.Vector3 for world coordinates that update screen coordinates automatically
 class CoordinatesImpl {
   private readonly gameScene: GameScene;
   private readonly world = new Phaser.Math.Vector3();
-  public readonly screen = new Phaser.Math.Vector2();
+  private screenVector = new Phaser.Math.Vector2();
+  private worldLengthCache: number | undefined = undefined;
+  private screenLengthCache: number | undefined = undefined;
+  private screenUpToDate = false;
 
   constructor(parent: GameObject | GameScene, xOrCoordinates: number | Phaser.Math.Vector3 = 0, y = 0, z = 0) {
     if (typeof xOrCoordinates === "number") {
@@ -26,43 +33,91 @@ class CoordinatesImpl {
       this.world.copy(xOrCoordinates);
     }
     this.gameScene = parent instanceof GameScene ? parent : parent.gameScene;
+    if (this.gameScene === undefined)
+      throw new Error("Coordinates must be created on a GameScene or an initialized GameObject that has a gameScene.");
 
-    this.refresh();
-    this.gameScene.events.on("perspective-change", this.refresh, this);
-    if (parent instanceof Phaser.GameObjects.GameObject)
-      parent.once("destroy", () => {
-        this.gameScene.events.off("perspective-change", this.refresh, this);
-      });
-    this.gameScene.events.once("destroy", () => {
-      this.gameScene.events.off("perspective-change", this.refresh, this);
-    });
+    this.gameScene.events.on("perspective-change", this.refreshScreen, this);
+    const cleanup = () => this.gameScene.events.off("perspective-change", this.refreshScreen, this);
+    this.gameScene.events.once("destroy", cleanup, this);
+    if (parent instanceof Phaser.GameObjects.GameObject) parent.once("destroy", cleanup, this);
 
-    // sweet Jesus, let's hope Gemini knows his shit
     return new Proxy(this, {
       set: (target, prop, value): boolean => {
-        Reflect.set(target.world, prop, value);
-        this.refresh();
+        if (vectorProps.includes(String(prop))) {
+          // console.log(`0.1 Setting property ${String(prop)} to ${value} on world instance`);
+          Reflect.set(target.world, prop, value);
+          // Refresh the screen coordinates and prune caches
+          target.refresh();
+        } else {
+          // Set the property directly on the CoordinatesImpl instance.
+          // console.log(`0.2 Setting property ${String(prop)} to ${value} on Coordinates instance`);
+          Reflect.set(target, prop, value);
+        }
+
         return true;
       },
       get: (target, prop, receiver) => {
-        // Prioritize properties on our implementation class ('screen')
-        if (prop in target) return Reflect.get(target, prop, receiver);
-        const valueFromWorld = Reflect.get(target.world, prop);
-        if (typeof valueFromWorld === "function") {
-          return (...args: any[]) => {
-            const result = valueFromWorld.apply(target.world, args);
-            this.refresh();
-            // Return the proxy for chaini ng
-            return result === target.world ? receiver : result;
-          };
+        // Prioritize properties on our implementation
+        if (prop in target) {
+          // console.log(`1.Getting property ${String(prop)}`);
+          return Reflect.get(target, prop, receiver);
+        } else {
+          const valueFromWorld = Reflect.get(target.world, prop);
+          if (typeof valueFromWorld === "function") {
+            // console.log(`2.Getting property ${String(prop)}`);
+            return (...args: any[]) => {
+              const result = valueFromWorld.apply(target.world, args);
+              // Only refresh if a mutator method was called
+              // This is a good optimization to prevent refreshes on .length(), for example
+              if (result === target.world) {
+                // console.log(`2.1. mutator called ${String(prop)}`);
+                target.refresh();
+              } else {
+                // console.log(`2.2. non mutator method called ${String(prop)}`);
+              }
+              // Return the proxy for chaining
+              return result === target.world ? receiver : result;
+            };
+          } else {
+            // console.log(`3.Getting property ${String(prop)}`);
+            return valueFromWorld;
+          }
         }
-        return valueFromWorld;
       },
     });
   }
 
   private refresh() {
-    this.gameScene.getScreenPosition(this.world, this.screen);
+    this.worldLengthCache = undefined;
+    this.refreshScreen();
+  }
+
+  private refreshScreen() {
+    this.screenUpToDate = false;
+    this.screenLengthCache = undefined;
+  }
+
+  public isEmpty() {
+    return this.world.x === 0 && this.world.y === 0 && this.world.z === 0;
+  }
+
+  public length() {
+    return this.worldLength();
+  }
+
+  public worldLength() {
+    return (this.worldLengthCache ??= this.world.length());
+  }
+  public screenLength() {
+    return (this.screenLengthCache ??= this.screen.length());
+  }
+
+  public get screen() {
+    if (!this.screenUpToDate) {
+      this.gameScene.getScreenPosition(this.world, this.screenVector);
+      this.screenUpToDate = true;
+    }
+    return this.screenVector;
   }
 }
 

@@ -1,7 +1,7 @@
-export function velocityVectorFromAzymuthAndAltitude(
+export function setNormalizedVelocity(
   azymuthRad: number,
   altitudeRad: number,
-  output: Phaser.Math.Vector3
+  output: Phaser.Math.Vector3,
 ): Phaser.Math.Vector3 {
   const horizontalSpeed = Math.cos(altitudeRad);
   output.x = Math.cos(azymuthRad) * horizontalSpeed;
@@ -10,15 +10,11 @@ export function velocityVectorFromAzymuthAndAltitude(
   return output;
 }
 
-export function altitudeRadFromVelocityVector(
-  vector: Phaser.Math.Vector3
-): number {
+export function altitudeRadFromVelocityVector(vector: Phaser.Math.Vector3): number {
   return Math.asin(Math.max(-1, Math.min(1, vector.z)));
 }
 
-export function azimuthRadFromVelocityVector(
-  vector: Phaser.Math.Vector3
-): number {
+export function azimuthRadFromVelocityVector(vector: Phaser.Math.Vector3): number {
   return Math.atan2(vector.y, vector.x);
 }
 

@@ -5,7 +5,7 @@ import type { GameScene } from "../scene/game";
 const ENNEMY_MASS_KG = 100;
 
 export class Enemy extends Phaser.GameObjects.Image implements Solid {
-  position: Phaser.Math.Vector3;
+  coordinates: Phaser.Math.Vector3;
   velocity: Phaser.Math.Vector3 = new Phaser.Math.Vector3(0, 0, 0);
   gameScene: GameScene;
   mass = ENNEMY_MASS_KG;
@@ -18,7 +18,7 @@ export class Enemy extends Phaser.GameObjects.Image implements Solid {
   constructor(gameScene: GameScene, world: Phaser.Math.Vector3) {
     super(gameScene, 0, 0, ENEMY_SPRITE);
 
-    this.position = world.clone();
+    this.coordinates = world.clone();
     this.gameScene = gameScene;
     this.gameScene.add.existing(this);
   }
