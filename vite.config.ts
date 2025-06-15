@@ -54,5 +54,5 @@ export default defineConfig(({ mode }) => ({
           },
         },
       ]
-    : [react()],
+    : [react({ babel: { plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]] } })],
 }));

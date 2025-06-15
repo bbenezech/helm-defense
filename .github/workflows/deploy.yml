@@ -37,9 +37,9 @@ jobs:
         with:
           node-version: "20"
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
       - name: Build
-        run: npm run build:gh
+        run: yarn build:gh
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

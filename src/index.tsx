@@ -4,7 +4,7 @@ import { App } from "./components/app";
 import "./style.css";
 
 window.app = <App />;
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(window.app);
 
 const NODE_ENV = import.meta.env.PROD ? "production" : "development";
 if (NODE_ENV === "development")
