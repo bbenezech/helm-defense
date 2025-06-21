@@ -76,7 +76,7 @@ const LAYER_DATA = {
   ],
 } as const;
 
-const getLayer = (index: 0 | 1 | 2, slopeheight: number) => {
+function getLayer({ index, slopeheight }: { index: 0 | 1 | 2; slopeheight: number }) {
   const data = LAYER_DATA[index];
   return {
     id: index + 1,
@@ -92,7 +92,7 @@ const getLayer = (index: 0 | 1 | 2, slopeheight: number) => {
     height: data.length,
     data: data.flat(),
   };
-};
+}
 
 const getExampleMap = ({
   tilesetSource,
@@ -105,7 +105,11 @@ const getExampleMap = ({
   tilewidth: number;
   slopeheight: number;
 }) => {
-  const layers = [getLayer(0, slopeheight), getLayer(1, slopeheight), getLayer(2, slopeheight)];
+  const layers = [
+    getLayer({ index: 0, slopeheight }),
+    getLayer({ index: 1, slopeheight }),
+    getLayer({ index: 2, slopeheight }),
+  ];
   const width = layers.reduce((max, layer) => Math.max(max, layer.width + layer.x), 0);
   const height = layers.reduce((max, layer) => Math.max(max, layer.height + layer.y), 0);
   return {
@@ -165,13 +169,21 @@ function getTileset({
   };
 }
 
-const getMontageCommand = (tileset: ReturnType<typeof getTileset>, inputDir: string, output: string) => {
+function getMontageCommand({
+  tileset,
+  inputDir,
+  output,
+}: {
+  tileset: ReturnType<typeof getTileset>;
+  inputDir: string;
+  output: string;
+}) {
   return `magick montage ${inputDir}/*.png \
         -tile ${tileset.columns}x${tileset.rows} \
         -geometry ${tileset.tilewidth}x${tileset.tileheight}+${TILE_MARGIN}+${TILE_MARGIN} \
         -background transparent \
         png:- | magick png:- -bordercolor transparent -border ${TILESET_MARGIN} ${output}`;
-};
+}
 
 export const createTilesetFiles = (name: string, inputDir: string, outputDir: string) => {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -199,7 +211,7 @@ export const createTilesetFiles = (name: string, inputDir: string, outputDir: st
   const tilesetFilename = `${name}.json`;
   const exampleMap = getExampleMap({ tilesetSource: tilesetFilename, tilewidth, tileheight, slopeheight });
 
-  execSync(getMontageCommand(tileset, inputDir, path.join(outputDir, imageFilename)));
+  execSync(getMontageCommand({ tileset, inputDir, output: path.join(outputDir, imageFilename) }));
   fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
   fs.writeFileSync(path.join(outputDir, exampleMapFilename), JSON.stringify(exampleMap, null, 2));
 };
