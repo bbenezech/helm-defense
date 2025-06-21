@@ -1,16 +1,16 @@
 {
+  "type": "tileset",
+  "name": "green",
   "image": "green.png",
   "tilewidth": 128,
   "tileheight": 96,
   "tilecount": 19,
-  "columns": 4,
   "rows": 5,
-  "tiledversion": "1.11.2",
-  "version": "1.10",
-  "type": "tileset",
+  "columns": 4,
   "spacing": 0,
   "margin": 0,
-  "imageheight": 480,
   "imagewidth": 512,
-  "name": "green"
+  "imageheight": 480,
+  "version": "1.10",
+  "tiledversion": "1.11.2"
 }

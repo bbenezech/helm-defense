@@ -1,15 +1,11 @@
 import path from "path";
-import fs from "fs";
+import fs, { readFileSync } from "fs";
 import { execSync } from "child_process";
+import { imageSize } from "image-size";
 
-const TILE_WIDTH = 128; // must be the same as the width of the Blender output
 const TILE_MARGIN = 0; // margin around each tile
 const TILESET_MARGIN = 0; // margin around the whole tileset image
 const TILESET_COLUMNS = 4;
-
-if (TILE_WIDTH % 8 !== 0) throw new Error(`TILE_WIDTH must be a multiple of 8, got ${TILE_WIDTH}`);
-const TILE_HEIGHT = TILE_WIDTH / 2;
-const SLOPE_HEIGHT = TILE_HEIGHT / 4;
 
 const LAYER_DATA = {
   0: [
@@ -80,7 +76,7 @@ const LAYER_DATA = {
   ],
 } as const;
 
-const getLayer = (index: 0 | 1 | 2) => {
+const getLayer = (index: 0 | 1 | 2, slopeheight: number) => {
   const data = LAYER_DATA[index];
   return {
     id: index + 1,
@@ -91,15 +87,25 @@ const getLayer = (index: 0 | 1 | 2) => {
     x: 0,
     y: 0,
     offsetx: 0,
-    offsety: -(index * SLOPE_HEIGHT),
+    offsety: -(index * slopeheight),
     width: data[0].length,
     height: data.length,
     data: data.flat(),
   };
 };
 
-const getExampleMap = (tileset: string) => {
-  const layers = [getLayer(0), getLayer(1), getLayer(2)];
+const getExampleMap = ({
+  tilesetSource,
+  slopeheight,
+  tileheight,
+  tilewidth,
+}: {
+  tilesetSource: string;
+  tileheight: number;
+  tilewidth: number;
+  slopeheight: number;
+}) => {
+  const layers = [getLayer(0, slopeheight), getLayer(1, slopeheight), getLayer(2, slopeheight)];
   const width = layers.reduce((max, layer) => Math.max(max, layer.width + layer.x), 0);
   const height = layers.reduce((max, layer) => Math.max(max, layer.height + layer.y), 0);
   return {
@@ -108,9 +114,9 @@ const getExampleMap = (tileset: string) => {
     renderorder: "right-down",
     width,
     height,
-    tilesets: [{ firstgid: 1, source: tileset }],
-    tileheight: TILE_HEIGHT,
-    tilewidth: TILE_WIDTH,
+    tilesets: [{ firstgid: 1, source: tilesetSource }],
+    tileheight,
+    tilewidth,
     layers,
     nextlayerid: 4,
     nextobjectid: 1,
@@ -121,11 +127,21 @@ const getExampleMap = (tileset: string) => {
   };
 };
 
-const getTileset = (name: string, imageFilename: string, tilecount: number) => {
+function getTileset({
+  imageFilename,
+  name,
+  tilecount,
+  tileheight,
+  tilewidth,
+}: {
+  name: string;
+  imageFilename: string;
+  tilewidth: number;
+  tileheight: number;
+  tilecount: number;
+}) {
   const rows = Math.ceil(tilecount / TILESET_COLUMNS);
   const columns = Math.min(TILESET_COLUMNS, tilecount);
-  const tilewidth = TILE_WIDTH;
-  const tileheight = TILE_HEIGHT + 2 * SLOPE_HEIGHT; // isometric tile height + slope space beneath and above
   const spacing = TILE_MARGIN * 2;
   const margin = TILESET_MARGIN + TILE_MARGIN;
   const imagewidth = (tilewidth + 2 * TILE_MARGIN) * columns + TILESET_MARGIN * 2;
@@ -147,7 +163,7 @@ const getTileset = (name: string, imageFilename: string, tilecount: number) => {
     version: "1.10",
     tiledversion: "1.11.2",
   };
-};
+}
 
 const getMontageCommand = (tileset: ReturnType<typeof getTileset>, inputDir: string, output: string) => {
   return `magick montage ${inputDir}/*.png \
@@ -160,12 +176,28 @@ const getMontageCommand = (tileset: ReturnType<typeof getTileset>, inputDir: str
 export const createTilesetFiles = (name: string, inputDir: string, outputDir: string) => {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
+  if (tilecount < 1) throw new Error(`No PNG files found in input directory: ${inputDir}`);
+  const firstTilePath = path.join(inputDir, fs.readdirSync(inputDir).find((file) => file.endsWith(".png"))!);
+  const tileImage = imageSize(readFileSync(firstTilePath));
+  const tileimagewidth = tileImage.width;
+  if (tileimagewidth % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileimagewidth}`);
+  const tileimageheight = tileImage.height;
+  const tilewidth = tileimagewidth;
+  const tileheight = tilewidth / 2;
+  const slopeheight = (tileimageheight - tileheight) / 2; // one slope height at the top and one slope height at the bottom
+
   const imageFilename = `${name}.png`;
-  const tileset = getTileset(name, imageFilename, tilecount);
+  const tileset = getTileset({
+    name,
+    imageFilename,
+    tilewidth: tileimagewidth,
+    tileheight: tileimageheight,
+    tilecount,
+  });
 
   const exampleMapFilename = `${name}-example-map.json`;
   const tilesetFilename = `${name}.json`;
-  const exampleMap = getExampleMap(tilesetFilename);
+  const exampleMap = getExampleMap({ tilesetSource: tilesetFilename, tilewidth, tileheight, slopeheight });
 
   execSync(getMontageCommand(tileset, inputDir, path.join(outputDir, imageFilename)));
   fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
