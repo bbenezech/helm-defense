@@ -22,6 +22,7 @@
     "noFallthroughCasesInSwitch": true,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
+    "allowImportingTsExtensions": true,
     "assumeChangesOnlyAffectDirectDependencies": true,
     "exactOptionalPropertyTypes": true,
     "noImplicitReturns": true,

@@ -14,12 +14,16 @@
     "serve": "vite serve",
     "electron:dev": "concurrently -r 'vite --mode electron' 'NODE_ENV=development electron electron/main.js'",
     "electron:mac": "npm run build && electron-builder --mac --dir",
-    "ci": "yarn && yarn tsc && yarn eslint"
+    "ci": "yarn && yarn tsc && yarn eslint",
+    "slope": "node -r @swc-node/register ./src/scripts/slope.ts"
   },
   "dependencies": {
     "@swc-node/register": "^1.10.10",
+    "@swc/core": "^1.12.1",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
+    "@types/sharp": "^0.32.0",
+    "@types/yargs": "^17.0.33",
     "@vitejs/plugin-react": "^4.5.1",
     "babel-plugin-react-compiler": "^19.1.0-rc.2",
     "body-parser": "^2.2.0",
@@ -37,9 +41,11 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "serve": "^14.2.4",
+    "sharp": "^0.34.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.34.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "yargs": "^18.0.0"
   },
   "devDependencies": {
     "@emnapi/core": "^1.4.3",
