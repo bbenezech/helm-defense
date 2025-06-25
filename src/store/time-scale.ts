@@ -1,4 +1,4 @@
-import { sessionStore } from ".";
+import { sessionStore } from "./index.js";
 
 const options: number[] = [0, 0.25, 0.5, 1, 2, 4];
 

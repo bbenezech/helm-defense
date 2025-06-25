@@ -1,34 +1,9 @@
 {
-  "compilerOptions": {
-    "jsx": "react",
-    "target": "es2024",
-    "module": "preserve",
-    "checkJs": true,
-    "allowJs": true,
-    "verbatimModuleSyntax": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "sourceMap": false,
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "noUncheckedSideEffectImports": true,
-    "noFallthroughCasesInSwitch": true,
-    "allowUnusedLabels": false,
-    "allowUnreachableCode": false,
-    "allowImportingTsExtensions": true,
-    "assumeChangesOnlyAffectDirectDependencies": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitReturns": true,
-    "noImplicitOverride": true,
-    "lib": ["es2024", "dom"],
-    "types": []
-  },
-  "include": ["src", "electron"]
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.config.json" },
+    { "path": "./src/tsconfig.json" },
+    { "path": "./scripts/tsconfig.json" },
+    { "path": "./electron/tsconfig.json" }
+  ]
 }

@@ -1,5 +1,5 @@
 import React from "react";
-import { start } from "../game";
+import { start } from "../game/index.js";
 
 const PAUSED_PREFIX = "Paused - ";
 function handleBlur(game: Phaser.Game) {

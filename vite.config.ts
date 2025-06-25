@@ -1,16 +1,16 @@
 import { defineConfig } from "vite";
 import bodyParser from "body-parser";
 import react from "@vitejs/plugin-react";
-import { IncomingMessage } from "http";
+import { IncomingMessage } from "node:http";
 
-const prod = process.env.NODE_ENV === "production";
+const prod = process.env["NODE_ENV"] === "production";
 const dev = !prod;
-const host = process.env.HOST || "0.0.0.0";
-const port = parseInt(process.env.PORT || "9000");
-const ReactCompilerConfig = {};
+const host = process.env["HOST"] || "0.0.0.0";
+const port = parseInt(process.env["PORT"] || "9000");
 
 export default defineConfig(({ mode }) => ({
   base: mode === "gh-pages" ? `/helm-defense/` : "./",
+  esbuild: { sourcemap: false, target: "esnext" },
   server: {
     host,
     port,
@@ -30,13 +30,12 @@ export default defineConfig(({ mode }) => ({
       ],
     },
   },
-  clearScreen: false,
-  build: { chunkSizeWarningLimit: 2000, sourcemap: false },
+  build: { chunkSizeWarningLimit: 2000, sourcemap: false, target: "esnext" },
   hmr: host ? { protocol: "ws", host, port: port + 1 } : undefined,
-  esbuild: { sourcemap: false },
+  clearScreen: false,
   plugins: dev
     ? [
-        react({ babel: { plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]] } }),
+        react(),
         {
           name: "log-viewer-middleware",
           configureServer(server) {
@@ -54,5 +53,5 @@ export default defineConfig(({ mode }) => ({
           },
         },
       ]
-    : [react({ babel: { plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]] } })],
+    : [react()],
 }));

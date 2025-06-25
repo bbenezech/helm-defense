@@ -1,5 +1,3 @@
-import "phaser";
-
 // sync with the Electron API exposed in preload.js
 export interface ElectronAPI {
   log: (...args: any[]) => void;

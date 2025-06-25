@@ -2,9 +2,9 @@
   "name": "cannon-defense-phaser",
   "private": true,
   "version": "0.0.1",
-  "type": "module",
   "author": "Ben",
   "description": "A Phaser game with Electron and Vite",
+  "type": "module",
   "main": "electron/main.js",
   "scripts": {
     "start": "vite --mode web",
@@ -15,17 +15,21 @@
     "electron:dev": "concurrently -r 'vite --mode electron' 'NODE_ENV=development electron electron/main.js'",
     "electron:mac": "npm run build && electron-builder --mac --dir",
     "ci": "yarn && yarn tsc && yarn eslint",
-    "slope": "node -r @swc-node/register ./src/scripts/slope.ts"
+    "slope": "node --loader @swc-node/register/esm ./scripts/slope.ts",
+    "tsc": "tsc --build",
+    "clean:tsc": "rm -f  ./tsconfig.*.tsbuildinfo; rm -f ./src/tsconfig.tsbuildinfo; rm -f  ./scripts/tsconfig.tsbuildinfo; rm -f ./electron/tsconfig.tsbuildinfo",
+    "clean": "rm -f ./scripts/texture.png && rm -rf ./scripts/all && rm -rf ./dist && rm -rf ./release && rm -rf ./release && rm -rf ./node_modules/.cache && yarn clean:tsc"
   },
   "dependencies": {
     "@swc-node/register": "^1.10.10",
     "@swc/core": "^1.12.1",
+    "@types/body-parser": "^1.19.6",
+    "@types/node": "^24.0.4",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
     "@types/sharp": "^0.32.0",
     "@types/yargs": "^17.0.33",
     "@vitejs/plugin-react": "^4.5.1",
-    "babel-plugin-react-compiler": "^19.1.0-rc.2",
     "body-parser": "^2.2.0",
     "concurrently": "^9.1.2",
     "d3-random": "^3.0.1",
@@ -52,7 +56,6 @@
     "@emnapi/core": "^1.4.3",
     "@types/d3-random": "^3.0.3",
     "@types/lodash.debounce": "^4.0.9",
-    "@types/node": "^22.15.29",
     "electron": "^36.4.0",
     "electron-builder": "^26.0.12"
   },

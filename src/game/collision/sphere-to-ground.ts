@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { GameScene } from "../scene/game"; // Assuming GameScene has the methods
-import { BULLET } from "../constants";
+import { GameScene } from "../scene/game.js"; // Assuming GameScene has the methods
+import { BULLET } from "../constants.js";
 
 export interface Solid {
   coordinates: Phaser.Math.Vector3;

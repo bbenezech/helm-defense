@@ -1,5 +1,5 @@
-import { Cannon } from "../actors/Cannon";
-import { Cube } from "../actors/Cube";
+import { Cannon } from "../actors/Cannon.js";
+import { Cube } from "../actors/Cube.js";
 import {
   BULLET_SPRITE,
   CANNON_SPRITE,
@@ -12,17 +12,17 @@ import {
   PERSPECTIVE_INDEX,
   PERSPECTIVES,
   GRAVITY_WORLD,
-} from "../constants";
-import { createCannonTexture } from "../texture/cannon";
-import { createCircleTexture } from "../texture/circle";
-import { createParticleTexture } from "../texture/particle";
-import { randomNormal } from "../lib/random";
-import { SURFACE_HARDNESS } from "../world/surface";
-import { Sound } from "../lib/sound";
-import fpsBus from "../../store/fps";
-import timeScaleStore from "../../store/time-scale";
-import { createPointer } from "../lib/pointer";
-import { Coordinates } from "../lib/coordinates";
+} from "../constants.js";
+import { createCannonTexture } from "../texture/cannon.js";
+import { createCircleTexture } from "../texture/circle.js";
+import { createParticleTexture } from "../texture/particle.js";
+import { randomNormal } from "../lib/random.js";
+import { SURFACE_HARDNESS } from "../world/surface.js";
+import { Sound } from "../lib/sound.js";
+import fpsBus from "../../store/fps.js";
+import timeScaleStore from "../../store/time-scale.js";
+import { createPointer } from "../lib/pointer.js";
+import { Coordinates } from "../lib/coordinates.js";
 
 const TOWN_SPRITE = "town";
 const DUNGEON_SPRITE = "dungeon";

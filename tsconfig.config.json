@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "types": ["node"] },
+  "files": ["eslint.config.ts", "vite.config.ts"]
+}

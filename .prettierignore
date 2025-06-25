@@ -1,1 +1,12 @@
-assets/tilemaps
+assets/
+node_modules/
+build/
+dist/
+release/
+webpack-stats.json
+coverage/
+traceDir/
+fixtures/
+*.d.ts
+*.min.js
+public/

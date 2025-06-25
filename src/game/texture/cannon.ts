@@ -1,4 +1,4 @@
-import { GameScene } from "../scene/game";
+import { GameScene } from "../scene/game.js";
 
 export function createCannonTexture(
   gameScene: GameScene,

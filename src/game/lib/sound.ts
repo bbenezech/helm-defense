@@ -1,7 +1,7 @@
-import { PLAY_SOUNDS } from "../constants";
-import { GameScene } from "../scene/game";
-import { randomNormal } from "./random";
-import { cameraHeight } from "./trigo";
+import { PLAY_SOUNDS } from "../constants.js";
+import { GameScene } from "../scene/game.js";
+import { randomNormal } from "./random.js";
+import { cameraHeight } from "./trigo.js";
 
 export class Sound {
   private gameScene: GameScene;

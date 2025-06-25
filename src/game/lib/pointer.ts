@@ -1,4 +1,4 @@
-import { GameScene } from "../scene/game";
+import { GameScene } from "../scene/game.js";
 
 const SCROLL_BOUNDARY = 100; // pixels from edge to start scrolling
 const SCROLL_SPEED = 2;

@@ -1,4 +1,4 @@
-import { localStore } from ".";
+import { localStore } from "./index.js";
 
 const score = localStore("score", 0);
 

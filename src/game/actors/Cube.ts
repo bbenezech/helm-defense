@@ -1,5 +1,5 @@
-import { WORLD_UNIT_PER_METER } from "../constants";
-import type { GameScene } from "../scene/game";
+import { WORLD_UNIT_PER_METER } from "../constants.js";
+import type { GameScene } from "../scene/game.js";
 
 // Colors for the two squares
 const TOP_COLOR = {

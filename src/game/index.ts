@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { GameScene } from "./scene/game";
-import { version } from "../../package.json";
+import { GameScene } from "./scene/game.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 const title = document.title;
 const url = import.meta.env.PROD ? "https://bbenezech.github.io/helm-defense" : window.location.href;
@@ -13,7 +13,7 @@ export function start(parent: string) {
     disableContextMenu: import.meta.env.PROD,
     title,
     url,
-    version,
+    version: packageJson.version,
     banner: { text: "yellow" },
     parent,
   });

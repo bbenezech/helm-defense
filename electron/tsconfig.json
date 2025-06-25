@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "allowJs": true, "checkJs": true, "lib": ["esnext"], "types": ["node"] }
+}

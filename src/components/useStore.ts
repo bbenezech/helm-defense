@@ -1,5 +1,5 @@
 import React from "react";
-import type { Bus, Store } from "../store";
+import type { Bus, Store } from "../store/index.js";
 
 export function useBusValue<T>({ subscribe }: Bus<T>): T | undefined {
   const [state, setState] = React.useState<T>();

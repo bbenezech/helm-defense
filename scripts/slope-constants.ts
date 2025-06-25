@@ -11,6 +11,7 @@ type UnionToTuple<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = tr
   ? []
   : [...UnionToTuple<Exclude<T, L>>, L];
 type Count<T> = UnionToTuple<T>["length"];
+type Vector3 = [number, number, number];
 
 export type SLOPE_BITMASK = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 23 | 27 | 29 | 30;
 export const SLOPE_BITMASK_COUNT_CHECK: Count<SLOPE_BITMASK> = 19;
@@ -30,21 +31,61 @@ export type SLOPE = {
   N: 0 | 1 | 2;
   E: 0 | 1 | 2;
   // normales
-  NORMAL_NE: [number, number, number];
-  NORMAL_NW: [number, number, number];
-  NORMAL_SE: [number, number, number];
-  NORMAL_SW: [number, number, number];
+  NORMAL_NE: Vector3;
+  NORMAL_NW: Vector3;
+  NORMAL_SE: Vector3;
+  NORMAL_SW: Vector3;
 };
 
-const TOP: [number, number, number] = [0, 0, 1];
-const SOUTH: [number, number, number] = [0.1933, -0.1933, 0.9619];
-const EAST: [number, number, number] = [0.1933, 0.1933, 0.9619];
-const WEST: [number, number, number] = [-0.1933, -0.1933, 0.9619];
-const NORTH: [number, number, number] = [-0.1933, 0.1933, 0.9619];
-const SOUTH_WEST: [number, number, number] = [0, -0.1985, 0.9801];
-const SOUTH_EAST: [number, number, number] = [0.1985, 0, 0.9801];
-const NORTH_WEST: [number, number, number] = [-0.1985, 0, 0.9801];
-const NORTH_EAST: [number, number, number] = [0, 0.1985, 0.9801];
+const TOP: Vector3 = [0, 0, 1];
+// isometric x, y, z coordinates
+// const SOUTH: Vector3 = [0.1933, -0.1933, 0.9619];
+// const EAST: Vector3 = [0.1933, 0.1933, 0.9619];
+// const WEST: Vector3 = [-0.1933, -0.1933, 0.9619];
+// const NORTH: Vector3 = [-0.1933, 0.1933, 0.9619];
+// const SOUTH_WEST: Vector3 = [0, -0.1985, 0.9801];
+// const SOUTH_EAST: Vector3 = [0.1985, 0, 0.9801];
+// const NORTH_WEST: Vector3 = [-0.1985, 0, 0.9801];
+// const NORTH_EAST: Vector3 = [0, 0.1985, 0.9801];
+
+// game engine x, y, z coordinates
+const SOUTH: Vector3 = [0, 0.2734, 0.9619]; // 15.87 degrees
+const EAST: Vector3 = [0.2734, 0, 0.9619];
+const WEST: Vector3 = [-0.2734, 0, 0.9619];
+const NORTH: Vector3 = [0, -0.2734, 0.9619];
+const SOUTH_WEST: Vector3 = [-0.14036, 0.14036, 0.9801]; // 11.45 degrees
+const SOUTH_EAST: Vector3 = [0.14036, 0.14036, 0.9801];
+const NORTH_WEST: Vector3 = [-0.14036, -0.14036, 0.9801];
+const NORTH_EAST: Vector3 = [0.14036, -0.14036, 0.9801];
+
+// from isometric to game engine coordinates
+// - X and Y are aligned with the isometric grid (toward the right), thus rotate by -45 degrees around the Z-axis
+// - X is positive to the right (ok)
+// - Y is positive up (inverse)
+// - Z is positive up (ok)
+export function fromIsoToGame(normal: Vector3): Vector3 {
+  const cos = Math.cos(-Math.PI / 4);
+  const sin = Math.sin(-Math.PI / 4);
+  const x = normal[0];
+  const y = normal[1];
+  const z = normal[2];
+  const newX = x * cos - y * sin;
+  const newY = x * sin + y * cos;
+  return [newX, -newY, z];
+}
+
+export function radToDeg(rad: number): number {
+  return rad * (180 / Math.PI);
+}
+
+// console.log(radToDeg(Math.acos(SOUTH[2])));
+// console.log(radToDeg(Math.acos(EAST[2])));
+// console.log(radToDeg(Math.acos(WEST[2])));
+// console.log(radToDeg(Math.acos(NORTH[2])));
+// console.log(radToDeg(Math.acos(SOUTH_WEST[2])));
+// console.log(radToDeg(Math.acos(SOUTH_EAST[2])));
+// console.log(radToDeg(Math.acos(NORTH_WEST[2])));
+// console.log(radToDeg(Math.acos(NORTH_EAST[2])));
 
 export const SLOPE_INDEX = {
   SLOPE_FLAT: {

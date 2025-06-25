@@ -220,7 +220,7 @@
     debug "^4.3.1"
     globals "^11.1.0"
 
-"@babel/types@^7.0.0", "@babel/types@^7.20.7", "@babel/types@^7.26.0", "@babel/types@^7.27.1", "@babel/types@^7.27.3", "@babel/types@^7.27.6":
+"@babel/types@^7.0.0", "@babel/types@^7.20.7", "@babel/types@^7.27.1", "@babel/types@^7.27.3", "@babel/types@^7.27.6":
   version "7.27.6"
   resolved "https://registry.yarnpkg.com/@babel/types/-/types-7.27.6.tgz#a434ca7add514d4e646c80f7375c0aa2befc5535"
   integrity sha512-ETyHEk2VHHvl9b9jZP5IHPavHYk57EhanlRRuae9XCpb/j5bDCbPPMOBfCWhnl/7EDJz0jEMCi/RhccCE8r1+Q==
@@ -1164,6 +1164,14 @@
   dependencies:
     "@babel/types" "^7.20.7"
 
+"@types/body-parser@^1.19.6":
+  version "1.19.6"
+  resolved "https://registry.yarnpkg.com/@types/body-parser/-/body-parser-1.19.6.tgz#1859bebb8fd7dac9918a45d54c1971ab8b5af474"
+  integrity sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==
+  dependencies:
+    "@types/connect" "*"
+    "@types/node" "*"
+
 "@types/cacheable-request@^6.0.1":
   version "6.0.3"
   resolved "https://registry.yarnpkg.com/@types/cacheable-request/-/cacheable-request-6.0.3.tgz#a430b3260466ca7b5ca5bfd735693b36e7a9d183"
@@ -1173,6 +1181,13 @@
     "@types/keyv" "^3.1.4"
     "@types/node" "*"
     "@types/responselike" "^1.0.0"
+
+"@types/connect@*":
+  version "3.4.38"
+  resolved "https://registry.yarnpkg.com/@types/connect/-/connect-3.4.38.tgz#5ba7f3bc4fbbdeaff8dded952e5ff2cc53f8d858"
+  integrity sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==
+  dependencies:
+    "@types/node" "*"
 
 "@types/d3-random@^3.0.3":
   version "3.0.3"
@@ -1244,12 +1259,19 @@
   dependencies:
     undici-types "~7.8.0"
 
-"@types/node@^22.15.29", "@types/node@^22.7.7":
+"@types/node@^22.7.7":
   version "22.15.31"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.31.tgz#454f11e2061150135c8353d7f3b3b1823fca9f3f"
   integrity sha512-jnVe5ULKl6tijxUhvQeNbQG/84fHfg+yMak02cT8QVhBx/F05rAVxCGBYYTh2EKz22D6JF5ktXuNwdx7b9iEGw==
   dependencies:
     undici-types "~6.21.0"
+
+"@types/node@^24.0.4":
+  version "24.0.4"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-24.0.4.tgz#dbae889912bda33a7f57669fb8587c1a56bc0c1f"
+  integrity sha512-ulyqAkrhnuNq9pB76DRBTkcS6YsmDALy6Ua63V8OhrOBgbcYt6IOdzpw5P1+dyRIyMerzLkeYWBeOXPpA9GMAA==
+  dependencies:
+    undici-types "~7.8.0"
 
 "@types/plist@^3.0.1":
   version "3.0.5"
@@ -1620,13 +1642,6 @@ at-least-node@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/at-least-node/-/at-least-node-1.0.0.tgz#602cd4b46e844ad4effc92a8011a3c46e0238dc2"
   integrity sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==
-
-babel-plugin-react-compiler@^19.1.0-rc.2:
-  version "19.1.0-rc.2"
-  resolved "https://registry.yarnpkg.com/babel-plugin-react-compiler/-/babel-plugin-react-compiler-19.1.0-rc.2.tgz#ef77f4316a2086d81f95ad8edbe081e2840d87a4"
-  integrity sha512-kSNA//p5fMO6ypG8EkEVPIqAjwIXm5tMjfD1XRPL/sRjYSbJ6UsvORfaeolNWnZ9n310aM0xJP7peW26BuCVzA==
-  dependencies:
-    "@babel/types" "^7.26.0"
 
 balanced-match@^1.0.0:
   version "1.0.2"
