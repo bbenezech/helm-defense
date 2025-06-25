@@ -1,6 +1,5 @@
-// example use of slopes
-const LAYER_DATA = {
-  0: [
+export const EXAMPLE_TILEMAP_LAYER_DATA = [
+  [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -22,7 +21,7 @@ const LAYER_DATA = {
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
   ],
-  1: [
+  [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -44,7 +43,7 @@ const LAYER_DATA = {
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
-  2: [
+  [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -66,59 +65,23 @@ const LAYER_DATA = {
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
-} as const;
+];
 
-function getLayer({ index, slopeheight }: { index: keyof typeof LAYER_DATA; slopeheight: number }) {
-  const data = LAYER_DATA[index];
+export function getTilemapLayer(slopeIndex: number, slopeheight: number, data: number[][]) {
   return {
-    id: index + 1,
-    name: `layer-${index + 1}`,
+    id: slopeIndex + 1,
+    name: `slope-${slopeIndex + 1}`,
     opacity: 1,
     type: "tilelayer",
     visible: true,
     x: 0,
     y: 0,
     offsetx: 0,
-    offsety: -(index * slopeheight),
+    offsety: -(slopeIndex * slopeheight),
     width: data[0].length,
     height: data.length,
     data: data.flat(),
   };
 }
 
-export function getExampleMap({
-  tilesetSource,
-  slopeheight,
-  tileheight,
-  tilewidth,
-}: {
-  tilesetSource: string;
-  tileheight: number;
-  tilewidth: number;
-  slopeheight: number;
-}) {
-  const layers = [
-    getLayer({ index: 0, slopeheight }),
-    getLayer({ index: 1, slopeheight }),
-    getLayer({ index: 2, slopeheight }),
-  ];
-  const width = layers.reduce((max, layer) => Math.max(max, layer.width + layer.x), 0);
-  const height = layers.reduce((max, layer) => Math.max(max, layer.height + layer.y), 0);
-  return {
-    type: "map",
-    orientation: "isometric",
-    renderorder: "right-down",
-    width,
-    height,
-    tilesets: [{ firstgid: 1, source: tilesetSource }],
-    tileheight,
-    tilewidth,
-    layers,
-    nextlayerid: 4,
-    nextobjectid: 1,
-    version: "1.10",
-    tiledversion: "1.11.2",
-    compressionlevel: -1,
-    infinite: false,
-  };
-}
+export type TilemapLayer = ReturnType<typeof getTilemapLayer>;

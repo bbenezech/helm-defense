@@ -3,10 +3,10 @@ import { hideBin } from "yargs/helpers";
 import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
-import { createTilesetFiles } from "./tileset.js";
-import { SLOPE_COUNT, type SLOPE_NAME } from "./slope-constants.js";
+import { createTileset } from "./lib/tileset.js";
+import { SLOPE_COUNT, type SLOPE_NAME } from "./lib/tileslope.js";
 
-const SCRIPT_NAME = "slope-shading-rotation";
+const SCRIPT_NAME = "tile-shading-rotation";
 // the order here depends on the Blender script!!!
 export const BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES = [
   "SLOPE_FLAT",
@@ -30,13 +30,15 @@ export const BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES = [
   "SLOPE_EW",
 ] satisfies SLOPE_NAME[];
 
-const slopCount = new Set(BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES).size;
-if (slopCount !== SLOPE_COUNT)
-  throw new Error(`Error: SLOPE_COUNT mismatch! Expected ${SLOPE_COUNT}, got ${slopCount}.`);
+if (new Set(BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES).size !== SLOPE_COUNT)
+  throw new Error(
+    `Error: SLOPE_COUNT mismatch! Expected ${SLOPE_COUNT}, got ${new Set(BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES).size}.`,
+  );
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const defaultBlenderBin = process.env["BLENDER"] || "/Applications/Blender.app/Contents/MacOS/Blender";
 
+// Generates an isometric sloped tileset for a given texture using Blender
 function generateTileset(texture: string, blenderBin: string, blenderScript: string) {
   console.log(`\n--- Processing: ${path.basename(texture)} ---`);
 
@@ -54,13 +56,13 @@ function generateTileset(texture: string, blenderBin: string, blenderScript: str
 
   const tilesetName = path.basename(texture, ".png");
   const tilesetDir = path.resolve(`${path.dirname(texture)}/../tilesets`);
-  createTilesetFiles(tilesetName, tmpBlenderOutDir, tilesetDir, BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES);
+  createTileset(tilesetName, tmpBlenderOutDir, tilesetDir, BLENDER_SCRIPT_OUTPUT_ORDERED_SLOPES);
   fs.rmSync(tmpBlenderOutDir, { recursive: true, force: true });
 }
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
-    .usage("Usage: yarn slope <file1> [file2...] [options]")
+    .usage("Usage: yarn tile <file1> [file2...] [options]")
     .command("$0 <textures...>", "Generates an isometric tileset for one or more texture files", (y) => {
       y.positional("textures", {
         describe: "One or more textures to process (glob patterns like *.png are supported)",

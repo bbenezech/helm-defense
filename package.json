@@ -15,7 +15,7 @@
     "electron:dev": "concurrently -r 'vite --mode electron' 'NODE_ENV=development electron electron/main.js'",
     "electron:mac": "npm run build && electron-builder --mac --dir",
     "ci": "yarn && yarn tsc && yarn eslint",
-    "slope": "node --loader @swc-node/register/esm ./scripts/slope.ts",
+    "tile": "node --loader @swc-node/register/esm ./scripts/tile.ts",
     "tsc": "tsc --build",
     "clean:tsc": "rm -f  ./tsconfig.*.tsbuildinfo; rm -f ./src/tsconfig.tsbuildinfo; rm -f  ./scripts/tsconfig.tsbuildinfo; rm -f ./electron/tsconfig.tsbuildinfo",
     "clean": "rm -f ./scripts/texture.png && rm -rf ./scripts/all && rm -rf ./dist && rm -rf ./release && rm -rf ./release && rm -rf ./node_modules/.cache && yarn clean:tsc"

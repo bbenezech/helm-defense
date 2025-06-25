@@ -1,10 +1,10 @@
 // https://newgrf-specs.tt-wiki.net/wiki/NML:List_of_tile_slopes
-// bit flag	            meaning
-// CORNER_W	            west corner is above the lowest corner.
-// CORNER_S	            south corner is above the lowest corner.
-// CORNER_E	            east corner is above the lowest corner.
-// CORNER_N	            north corner is above the lowest corner.
-// IS_STEEP_SLOPE	    this tile is a steep slope (the corner opposite to the lowest corner is 2 units higher).
+// bit flag	       meaning
+// CORNER_W	       west corner is above the lowest corner.
+// CORNER_S	       south corner is above the lowest corner.
+// CORNER_E	       east corner is above the lowest corner.
+// CORNER_N	       north corner is above the lowest corner.
+// IS_STEEP_SLOPE	 this tile is a steep slope (the corner opposite to the lowest corner is 2 units higher).
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 type LastOf<T> = UnionToIntersection<T extends any ? () => T : never> extends () => infer R ? R : never;
 type UnionToTuple<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = true extends N
@@ -118,8 +118,8 @@ export const SLOPE_INDEX = {
     CORNER_N: false,
     CORNER_S: false,
     STEEP: false,
-    CENTER: 0,
     FLAT: false,
+    CENTER: 0,
     W: 1,
     S: 0,
     N: 0,
@@ -139,8 +139,8 @@ export const SLOPE_INDEX = {
     CORNER_N: false,
     CORNER_S: true,
     STEEP: false,
-    CENTER: 0,
     FLAT: false,
+    CENTER: 0,
     W: 0,
     S: 1,
     N: 0,
@@ -160,8 +160,8 @@ export const SLOPE_INDEX = {
     CORNER_N: false,
     CORNER_S: false,
     STEEP: false,
-    CENTER: 0,
     FLAT: false,
+    CENTER: 0,
     W: 0,
     S: 0,
     N: 0,

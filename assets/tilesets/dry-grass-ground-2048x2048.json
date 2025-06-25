@@ -204,5 +204,12 @@
     }
   ],
   "version": "1.10",
-  "tiledversion": "1.11.2"
+  "tiledversion": "1.11.2",
+  "properties": [
+    {
+      "name": "slope",
+      "type": "int",
+      "value": 16
+    }
+  ]
 }

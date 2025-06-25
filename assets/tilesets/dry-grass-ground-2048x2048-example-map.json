@@ -7,7 +7,218 @@
   "tilesets": [
     {
       "firstgid": 1,
-      "source": "dry-grass-ground-2048x2048.json"
+      "name": "dry-grass-ground-2048x2048",
+      "image": "dry-grass-ground-2048x2048.png",
+      "tilewidth": 128,
+      "tileheight": 96,
+      "tilecount": 19,
+      "rows": 5,
+      "columns": 4,
+      "spacing": 0,
+      "margin": 0,
+      "imagewidth": 512,
+      "imageheight": 480,
+      "tiles": [
+        {
+          "id": 0,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_FLAT"
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_W"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_S"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_E"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_N"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_NW"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_SW"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_SE"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_NE"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_NWS"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_WSE"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_SEN"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_ENW"
+            }
+          ]
+        },
+        {
+          "id": 13,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_STEEP_S"
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_STEEP_W"
+            }
+          ]
+        },
+        {
+          "id": 15,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_STEEP_N"
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_STEEP_E"
+            }
+          ]
+        },
+        {
+          "id": 17,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_NS"
+            }
+          ]
+        },
+        {
+          "id": 18,
+          "properties": [
+            {
+              "name": "SLOPE",
+              "type": "string",
+              "value": "SLOPE_EW"
+            }
+          ]
+        }
+      ],
+      "version": "1.10",
+      "tiledversion": "1.11.2",
+      "properties": [
+        {
+          "name": "slope",
+          "type": "int",
+          "value": 16
+        }
+      ]
     }
   ],
   "tileheight": 64,
@@ -15,7 +226,7 @@
   "layers": [
     {
       "id": 1,
-      "name": "layer-1",
+      "name": "slope-1",
       "opacity": 1,
       "type": "tilelayer",
       "visible": true,
@@ -630,7 +841,7 @@
     },
     {
       "id": 2,
-      "name": "layer-2",
+      "name": "slope-2",
       "opacity": 1,
       "type": "tilelayer",
       "visible": true,
@@ -1245,7 +1456,7 @@
     },
     {
       "id": 3,
-      "name": "layer-3",
+      "name": "slope-3",
       "opacity": 1,
       "type": "tilelayer",
       "visible": true,

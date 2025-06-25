@@ -2,7 +2,9 @@ import path from "node:path";
 import fs, { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
-import { getExampleMap } from "./map.js";
+import { getTilemap } from "./tilemap.js";
+import type { SLOPE_NAME } from "./tileslope.js";
+import { EXAMPLE_TILEMAP_LAYER_DATA } from "./tilemap-layer.js";
 
 const TILE_MARGIN = 0; // margin around each tile
 const TILESET_MARGIN = 0; // margin around the whole tileset image
@@ -14,6 +16,7 @@ function getTileset({
   tilecount,
   tileheight,
   tilewidth,
+  slopeheight,
   slopes,
 }: {
   name: string;
@@ -21,7 +24,8 @@ function getTileset({
   tilewidth: number;
   tileheight: number;
   tilecount: number;
-  slopes: string[];
+  slopeheight: number;
+  slopes: SLOPE_NAME[];
 }) {
   const rows = Math.ceil(tilecount / TILESET_COLUMNS);
   const columns = Math.min(TILESET_COLUMNS, tilecount);
@@ -52,18 +56,13 @@ function getTileset({
     tiles,
     version: "1.10",
     tiledversion: "1.11.2",
-  };
+    properties: [{ name: "slope", type: "int", value: slopeheight }],
+  } as const;
 }
 
-function getMontageCommand({
-  tileset,
-  inputDir,
-  output,
-}: {
-  tileset: ReturnType<typeof getTileset>;
-  inputDir: string;
-  output: string;
-}) {
+export type Tileset = ReturnType<typeof getTileset>;
+
+function getMontageCommand({ tileset, inputDir, output }: { tileset: Tileset; inputDir: string; output: string }) {
   return `magick montage ${inputDir}/*.png \
         -tile ${tileset.columns}x${tileset.rows} \
         -geometry ${tileset.tilewidth}x${tileset.tileheight}+${TILE_MARGIN}+${TILE_MARGIN} \
@@ -71,7 +70,7 @@ function getMontageCommand({
         png:- | magick png:- -bordercolor transparent -border ${TILESET_MARGIN} ${output}`;
 }
 
-export const createTilesetFiles = (name: string, inputDir: string, outputDir: string, slopes: string[]) => {
+export const createTileset = (name: string, inputDir: string, outputDir: string, slopes: SLOPE_NAME[]) => {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
   if (tilecount < 1) throw new Error(`No PNG files found in input directory: ${inputDir}`);
@@ -90,15 +89,16 @@ export const createTilesetFiles = (name: string, inputDir: string, outputDir: st
     imageFilename,
     tilewidth: tileimagewidth,
     tileheight: tileimageheight,
+    slopeheight,
     tilecount,
     slopes,
   });
 
-  const exampleMapFilename = `${name}-example-map.json`;
   const tilesetFilename = `${name}.json`;
-  const exampleMap = getExampleMap({ tilesetSource: tilesetFilename, tilewidth, tileheight, slopeheight });
 
   execSync(getMontageCommand({ tileset, inputDir, output: path.join(outputDir, imageFilename) }));
   fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
-  fs.writeFileSync(path.join(outputDir, exampleMapFilename), JSON.stringify(exampleMap, null, 2));
+
+  const exampleTilemap = getTilemap(tileset, EXAMPLE_TILEMAP_LAYER_DATA);
+  fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap, null, 2));
 };
