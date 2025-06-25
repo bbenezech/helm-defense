@@ -100,5 +100,5 @@ export const createTileset = (name: string, inputDir: string, outputDir: string,
   fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
 
   const exampleTilemap = getTilemap(tileset, EXAMPLE_TILEMAP_LAYER_DATA);
-  fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap, null, 2));
+  fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap));
 };
