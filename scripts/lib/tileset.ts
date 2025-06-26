@@ -4,7 +4,8 @@ import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
 import { getTilemap } from "./tilemap.js";
 import type { SLOPE_NAME } from "./tileslope.js";
-import { EXAMPLE_TILEMAP_LAYER_DATA } from "./tilemap-layer.js";
+import { EXAMPLE_TILEMAP_LAYERS as EXAMPLE_TILEMAP_LAYERS } from "./tilemap-layer.js";
+import { generateHeightmap, heightmapToLayers } from "./heightmap.js";
 
 const TILE_MARGIN = 0; // margin around each tile
 const TILESET_MARGIN = 0; // margin around the whole tileset image
@@ -99,6 +100,10 @@ export const createTileset = (name: string, inputDir: string, outputDir: string,
   execSync(getMontageCommand({ tileset, inputDir, output: path.join(outputDir, imageFilename) }));
   fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
 
-  const exampleTilemap = getTilemap(tileset, EXAMPLE_TILEMAP_LAYER_DATA);
+  const exampleTilemap = getTilemap(tileset, EXAMPLE_TILEMAP_LAYERS);
   fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap));
+
+  const heightmap = generateHeightmap({ width: 100, height: 50, maxValue: 10, scale: 0.07 });
+  const randomTilemap = getTilemap(tileset, heightmapToLayers(heightmap, slopes));
+  fs.writeFileSync(path.join(outputDir, `${name}-random-map.json`), JSON.stringify(randomTilemap));
 };

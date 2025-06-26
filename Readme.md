@@ -8,6 +8,23 @@ Not much to see, mostly a tech demo
 
 electron phaser game react top-down edge-scrolling full-screen
 
+## Setup
+
+```
+brew install nvm imagemagick
+nvm use
+npm install yarn -g
+yarn
+cp .env.example .env
+./scripts/tile.ts ./assets/textures/compass.png
+```
+
+## Run server
+
+```
+yarn start
+```
+
 ## Tech Roadmap
 
 - [x] Repo setup
@@ -29,7 +46,8 @@ electron phaser game react top-down edge-scrolling full-screen
 - [x] add electron
 - [x] implement edge scrolling
 - [x] implement pan/zoom
-- [ ] tile heightmap
+- [x] tile heightmap
+- [x] sloped tile rendering
 - [ ] height rendering
 - [ ] tile collision
 - [ ] sprite collision
@@ -58,11 +76,6 @@ electron phaser game react top-down edge-scrolling full-screen
 - [ ] make projectiles prettier
 - [ ] make ennemies climb the castle with ladders
 - [ ] make defenders attack the ennemies on the wall
-
-## Getting Started
-
-- yarn install
-- yarn start
 
 ## License
 
