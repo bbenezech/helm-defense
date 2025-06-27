@@ -1,6 +1,6 @@
 import { createNoise2D } from "simplex-noise";
-import { SLOPE_INDEX, type NESW, type SLOPE_NAME } from "./tileslope.js";
 
+export type Heightmap = number[][];
 export function generateHeightmap({
   width,
   height,
@@ -16,11 +16,11 @@ export function generateHeightmap({
    * @default 0.1
    */
   scale?: number;
-}): number[][] {
+}): Heightmap {
   const intStep = 1;
   const noise2D = createNoise2D();
 
-  const heightmap: number[][] = Array(height)
+  const heightmap: Heightmap = Array(height)
     .fill(0)
     .map(() => Array(width).fill(0));
 
@@ -41,50 +41,7 @@ export function generateHeightmap({
   return heightmap;
 }
 
-export function heightmapToLayers(heightmap: number[][], orderedSlopes: SLOPE_NAME[]): number[][][] {
-  const slopeNameByNESW = Object.entries(SLOPE_INDEX).reduce(
-    (acc, [name, slope]) => {
-      acc[slope.NESW] = name as SLOPE_NAME;
-
-      return acc;
-    },
-    {} as Record<NESW, SLOPE_NAME>,
-  );
-  const slopeOffsets = orderedSlopes.reduce<Record<SLOPE_NAME, number>>(
-    (acc, slope, index) => {
-      acc[slope] = index;
-      return acc;
-    },
-    {} as Record<SLOPE_NAME, number>,
-  );
-  const maxValue = Math.max(...heightmap.flat());
-  const slopes: number[][][] = Array.from({ length: maxValue + 1 }, () =>
-    Array.from({ length: heightmap.length - 1 }, () => Array(heightmap[0].length - 1).fill(0)),
-  );
-
-  for (let y = 0; y < heightmap.length - 1; y++) {
-    for (let x = 0; x < heightmap[y].length - 1; x++) {
-      let N = heightmap[y][x];
-      let E = heightmap[y][x + 1];
-      let S = heightmap[y + 1][x + 1];
-      let W = heightmap[y + 1][x];
-      const level = Math.min(N, E, S, W);
-      N -= level;
-      E -= level;
-      S -= level;
-      W -= level;
-
-      const NESW = `${N}${E}${S}${W}` as NESW;
-      const slopeName = slopeNameByNESW[NESW];
-      if (!slopeName) throw new Error(`Unknown slope for NESW "${NESW}" at (${x}, ${y})`);
-      slopes[level][y][x] = slopeOffsets[slopeName] + 1;
-    }
-  }
-
-  return slopes;
-}
-
-export function printHeightmap(map: number[][], maxValue: number): void {
+export function printHeightmap(map: Heightmap, maxValue: number): void {
   const chars = [" ", "░", "▒", "▓", "█"];
   const step = Math.max(1, maxValue) / chars.length;
 

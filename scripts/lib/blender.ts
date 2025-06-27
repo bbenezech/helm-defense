@@ -1,4 +1,4 @@
-import { SLOPE_COUNT, type SLOPE_NAME } from "./tileslope.js";
+import { TERRAIN_TILE_COUNT, type TerrainTileName } from "./terrain.js";
 
 export const ORDERED_SLOPES = [
   "SLOPE_FLAT",
@@ -20,10 +20,10 @@ export const ORDERED_SLOPES = [
   "SLOPE_STEEP_E",
   "SLOPE_NS",
   "SLOPE_EW",
-] satisfies SLOPE_NAME[];
+] satisfies TerrainTileName[];
 
-if (new Set(ORDERED_SLOPES).size !== SLOPE_COUNT)
-  throw new Error(`Error: SLOPE_COUNT mismatch! Expected ${SLOPE_COUNT}, got ${new Set(ORDERED_SLOPES).size}.`);
+if (new Set(ORDERED_SLOPES).size !== TERRAIN_TILE_COUNT)
+  throw new Error(`Error: SLOPE_COUNT mismatch! Expected ${TERRAIN_TILE_COUNT}, got ${new Set(ORDERED_SLOPES).size}.`);
 
 // CURRENT SCRIPT SLOPE INDEX
 // SLOPE_FLAT:1 SLOPE_W:2 SLOPE_S:3 SLOPE_E:4 SLOPE_N:5 SLOPE_NW:6 SLOPE_SW:7 SLOPE_SE:8 SLOPE_NE:9 SLOPE_NWS:10 SLOPE_WSE:11 SLOPE_SEN:12 SLOPE_ENW:13 SLOPE_STEEP_S:14 SLOPE_STEEP_W:15 SLOPE_STEEP_N:16 SLOPE_STEEP_E:17 SLOPE_NS:18 SLOPE_EW:19
