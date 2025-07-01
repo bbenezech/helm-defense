@@ -178,7 +178,7 @@ export const createTileset = (name: string, inputDir: string, outputDir: string,
   const exampleTilemap = getTilemap(EXAMPLE_TILE_INDEXES, tileset);
   fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap));
 
-  const terrain = heightmapToTerrain(generateHeightmap({ width: 100, height: 50, maxValue: 10, scale: 0.07 }));
+  const terrain = heightmapToTerrain(generateHeightmap({ tileWidth: 100, tileHeight: 50, maxValue: 10, scale: 0.07 }));
   const randomTilemap = getTilemapFromTerrain(terrain, tileset);
   fs.writeFileSync(path.join(outputDir, `${name}-random-map.json`), JSON.stringify(randomTilemap));
 };

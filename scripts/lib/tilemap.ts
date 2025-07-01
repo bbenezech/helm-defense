@@ -10,7 +10,7 @@ export function getTilemap(rawLayers: number[][][], tileset: Tileset) {
   const tileheight = tileset.tileheight - 2 * slope.value;
   const layers = rawLayers.map((data, index) => ({
     id: index + 1,
-    name: `slope-${index + 1}`,
+    name: `level-${index + 1}`,
     opacity: 1,
     type: "tilelayer",
     visible: true,
@@ -53,32 +53,31 @@ function terrainToLayers(terrain: Terrain, tileset: Tileset): TilemapLayer[] {
     return acc;
   }, {} as NESWToGids);
 
-  const layers: TilemapLayer[] = Array.from({ length: terrain.length }, () =>
-    Array.from({ length: terrain[0].length }, () => Array(terrain[0][0].length).fill(0)),
+  const maxHeight = Math.max(...terrain.flat(2).map((t) => t.level));
+  const layers: TilemapLayer[] = Array.from({ length: maxHeight + 1 }, () =>
+    Array.from({ length: terrain.length }, () => Array(terrain[0].length).fill(0)),
   );
 
-  for (let level = 0; level < terrain.length; level++) {
-    for (let y = 0; y < terrain[level].length; y++) {
-      for (let x = 0; x < terrain[level][y].length; x++) {
-        const tile = terrain[level][y][x];
-        if (tile === null) continue;
-        const candidates = NESWToGids[tile];
-        if (!candidates || candidates.length === 0)
-          throw new Error(`No terrain candidates found for terrain tile "${tile}"`);
-        const totalProbability = candidates.reduce((sum, candidate) => sum + candidate.probability, 0);
-        let randomPoint = Math.random() * totalProbability;
-        let chosenCandidate = candidates[candidates.length - 1];
-        for (const candidate of candidates) {
-          if (randomPoint < candidate.probability) {
-            chosenCandidate = candidate;
-            break;
-          }
-          randomPoint -= candidate.probability;
+  for (let y = 0; y < terrain.length; y++) {
+    for (let x = 0; x < terrain[y].length; x++) {
+      const cell = terrain[y][x];
+      const candidates = NESWToGids[cell.tile.NESW];
+      if (!candidates || candidates.length === 0)
+        throw new Error(`No terrain candidates found for terrain tile "${cell.tile.NESW}" at (${x}, ${y})`);
+      const totalProbability = candidates.reduce((sum, candidate) => sum + candidate.probability, 0);
+      let randomPoint = Math.random() * totalProbability;
+      let chosenCandidate = candidates[candidates.length - 1];
+      for (const candidate of candidates) {
+        if (randomPoint < candidate.probability) {
+          chosenCandidate = candidate;
+          break;
         }
-
-        if (chosenCandidate === undefined) throw new Error(`Could not select a valid slope tile for "${tile}"`);
-        layers[level][y][x] = chosenCandidate.gid;
+        randomPoint -= candidate.probability;
       }
+
+      if (chosenCandidate === undefined)
+        throw new Error(`Could not select a valid tile for "${cell.tile.NESW}" at (${x}, ${y})`);
+      layers[cell.level][y][x] = chosenCandidate.gid;
     }
   }
 

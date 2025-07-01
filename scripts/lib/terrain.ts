@@ -1,4 +1,4 @@
-import type { Heightmap } from "./heightmap.js";
+import type { Heightmap, Normalmap } from "./heightmap.js";
 
 // https://newgrf-specs.tt-wiki.net/wiki/NML:List_of_tile_slopes
 // bit flag	       meaning
@@ -15,7 +15,7 @@ type UnionToTuple<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = tr
 type Count<T> = UnionToTuple<T>["length"];
 type Vector3 = [number, number, number];
 
-export type TerrainTile = {
+type TerrainTile = {
   NESW: NESW;
   FLAT: boolean;
   // elevations
@@ -31,55 +31,29 @@ export type TerrainTile = {
   NORMAL_SW: Vector3;
 };
 
+// deal with the 0 to 1 unit elevation on a tile width
+// Math.tan(Math.acos(NORMAL_ELEVATION_VECTOR_Z)) => slope is 20.25% of width => 4.938 : 1 => ground angle is 0.2 rad or 11.45°
+const NORMAL_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (0 to 1 elevation on a tile width)
+const NORMAL_ELEVATION_ANGLE_RAD = Math.acos(NORMAL_ELEVATION_Z); // angle 0.2 rad elevation angle => 11.45° slope to go from 0 to 1 elevation on a tile width
+const NORMAL_ELEVATION_RATIO = Math.tan(NORMAL_ELEVATION_ANGLE_RAD); // elevation ratio => 0.20253482585771954 elevation per tile width on a normal slope, 4.938 : 1
+
+const NORMAL_ELEVATION_X_OR_Y = Math.sqrt(1 - NORMAL_ELEVATION_Z * NORMAL_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
+const SOUTH_WEST: Vector3 = [0, -NORMAL_ELEVATION_X_OR_Y, NORMAL_ELEVATION_Z];
+const SOUTH_EAST: Vector3 = [NORMAL_ELEVATION_X_OR_Y, 0, NORMAL_ELEVATION_Z];
+const NORTH_WEST: Vector3 = [-NORMAL_ELEVATION_X_OR_Y, 0, NORMAL_ELEVATION_Z];
+const NORTH_EAST: Vector3 = [0, NORMAL_ELEVATION_X_OR_Y, NORMAL_ELEVATION_Z];
+
+// deal with the 0 to 1 unit elevation on a tile half-diagonal
+// Math.tan(Math.acos(0.9619)) => slope is 28.46% of width => 3.513 : 1 => ground angle is 0.277 rad or 15.89°
+const HALF_SLOPE_ELEVATION_ANGLE = Math.atan(Math.SQRT2 * Math.tan(NORMAL_ELEVATION_ANGLE_RAD)); // 0.277 radians or 15.89°
+const HALF_SLOPE_ELEVATION_Z = Math.cos(HALF_SLOPE_ELEVATION_ANGLE); // 0.9619
+const HALF_SLOPE_ELEVATION_X_AND_Y = Math.sqrt(Math.abs(1 - HALF_SLOPE_ELEVATION_Z * HALF_SLOPE_ELEVATION_Z) / 2); // 0.1933
+
 const TOP: Vector3 = [0, 0, 1];
-// isometric x, y, z coordinates
-// const SOUTH: Vector3 = [0.1933, -0.1933, 0.9619];
-// const EAST: Vector3 = [0.1933, 0.1933, 0.9619];
-// const WEST: Vector3 = [-0.1933, -0.1933, 0.9619];
-// const NORTH: Vector3 = [-0.1933, 0.1933, 0.9619];
-// const SOUTH_WEST: Vector3 = [0, -0.1985, 0.9801];
-// const SOUTH_EAST: Vector3 = [0.1985, 0, 0.9801];
-// const NORTH_WEST: Vector3 = [-0.1985, 0, 0.9801];
-// const NORTH_EAST: Vector3 = [0, 0.1985, 0.9801];
-
-// game engine x, y, z coordinates
-const SOUTH: Vector3 = [0, 0.2734, 0.9619]; // 15.87 degrees
-const EAST: Vector3 = [0.2734, 0, 0.9619];
-const WEST: Vector3 = [-0.2734, 0, 0.9619];
-const NORTH: Vector3 = [0, -0.2734, 0.9619];
-const SOUTH_WEST: Vector3 = [-0.14036, 0.14036, 0.9801]; // 11.45 degrees
-const SOUTH_EAST: Vector3 = [0.14036, 0.14036, 0.9801];
-const NORTH_WEST: Vector3 = [-0.14036, -0.14036, 0.9801];
-const NORTH_EAST: Vector3 = [0.14036, -0.14036, 0.9801];
-
-// from isometric to game engine coordinates
-// - X and Y are aligned with the isometric grid (toward the right), thus rotate by -45 degrees around the Z-axis
-// - X is positive to the right (ok)
-// - Y is positive up (inverse)
-// - Z is positive up (ok)
-export function fromIsoToGame(normal: Vector3): Vector3 {
-  const cos = Math.cos(-Math.PI / 4);
-  const sin = Math.sin(-Math.PI / 4);
-  const x = normal[0];
-  const y = normal[1];
-  const z = normal[2];
-  const newX = x * cos - y * sin;
-  const newY = x * sin + y * cos;
-  return [newX, -newY, z];
-}
-
-export function radToDeg(rad: number): number {
-  return rad * (180 / Math.PI);
-}
-
-// console.log(radToDeg(Math.acos(SOUTH[2])));
-// console.log(radToDeg(Math.acos(EAST[2])));
-// console.log(radToDeg(Math.acos(WEST[2])));
-// console.log(radToDeg(Math.acos(NORTH[2])));
-// console.log(radToDeg(Math.acos(SOUTH_WEST[2])));
-// console.log(radToDeg(Math.acos(SOUTH_EAST[2])));
-// console.log(radToDeg(Math.acos(NORTH_WEST[2])));
-// console.log(radToDeg(Math.acos(NORTH_EAST[2])));
+const SOUTH: Vector3 = [HALF_SLOPE_ELEVATION_X_AND_Y, -HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
+const EAST: Vector3 = [HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
+const WEST: Vector3 = [-HALF_SLOPE_ELEVATION_X_AND_Y, -HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
+const NORTH: Vector3 = [-HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
 
 export const TERRAIN_TILE_INDEX = {
   SLOPE_FLAT: {
@@ -335,30 +309,141 @@ export const TERRAIN_TILE_INDEX = {
 export type TerrainTileName = keyof typeof TERRAIN_TILE_INDEX;
 export const TERRAIN_TILE_COUNT: Count<TerrainTileName> = 19;
 
-export type NESW = `${0 | 1 | 2}${0 | 1 | 2}${0 | 1 | 2}${0 | 1 | 2}`; // 4 elevations, 0, 1, or 2, N E S W
-export type Terrain = (NESW | null)[][][];
+export type NESW = `${number}${number}${number}${number}`;
+
+export type Terrain = TileData[][];
+
+interface Point2D {
+  x: number;
+  y: number;
+}
+interface Point3D extends Point2D {
+  z: number;
+}
+
+function getBarycentricWeights(p: Point2D, v1: Point2D, v2: Point2D, v3: Point2D): [number, number, number] {
+  const den = (v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y);
+  const w1 = ((v2.y - v3.y) * (p.x - v3.x) + (v3.x - v2.x) * (p.y - v3.y)) / den;
+  const w2 = ((v3.y - v1.y) * (p.x - v3.x) + (v1.x - v3.x) * (p.y - v3.y)) / den;
+  const w3 = 1 - w1 - w2;
+  return [w1, w2, w3];
+}
+
+interface TileData {
+  tile: TerrainTile; // Your TerrainTile object
+  level: number;
+  N: number;
+  E: number;
+  S: number;
+  W: number;
+  CENTER: number;
+}
+
 export function heightmapToTerrain(heightmap: Heightmap): Terrain {
-  const maxValue = Math.max(...heightmap.flat());
-  const terrain: Terrain = Array.from({ length: maxValue + 1 }, () =>
-    Array.from({ length: heightmap.length - 1 }, () => Array(heightmap[0].length - 1).fill(null)),
+  const NESWToTerrainTile: Record<NESW, TerrainTile> = Object.fromEntries(
+    Object.values(TERRAIN_TILE_INDEX).map((tile) => [tile.NESW, tile]),
+  );
+  const terrain: Terrain = Array.from({ length: heightmap.length - 1 }, () =>
+    Array(heightmap[0].length - 1).fill(null),
   );
 
   for (let y = 0; y < heightmap.length - 1; y++) {
     for (let x = 0; x < heightmap[y].length - 1; x++) {
-      let N = heightmap[y][x];
-      let E = heightmap[y][x + 1];
-      let S = heightmap[y + 1][x + 1];
-      let W = heightmap[y + 1][x];
+      const N = heightmap[y][x];
+      const E = heightmap[y][x + 1];
+      const S = heightmap[y + 1][x + 1];
+      const W = heightmap[y + 1][x];
       const level = Math.min(N, E, S, W);
-      // normalize vertices elevation to 0 -> 2
-      N -= level;
-      E -= level;
-      S -= level;
-      W -= level;
-
-      terrain[level][y][x] = `${N}${E}${S}${W}` as NESW;
+      const NESW = `${N - level}${E - level}${S - level}${W - level}` as const;
+      const tile: TerrainTile = NESWToTerrainTile[NESW];
+      if (!tile) throw new Error(`Unknown terrain tile for NESW: ${NESW}`);
+      terrain[y][x] = { tile, level, N, E, S, W, CENTER: tile.CENTER + level };
     }
   }
 
   return terrain;
+}
+
+export function terrainToMetadata(
+  terrain: Terrain,
+  pixelsPerTile: number,
+): { heightmap: Heightmap; normalmap: Normalmap } {
+  const mapHeight = terrain.length;
+  if (mapHeight === 0) return { heightmap: [], normalmap: [] };
+  const mapWidth = terrain[0].length;
+  if (mapWidth === 0) return { heightmap: [], normalmap: [] };
+
+  const fineMapWidth = mapWidth * pixelsPerTile;
+  const fineMapHeight = mapHeight * pixelsPerTile;
+
+  const heightmap: Heightmap = Array.from({ length: fineMapHeight }, () => Array(fineMapWidth).fill(0));
+  const normalmap: Normalmap = Array.from({ length: fineMapHeight }, () => Array(fineMapWidth).fill([0, 0, 1]));
+
+  const invSpan = 1.0 / pixelsPerTile;
+
+  for (let py = 0; py < fineMapHeight; py++) {
+    for (let px = 0; px < fineMapWidth; px++) {
+      // Calculate global floating-point coordinates in the tile grid
+      const globalX = px * invSpan;
+      const globalY = py * invSpan;
+
+      // The integer part is the tile index
+      const tx = Math.floor(globalX);
+      const ty = Math.floor(globalY);
+
+      // The fractional part is the normalized coordinate within the tile
+      const normX = globalX - tx;
+      const normY = globalY - ty;
+
+      const tileData = terrain[ty][tx];
+      const p: Point2D = { x: normX, y: normY };
+
+      const vN: Point3D = { x: 0, y: 0, z: tileData.N };
+      const vE: Point3D = { x: 1, y: 0, z: tileData.E };
+      const vS: Point3D = { x: 1, y: 1, z: tileData.S };
+      const vW: Point3D = { x: 0, y: 1, z: tileData.W };
+      const vC: Point3D = { x: 0.5, y: 0.5, z: tileData.CENTER };
+
+      let tri_v1: Point3D, tri_v2: Point3D, tri_v3: Point3D;
+      let normal: Vector3;
+
+      if (normY < 1 - normX) {
+        // Top-half of the tile
+        if (normY < normX) {
+          // NEC triangle
+          tri_v1 = vN;
+          tri_v2 = vE;
+          tri_v3 = vC;
+          normal = tileData.tile.NORMAL_NE;
+        } else {
+          // WNC triangle
+          tri_v1 = vW;
+          tri_v2 = vN;
+          tri_v3 = vC;
+          normal = tileData.tile.NORMAL_NW;
+        }
+      } else {
+        // Bottom-half of the tile
+        if (normY < normX) {
+          // ESC triangle
+          tri_v1 = vE;
+          tri_v2 = vS;
+          tri_v3 = vC;
+          normal = tileData.tile.NORMAL_SE;
+        } else {
+          // SWC triangle
+          tri_v1 = vS;
+          tri_v2 = vW;
+          tri_v3 = vC;
+          normal = tileData.tile.NORMAL_SW;
+        }
+      }
+
+      const [w1, w2, w3] = getBarycentricWeights(p, tri_v1, tri_v2, tri_v3);
+      heightmap[py][px] = (w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * NORMAL_ELEVATION_RATIO;
+      normalmap[py][px] = normal;
+    }
+  }
+
+  return { heightmap, normalmap };
 }
