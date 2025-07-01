@@ -1,25 +1,24 @@
 #!/usr/bin/env -S yarn tsx
 
-import { generateHeightmap, heightmapToNormalmap, saveHeightmap, saveNormalmap } from "./lib/heightmap.js";
-import { terrainToMetadata, heightmapToTerrain } from "./lib/terrain.js";
+import {
+  generateTilableHeightmap,
+  heightmapToNormalmap,
+  printHeightmap,
+  saveHeightmap,
+  saveNormalmap,
+} from "./lib/heightmap.js";
+import { terrainToMetadata, tileableHeightmapToTerrain } from "./lib/terrain.js";
 
 const maxValue = 5;
 
-const terrain = heightmapToTerrain(generateHeightmap({ tileWidth: 100, tileHeight: 100, maxValue, scale: 0.07 }));
-const pixelsPerTile = 16;
-const { heightmap, normalmap: normalmap1 } = terrainToMetadata(terrain, pixelsPerTile);
-// const softenedHeightmap = fastBoxBlur(rawHeightmap, 4, 3);
-// const softenedNormalmap = heightmapToNormalmap(softenedHeightmap, pixelsPerTile);
+const tileHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 40, maxValue, scale: 0.07 });
+printHeightmap(tileHeightmap);
 
-// printHeightmap(rawHeightmap, maxValue);
-// printNormalmap(rawNormalmap);
+const terrain = tileableHeightmapToTerrain(tileHeightmap);
+const metadata = terrainToMetadata(terrain, 16);
 
-// saveHeightmap(rawHeightmap, "fine-heightmap.png");
-// const softenedHeightmap = fastBoxBlur(rawHeightmap, 4, 3);
-// saveHeightmapAsImage(softenedHeightmap, "softened-heightmap.png");
-const normalmap2 = heightmapToNormalmap(heightmap, pixelsPerTile, 1);
-// const normalmap2 = fastBoxBlurVectors(normalmap1, 4, 3);
+heightmapToNormalmap(metadata.heightmap, 10);
 
-saveHeightmap(heightmap, "heightmap.png");
-saveNormalmap(normalmap1, "normalmap1.png");
-saveNormalmap(normalmap2, "normalmap2.png");
+saveHeightmap(metadata.heightmap, "heightmap.png");
+saveNormalmap(metadata.normalmap, "normalmap1.png");
+saveNormalmap(heightmapToNormalmap(metadata.heightmap), "normalmap2.png");

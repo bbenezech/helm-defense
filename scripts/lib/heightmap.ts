@@ -5,7 +5,13 @@ export type Heightmap = number[][];
 export type Normalmap = [number, number, number][][];
 export type RgbaBuffer = { data: Uint8ClampedArray; width: number; height: number };
 
-export function generateHeightmap({
+// Generates a tilable heightmap
+// height is an integer between 0 and maxValue (inclusive)
+// each height can connect to its 4 cardinal neighbors with a maximum difference of 1
+// after normalization to 0-2, this rule implies that the heightmap can be tiled on each minimum square of 4 values with 19 variants
+// 0 0 | 1 2 | 2 1 | 1 0 | 0 1 | 0 1 | 1 0 | 0 0 | 0 0 | 1 0 | 0 1 | 1 1 | 1 1 | 0 1 | 1 0 | 1 1 | 0 0 | 1 0 | 0 1
+// 0 0 | 0 1 | 1 0 | 2 1 | 1 2 | 0 0 | 0 0 | 1 0 | 0 1 | 0 1 | 1 0 | 0 1 | 1 0 | 1 1 | 1 1 | 0 0 | 1 1 | 1 0 | 0 1
+export function generateTilableHeightmap({
   tileWidth,
   tileHeight,
   maxValue,
@@ -46,11 +52,7 @@ export function generateHeightmap({
   return heightmap;
 }
 
-export function heightmapToNormalmap(
-  heightmap: Heightmap,
-  pixelsPerTile: number,
-  rollingWindowSize: number,
-): Normalmap {
+export function heightmapToNormalmap(heightmap: Heightmap, rollingWindowSize: number = 1): Normalmap {
   const height = heightmap.length;
   if (height === 0) return [];
   const width = heightmap[0].length;
@@ -74,8 +76,8 @@ export function heightmapToNormalmap(
       const dz_dy = dy_pixels > 0 ? verticalValues[dy_pixels] - verticalValues[0] : 0;
 
       const normal: [number, number, number] = [
-        dx_pixels > 0 ? -dz_dx * (pixelsPerTile / dx_pixels) : 0,
-        dy_pixels > 0 ? dz_dy * (pixelsPerTile / dy_pixels) : 0,
+        dx_pixels > 0 ? -dz_dx / dx_pixels : 0,
+        dy_pixels > 0 ? dz_dy / dy_pixels : 0,
         1.0,
       ];
 
@@ -158,29 +160,16 @@ export function normalmapToRgbaBuffer(normalmap: Normalmap): RgbaBuffer {
   return { data: buffer, width, height };
 }
 
-export async function saveRgbaBufferToImage(rgbaBuffer: RgbaBuffer, filename: `${string}.${string}`): Promise<void> {
-  const { data, width, height } = rgbaBuffer;
-
-  if (data.length === 0) throw new Error("Cannot save an empty RGBA buffer to an image.");
-  try {
-    console.log(`Saving RGBA buffer to ${filename} (${width}x${height})...`);
-
-    // Jimp can be constructed directly from a raw buffer, width, and height.
-    const image = new Jimp({ data: Buffer.from(data), width, height });
-    await image.write(filename);
-
-    console.log(`Successfully saved image to ${filename}.`);
-  } catch (error) {
-    console.error(`Failed to save image to ${filename}:`, error);
-    throw error;
-  }
+export async function saveRgbaBufferToImage({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
+  console.log(`Saving RGBA buffer to ${filename} (${width}x${height})`);
+  await new Jimp({ data: Buffer.from(data), width, height }).write(filename as `${string}.${string}`);
 }
 
-export async function saveNormalmap(normalmap: Normalmap, filename: `${string}.${string}`): Promise<void> {
+export async function saveNormalmap(normalmap: Normalmap, filename: string): Promise<void> {
   await saveRgbaBufferToImage(normalmapToRgbaBuffer(normalmap), filename);
 }
 
-export async function saveHeightmap(heightmap: Heightmap, filename: `${string}.${string}`): Promise<void> {
+export async function saveHeightmap(heightmap: Heightmap, filename: string): Promise<void> {
   await saveRgbaBufferToImage(heightmapToRgbaBuffer(heightmap), filename);
 }
 
@@ -209,7 +198,8 @@ export function printNormalmap(normalmap: Normalmap): void {
   });
 }
 
-export function printHeightmap(map: Heightmap, maxValue: number): void {
+export function printHeightmap(map: Heightmap): void {
+  const maxValue = map.flat().reduce((max, value) => Math.max(max, value), -Infinity);
   const chars = [" ", "░", "▒", "▓", "█"];
   const step = Math.max(1, maxValue) / chars.length;
 

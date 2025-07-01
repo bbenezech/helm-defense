@@ -3,8 +3,8 @@ import fs, { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
 import { getTilemap, getTilemapFromTerrain } from "./tilemap.js";
-import { heightmapToTerrain, TERRAIN_TILE_INDEX, type TerrainTileName } from "./terrain.js";
-import { generateHeightmap } from "./heightmap.js";
+import { tileableHeightmapToTerrain, TERRAIN_TILE_INDEX, type TerrainTileName, terrainToMetadata } from "./terrain.js";
+import { generateTilableHeightmap, saveHeightmap, saveNormalmap } from "./heightmap.js";
 
 const TILE_MARGIN = 0; // margin around each tile
 const TILESET_MARGIN = 0; // margin around the whole tileset image
@@ -178,7 +178,14 @@ export const createTileset = (name: string, inputDir: string, outputDir: string,
   const exampleTilemap = getTilemap(EXAMPLE_TILE_INDEXES, tileset);
   fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap));
 
-  const terrain = heightmapToTerrain(generateHeightmap({ tileWidth: 100, tileHeight: 50, maxValue: 10, scale: 0.07 }));
+  const terrain = tileableHeightmapToTerrain(
+    generateTilableHeightmap({ tileWidth: 100, tileHeight: 50, maxValue: 10, scale: 0.07 }),
+  );
   const randomTilemap = getTilemapFromTerrain(terrain, tileset);
   fs.writeFileSync(path.join(outputDir, `${name}-random-map.json`), JSON.stringify(randomTilemap));
+
+  const metadata = terrainToMetadata(terrain, 8);
+
+  saveHeightmap(metadata.heightmap, path.join(outputDir, `${name}-heightmap.png`));
+  saveNormalmap(metadata.normalmap, path.join(outputDir, `${name}-normalmap.png`));
 };
