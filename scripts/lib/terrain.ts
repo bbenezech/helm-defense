@@ -1,4 +1,6 @@
 import type { Heightmap, Normalmap } from "./heightmap.js";
+import { log } from "./log.js";
+import type { Vector3 } from "./vector.js";
 
 const NORMAL_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (level 0 to level 1 elevation on a tile width).
 
@@ -8,7 +10,6 @@ type UnionToTuple<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = tr
   ? []
   : [...UnionToTuple<Exclude<T, L>>, L];
 type Count<T> = UnionToTuple<T>["length"];
-type Vector3 = [number, number, number];
 
 type TerrainTile = {
   NESW: NESW;
@@ -330,6 +331,7 @@ interface TileData {
 }
 
 export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain {
+  const startsAt = Date.now();
   const NESWToTerrainTile: Record<NESW, TerrainTile> = Object.fromEntries(
     Object.values(TERRAIN_TILE_INDEX).map((tile) => [tile.NESW, tile]),
   );
@@ -351,6 +353,13 @@ export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain
     }
   }
 
+  log(
+    `tileableHeightmapToTerrain`,
+    startsAt,
+    `Converted tilable heightmap to terrain (${tilableHeightmap[0].length - 1}x${
+      tilableHeightmap.length - 1
+    }), ${TERRAIN_TILE_COUNT} terrain tiles, elevationRatio=${NORMAL_ELEVATION_RATIO.toFixed(4)}`,
+  );
   return terrain;
 }
 
@@ -358,6 +367,7 @@ export function terrainToMetadata(
   terrain: Terrain,
   pixelsPerTile: number, // Number of pixels per tile in the heightmap and normalmap (definition), use powers of 2 to avoid artefacts on diagonals
 ): { heightmap: Heightmap; normalmap: Normalmap } {
+  const startsAt = Date.now();
   const mapHeight = terrain.length;
   if (mapHeight === 0) return { heightmap: [], normalmap: [] };
   const mapWidth = terrain[0].length;
@@ -378,7 +388,6 @@ export function terrainToMetadata(
   const vW: Point3D = { x: 0, y: 1, z: 0 };
   const vC: Point3D = { x: 0.5, y: 0.5, z: 0 };
 
-  const startsAt = Date.now();
   for (let py = 0; py < fineMapHeight; py++) {
     for (let px = 0; px < fineMapWidth; px++) {
       // Calculate global floating-point coordinates in the tile grid
@@ -442,8 +451,10 @@ export function terrainToMetadata(
     }
   }
 
-  console.log(
-    `Terrain metadata generated in ${Date.now() - startsAt}ms for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${pxElevation.toFixed(4)}`,
+  log(
+    `terrainToMetadata`,
+    startsAt,
+    `Terrain metadata generated for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${pxElevation.toFixed(4)}`,
   );
 
   return { heightmap, normalmap };

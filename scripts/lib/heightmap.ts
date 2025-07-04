@@ -1,10 +1,26 @@
 import { Jimp } from "jimp";
-import { createNoise2D } from "simplex-noise";
+import { createNoise2D, type NoiseFunction2D } from "simplex-noise";
+import alea from "alea";
+import { cross, dot, mat3_mul_vec3_in_place, normalizeInPlace, scale, subtract, type Vector3 } from "./vector.js";
+import { log } from "./log.js";
+import sharp from "sharp";
 
 export type Heightmap = number[][];
-export type Normalmap = [number, number, number][][];
+export type Normalmap = Vector3[][];
 export type RgbaBuffer = { data: Uint8ClampedArray; width: number; height: number };
-
+export function fbm2d(noise2D: NoiseFunction2D, octaves: number): NoiseFunction2D {
+  return function fbm2dFn(x: number, y: number) {
+    let value = 0.0;
+    let amplitude = 1;
+    for (let i = 0; i < octaves; i++) {
+      value += noise2D(x * 0.07, y * 0.07) * amplitude;
+      x *= 10;
+      y *= 10;
+      amplitude *= 0.9;
+    }
+    return value;
+  };
+}
 // Generates a tilable heightmap
 // height is an integer between 0 and maxValue (inclusive)
 // each height can connect to its 4 cardinal neighbors with a maximum difference of 1
@@ -15,50 +31,46 @@ export function generateTilableHeightmap({
   tileWidth,
   tileHeight,
   maxValue,
-  scale = 0.1,
 }: {
   tileWidth: number;
   tileHeight: number;
   maxValue: number;
-  /**
-   * The scale of the noise. Larger values produce more frequent, smaller features (zoomed out),
-   * while smaller values produce larger, smoother features (zoomed in).
-   * @default 0.1
-   */
-  scale?: number;
 }): Heightmap {
+  const startsAt = Date.now();
   const step = 1;
-  const noise2D = createNoise2D();
   const height = tileHeight + 1;
   const width = tileWidth + 1;
 
   const heightmap: Heightmap = Array(height)
     .fill(0)
     .map(() => Array(width).fill(0));
+  const noise2D = createNoise2D(alea("1"));
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const leftValue = x > 0 ? heightmap[y][x - 1] : 0;
       const topValue = y > 0 ? heightmap[y - 1][x] : 0;
       const minAllowed = Math.max(0, leftValue - step, topValue - step);
-      const maxAllowed = Math.min(maxValue - 1, leftValue + step, topValue + step);
-      const rawNoise = noise2D(x * scale, y * scale); // Range [-1, 1]
-      const normalizedNoise = (rawNoise + 1) / 2; // Range [0, 1]
+      const maxAllowed = Math.min(maxValue, leftValue + step, topValue + step);
+      const noise = (noise2D(x * 0.1, y * 0.1) + 1) / 2;
 
-      heightmap[y][x] = Math.round(minAllowed + normalizedNoise * (maxAllowed - minAllowed));
+      heightmap[y][x] = Math.round(Math.max(minAllowed, noise * maxAllowed));
     }
   }
+
+  log(`generateTilableHeightmap`, startsAt, `Generated tilable heightmap (${width}x${height}, maxValue=${maxValue})`);
 
   return heightmap;
 }
 
-export function heightmapToNormalmap(heightmap: Heightmap, rollingWindowSize: number = 1): Normalmap {
+export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 3): Normalmap {
+  const startsAt = Date.now();
   const height = heightmap.length;
   if (height === 0) return [];
   const width = heightmap[0].length;
   if (width === 0) return [];
 
-  if (rollingWindowSize < 1) throw new Error("rollingWindowSize must be an integer greater than or equal to 1.");
+  if (kernelSize < 1) throw new Error("kernelSize must be an integer greater than or equal to 1.");
   const normalmap: Normalmap = Array.from({ length: height }, () => Array(width).fill([0, 0, 1]));
 
   for (let y = 0; y < height; y++) {
@@ -66,7 +78,7 @@ export function heightmapToNormalmap(heightmap: Heightmap, rollingWindowSize: nu
       const horizontalValues: number[] = [];
       const verticalValues: number[] = [];
 
-      for (let i = -rollingWindowSize; i <= rollingWindowSize; i++) {
+      for (let i = -kernelSize; i <= kernelSize; i++) {
         if (heightmap[y][x + i] !== undefined) horizontalValues.push(heightmap[y][x + i]);
         if (heightmap[y + i] !== undefined) verticalValues.push(heightmap[y + i][x]);
       }
@@ -92,10 +104,48 @@ export function heightmapToNormalmap(heightmap: Heightmap, rollingWindowSize: nu
     }
   }
 
+  log(
+    `heightmapToNormalmap`,
+    startsAt,
+    `Generated normalmap from heightmap (${width}x${height}, kernelSize=${kernelSize})`,
+  );
+
   return normalmap;
 }
 
+export async function imageToRgbaBuffer(filePath: string): Promise<RgbaBuffer> {
+  const startsAt = Date.now();
+  const image = await Jimp.read(filePath);
+  log(`imageToRgbaBuffer`, startsAt, `Loaded image ${filePath} (${image.bitmap.width}x${image.bitmap.height})`);
+  return { ...image.bitmap, data: new Uint8ClampedArray(image.bitmap.data) };
+}
+
+export function rgbaBufferToHeightmap(rgbaBuffer: RgbaBuffer): Heightmap {
+  const startsAt = Date.now();
+  const { data, width, height } = rgbaBuffer;
+  const heightmap: Heightmap = Array.from({ length: height }, () => Array(width).fill(0));
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+
+      // Calculate luminance (perceived brightness) to create the height value.
+      // This formula is more accurate than a simple average (r+g+b)/3.
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      heightmap[y][x] = luminance;
+    }
+  }
+
+  log(`rgbaBufferToHeightmap`, startsAt, `Converted RGBA buffer to heightmap (${width}x${height})`);
+
+  return heightmap;
+}
+
 export function heightmapToRgbaBuffer(heightmap: Heightmap) {
+  const startsAt = Date.now();
   const height = heightmap.length;
   if (height === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
 
@@ -131,10 +181,13 @@ export function heightmapToRgbaBuffer(heightmap: Heightmap) {
     }
   }
 
+  log("heightmapToRgbaBuffer", startsAt, `Converted heightmap to RGBA buffer (${width}x${height})`);
+
   return { data: buffer, width, height };
 }
 
 export function normalmapToRgbaBuffer(normalmap: Normalmap): RgbaBuffer {
+  const startsAt = Date.now();
   const height = normalmap.length;
   if (height === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
   const width = normalmap[0].length;
@@ -157,12 +210,74 @@ export function normalmapToRgbaBuffer(normalmap: Normalmap): RgbaBuffer {
     }
   }
 
+  log(`normalmapToRgbaBuffer`, startsAt, `Converted normalmap to RGBA buffer (${width}x${height})`);
   return { data: buffer, width, height };
 }
 
-export async function saveRgbaBufferToImage({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
-  console.log(`Saving RGBA buffer to ${filename} (${width}x${height})`);
+export function addTileNormalmapToGlobalNormalmap(
+  globalNormalmap: Normalmap,
+  tileNormalmap: Normalmap,
+  pixelsPerTile: number,
+  detailStrength: number = 1.0,
+): Normalmap {
+  const startsAt = Date.now();
+  const globalHeight = globalNormalmap.length;
+  if (globalHeight === 0) return [];
+  const globalWidth = globalNormalmap[0].length;
+  const tileHeight = tileNormalmap.length;
+  if (tileHeight === 0) return globalNormalmap;
+  const tileWidth = tileNormalmap[0].length;
+  if (pixelsPerTile <= 0) throw new Error("pixelsPerTile must be greater than 0.");
+  const initial_T: Vector3 = [1, 0, 0];
+  const resultNormalmap: Normalmap = Array.from({ length: globalHeight }, () => Array(globalWidth));
+
+  for (let y = 0; y < globalHeight; y++) {
+    for (let x = 0; x < globalWidth; x++) {
+      // Get the world-space base normal (N) from the global map.
+      const N = globalNormalmap[y][x];
+
+      // Get the tangent-space detail normal (D_ts) from the tile map.
+      const tileX = Math.floor(((x / pixelsPerTile) * tileWidth) % tileWidth);
+      const tileY = Math.floor(((y / pixelsPerTile) * tileHeight) % tileHeight);
+      const D_ts: Vector3 = [...tileNormalmap[tileY][tileX]];
+
+      // Apply the detail strength.
+      D_ts[0] *= detailStrength;
+      D_ts[1] *= detailStrength;
+      normalizeInPlace(D_ts);
+
+      // Establish the TBN (Tangent, Bitangent, Normal) basis matrix.
+      const T = normalizeInPlace(subtract(initial_T, scale(N, dot(initial_T, N))));
+      const B = cross(N, T);
+
+      // Transform the detail normal into world space and combine.
+      resultNormalmap[y][x] = normalizeInPlace(mat3_mul_vec3_in_place([T, B, N], D_ts));
+    }
+  }
+
+  log(
+    `addTileNormalmapToGlobalNormalmap`,
+    startsAt,
+    `Combined tile normalmap with global normalmap: ${globalWidth}x${globalHeight}, ${tileWidth}x${tileHeight} (pixelsPerTile=${pixelsPerTile}, detailStrength=${detailStrength})`,
+  );
+  return resultNormalmap;
+}
+
+export async function saveRgbaBufferToImageJimp({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
+  const startsAt = Date.now();
   await new Jimp({ data: Buffer.from(data), width, height }).write(filename as `${string}.${string}`);
+  log("saveRgbaBufferToImageJimp", startsAt, `Saved RGBA buffer to ${filename} (${width}x${height})`);
+}
+
+export async function saveRgbaBufferToImage({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
+  const startsAt = Date.now();
+  const info = await sharp(data, { raw: { width: width, height: height, channels: 4 } }).toFile(filename);
+
+  log(
+    "saveRgbaBufferToImageSharp",
+    startsAt,
+    `Saved RGBA buffer to ${filename} (${width}x${height}, ${Math.round(info.size / 1024)}kb)`,
+  );
 }
 
 export async function saveNormalmap(normalmap: Normalmap, filename: string): Promise<void> {

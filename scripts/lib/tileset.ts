@@ -2,9 +2,19 @@ import path from "node:path";
 import fs, { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
-import { getTilemap, getTilemapFromTerrain } from "./tilemap.js";
+import { getTilemap, terrainToLayers } from "./tilemap.js";
 import { tileableHeightmapToTerrain, TERRAIN_TILE_INDEX, type TerrainTileName, terrainToMetadata } from "./terrain.js";
-import { generateTilableHeightmap, saveHeightmap, saveNormalmap } from "./heightmap.js";
+import {
+  addTileNormalmapToGlobalNormalmap,
+  generateTilableHeightmap,
+  heightmapToNormalmap,
+  imageToRgbaBuffer,
+  rgbaBufferToHeightmap,
+  saveHeightmap,
+  saveNormalmap,
+} from "./heightmap.js";
+import { fastBoxBlur, fastBoxBlurVectors } from "./blur.js";
+import { log } from "./log.js";
 
 const TILE_MARGIN = 0; // margin around each tile
 const TILESET_MARGIN = 0; // margin around the whole tileset image
@@ -138,28 +148,42 @@ function getTileset({
 
 export type Tileset = ReturnType<typeof getTileset>;
 
-function getMontageCommand({ tileset, inputDir, output }: { tileset: Tileset; inputDir: string; output: string }) {
-  return `magick montage ${inputDir}/*.png \
+function createMontage({ tileset, inputDir, output }: { tileset: Tileset; inputDir: string; output: string }) {
+  const startsAt = Date.now();
+  const cmd = `magick montage -define png:exclude-chunk=eXIf ${inputDir}/*.png \
+        -quiet \
         -tile ${tileset.columns}x${tileset.rows} \
         -geometry ${tileset.tilewidth}x${tileset.tileheight}+${TILE_MARGIN}+${TILE_MARGIN} \
         -background transparent \
         png:- | magick png:- -bordercolor transparent -border ${TILESET_MARGIN} ${output}`;
+
+  execSync(cmd);
+  log(`createMontage`, startsAt, `Tileset image created at ${output} (${tileset.imagewidth}x${tileset.imageheight})`);
 }
 
-export const createTileset = (name: string, inputDir: string, outputDir: string, slopes: TerrainTileName[]) => {
+export async function createTileset(
+  name: string,
+  texture: string,
+  inputDir: string,
+  outputDir: string,
+  slopes: TerrainTileName[],
+) {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  fs.copyFileSync(texture, path.join(outputDir, "texture.png"));
+
   const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
   if (tilecount < 1) throw new Error(`No PNG files found in input directory: ${inputDir}`);
   const firstTilePath = path.join(inputDir, fs.readdirSync(inputDir).find((file) => file.endsWith(".png"))!);
   const tileImage = imageSize(readFileSync(firstTilePath));
   const tileimagewidth = tileImage.width;
   if (tileimagewidth % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileimagewidth}`);
+  const pixelsPerTile = tileimagewidth / 8;
   const tileimageheight = tileImage.height;
   const tilewidth = tileimagewidth;
   const tileheight = tilewidth / 2;
   const slopeheight = (tileimageheight - tileheight) / 2; // one slope height at the top and one slope height at the bottom
 
-  const imageFilename = `${name}.png`;
+  const imageFilename = `${name}.tileset.png`;
   const tileset = getTileset({
     name,
     imageFilename,
@@ -170,22 +194,29 @@ export const createTileset = (name: string, inputDir: string, outputDir: string,
     terrainTileNames: slopes,
   });
 
-  const tilesetFilename = `${name}.json`;
-
-  execSync(getMontageCommand({ tileset, inputDir, output: path.join(outputDir, imageFilename) }));
-  fs.writeFileSync(path.join(outputDir, tilesetFilename), JSON.stringify(tileset, null, 2));
+  createMontage({ tileset, inputDir, output: path.join(outputDir, imageFilename) });
+  fs.writeFileSync(path.join(outputDir, `${name}.tileset.json`), JSON.stringify(tileset, null, 2));
 
   const exampleTilemap = getTilemap(EXAMPLE_TILE_INDEXES, tileset);
-  fs.writeFileSync(path.join(outputDir, `${name}-example-map.json`), JSON.stringify(exampleTilemap));
+  fs.writeFileSync(path.join(outputDir, `example.map.json`), JSON.stringify(exampleTilemap));
 
   const terrain = tileableHeightmapToTerrain(
-    generateTilableHeightmap({ tileWidth: 100, tileHeight: 50, maxValue: 10, scale: 0.07 }),
+    generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 }),
   );
-  const randomTilemap = getTilemapFromTerrain(terrain, tileset);
-  fs.writeFileSync(path.join(outputDir, `${name}-random-map.json`), JSON.stringify(randomTilemap));
-
-  const metadata = terrainToMetadata(terrain, 8);
-
-  saveHeightmap(metadata.heightmap, path.join(outputDir, `${name}-heightmap.png`));
-  saveNormalmap(metadata.normalmap, path.join(outputDir, `${name}-normalmap.png`));
-};
+  const randomTilemap = getTilemap(terrainToLayers(terrain, tileset), tileset);
+  fs.writeFileSync(path.join(outputDir, `random.map.json`), JSON.stringify(randomTilemap));
+  const randomMapMetadata = terrainToMetadata(terrain, pixelsPerTile);
+  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDir, `random-map.heightmap.png`));
+  await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDir, `random-map.normalmap.png`));
+  const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10);
+  await saveNormalmap(softNormalmap, path.join(outputDir, `random-map-soft.normalmap.png`));
+  const textureBuffer = await imageToRgbaBuffer(texture);
+  const textureHeightmap = fastBoxBlur(rgbaBufferToHeightmap(textureBuffer), 10);
+  await saveHeightmap(textureHeightmap, path.join(outputDir, `texture.heightmap.png`));
+  const textureNormalmap = heightmapToNormalmap(textureHeightmap);
+  const textureNormalmapToroidal = fastBoxBlurVectors(heightmapToNormalmap(textureHeightmap), 10, 4, true);
+  await saveNormalmap(textureNormalmap, path.join(outputDir, `texture.normalmap.png`));
+  await saveNormalmap(textureNormalmapToroidal, path.join(outputDir, `texture-toroidal.normalmap.png`));
+  const finalNormalmap = addTileNormalmapToGlobalNormalmap(softNormalmap, textureNormalmapToroidal, pixelsPerTile);
+  await saveNormalmap(finalNormalmap, path.join(outputDir, `random-map-final.normalmap.png`));
+}

@@ -1,102 +1,189 @@
-function boxBlurH(source: number[][], target: number[][], width: number, height: number, radius: number): void {
-  const invRadius = 1 / (radius * 2 + 1);
+import { log } from "./log.js";
+import { normalizeXYZ } from "./vector.js";
+
+function wrapIndex(index: number, max: number): number {
+  return ((index % max) + max) % max;
+}
+
+function clampIndex(index: number, max: number): number {
+  return Math.max(0, Math.min(index, max - 1));
+}
+
+/**
+ * Performs a horizontal box blur, supporting both clamped and toroidal (wrapping) edges.
+ */
+function boxBlurH(
+  source: number[][],
+  target: number[][],
+  width: number,
+  height: number,
+  radius: number,
+  invRadius: number,
+  getIndex: (index: number, max: number) => number,
+): void {
   for (let y = 0; y < height; y++) {
-    let trailingIndex = 0;
-    let leadingIndex = 0;
     let sum = 0;
+
     // Prime the moving average window
-    for (let x = -radius; x <= radius; x++) {
-      leadingIndex = Math.max(0, Math.min(x, width - 1));
-      sum += source[y][leadingIndex];
+    for (let i = -radius; i <= radius; i++) {
+      const sampleX = getIndex(i, width);
+      sum += source[y][sampleX];
     }
+
+    // Slide the window across the row
     for (let x = 0; x < width; x++) {
       target[y][x] = sum * invRadius;
 
-      // Subtract the trailing edge and add the leading edge
-      trailingIndex = Math.max(0, x - radius);
-      leadingIndex = Math.min(width - 1, x + radius + 1);
+      // Update the sum for the next window
+      const trailingIndex = getIndex(x - radius, width);
+      const leadingIndex = getIndex(x + radius + 1, width);
 
       sum += source[y][leadingIndex] - source[y][trailingIndex];
     }
   }
 }
 
-function boxBlurV(source: number[][], target: number[][], width: number, height: number, radius: number): void {
-  const invRadius = 1 / (radius * 2 + 1);
+/**
+ * Performs a vertical box blur, supporting both clamped and toroidal (wrapping) edges.
+ */
+function boxBlurV(
+  source: number[][],
+  target: number[][],
+  width: number,
+  height: number,
+  radius: number,
+  invRadius: number,
+  getIndex: (index: number, max: number) => number,
+): void {
   for (let x = 0; x < width; x++) {
-    let trailingIndex = 0;
-    let leadingIndex = 0;
     let sum = 0;
-    for (let y = -radius; y <= radius; y++) {
-      leadingIndex = Math.max(0, Math.min(y, height - 1));
-      sum += source[leadingIndex][x];
+
+    // Prime the moving average window
+    for (let i = -radius; i <= radius; i++) {
+      const sampleY = getIndex(i, height);
+      sum += source[sampleY][x];
     }
+
+    // Slide the window down the column
     for (let y = 0; y < height; y++) {
       target[y][x] = sum * invRadius;
 
-      trailingIndex = Math.max(0, y - radius);
-      leadingIndex = Math.min(height - 1, y + radius + 1);
+      // Update the sum for the next window
+      const trailingIndex = getIndex(y - radius, height);
+      const leadingIndex = getIndex(y + radius + 1, height);
 
       sum += source[leadingIndex][x] - source[trailingIndex][x];
     }
   }
 }
 
-export function fastBoxBlur(heightmap: number[][], radius = 4, passes = 4): number[][] {
-  const height = heightmap.length;
-  if (height === 0) return [];
-  const width = heightmap[0].length;
-  if (width === 0) return [];
+/**
+ * Applies a fast, multi-pass box blur to a 2D array of numbers.
+ *
+ * @param heightmap The 2D array of numbers to blur.
+ * @param radius The blur radius.
+ * @param passes The number of blur passes to apply.
+ * @param toroidal If true, the blur will wrap around the edges; otherwise, edges are clamped. Defaults to false.
+ * @returns A new 2D array with the blurred data.
+ */
+export function fastBoxBlur(
+  heightmap: number[][],
+  radius: number = 4,
+  passes: number = 4,
+  toroidal: boolean = false,
+): number[][] {
+  const startsAt = Date.now();
+  const result = fastBoxBlurInPlace(
+    heightmap.map((row) => [...row]),
+    radius,
+    passes,
+    toroidal,
+  );
+  log(
+    "fastBoxBlur",
+    startsAt,
+    `Blurred heightmap (${heightmap[0].length}x${heightmap.length}, radius=${radius}, passes=${passes}, toroidal=${toroidal})`,
+  );
 
-  const currentMap = heightmap;
-  // Create a single intermediate map to ping-pong buffers, avoiding allocations.
-  const intermediateMap: number[][] = Array.from({ length: height }, () => Array(width).fill(0));
+  return result;
+}
+
+function fastBoxBlurInPlace(
+  heightmap: number[][],
+  radius: number = 4,
+  passes: number = 4,
+  toroidal: boolean = false,
+): number[][] {
+  const height = heightmap.length;
+  if (height === 0) return heightmap;
+  const width = heightmap[0].length;
+  if (width === 0) return heightmap;
+
+  const targetMap: number[][] = Array.from({ length: height }, () => Array(width).fill(0));
+  const invRadius = 1 / (radius * 2 + 1);
+  const getIndex = toroidal ? wrapIndex : clampIndex;
 
   for (let i = 0; i < passes; i++) {
-    boxBlurH(currentMap, intermediateMap, width, height, radius);
-    boxBlurV(intermediateMap, currentMap, width, height, radius);
+    boxBlurH(heightmap, targetMap, width, height, radius, invRadius, getIndex);
+    boxBlurV(targetMap, heightmap, width, height, radius, invRadius, getIndex);
   }
 
-  return currentMap;
+  return heightmap;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
+/**
+ * Applies a fast, multi-pass box blur to a 2D array of vectors (e.g., a normal map).
+ *
+ * @param normalmap The 2D array of vectors to blur.
+ * @param radius The blur radius.
+ * @param passes The number of blur passes.
+ * @param toroidal If true, the blur will wrap around the edges; otherwise, edges are clamped. Defaults to false.
+ * @returns A new 2D array with the blurred vectors.
+ */
 export function fastBoxBlurVectors(
   normalmap: [number, number, number][][],
   radius: number,
   passes: number = 3,
+  toroidal: boolean = false,
 ): [number, number, number][][] {
+  const startsAt = Date.now();
   const height = normalmap.length;
   if (height === 0) return [];
   const width = normalmap[0].length;
   if (width === 0) return [];
 
-  // Create temporary heightmaps for each component (X, Y, Z)
-  const mapX: number[][] = normalmap.map((row) => row.map((v) => v[0]));
-  const mapY: number[][] = normalmap.map((row) => row.map((v) => v[1]));
-  const mapZ: number[][] = normalmap.map((row) => row.map((v) => v[2]));
-
-  // Blur each component map independently
-  const blurredX = fastBoxBlur(mapX, radius, passes);
-  const blurredY = fastBoxBlur(mapY, radius, passes);
-  const blurredZ = fastBoxBlur(mapZ, radius, passes);
-
-  // Reconstruct the final blurred normal map
-  const blurredNormals: [number, number, number][][] = Array.from({ length: height }, () =>
-    Array(width).fill([0, 0, 1]),
+  const blurredX = fastBoxBlurInPlace(
+    normalmap.map((row) => row.map((v) => v[0])),
+    radius,
+    passes,
+    toroidal,
   );
+  const blurredY = fastBoxBlurInPlace(
+    normalmap.map((row) => row.map((v) => v[1])),
+    radius,
+    passes,
+    toroidal,
+  );
+  const blurredZ = fastBoxBlurInPlace(
+    normalmap.map((row) => row.map((v) => v[2])),
+    radius,
+    passes,
+    toroidal,
+  );
+
+  const blurredNormals: [number, number, number][][] = Array.from({ length: height }, () => Array(width));
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const X = clamp(blurredX[y][x], -1, 1);
-      const Y = clamp(blurredY[y][x], -1, 1);
-      const Z = clamp(blurredZ[y][x], -1, 1);
-
-      blurredNormals[y][x] = [X, Y, Z];
+      blurredNormals[y][x] = normalizeXYZ(blurredX[y][x], blurredY[y][x], blurredZ[y][x]);
     }
   }
+
+  log(
+    "fastBoxBlurVectors",
+    startsAt,
+    `Blurred normalmap (${width}x${height}, radius=${radius}, passes=${passes}, toroidal=${toroidal})`,
+  );
 
   return blurredNormals;
 }

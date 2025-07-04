@@ -9,16 +9,22 @@ import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { createTileset } from "./lib/tileset.js";
 import { ORDERED_SLOPES } from "./lib/blender.js";
+import { log } from "./lib/log.js";
 
-const SCRIPT_NAME = "tile-shading-rotation";
+const SCRIPT_NAME = "tile-no-shading-rotation-fast";
 
-function generateTileset(texture: string, blenderBin: string, blenderScript: string) {
+async function generateTileset(texture: string, blenderBin: string, blenderScript: string) {
   console.log(`\n--- Processing: ${path.basename(texture)} ---`);
+  const tilesetName = path.basename(texture, ".png");
+  const tilesetDir = path.resolve(`${path.dirname(texture)}/tilesets/${tilesetName}`);
 
   // texture.png is read by Blender from the same directory as the script
   const tmpLocalBlenderTexture = path.join(__dirname, "texture.png");
   fs.copyFileSync(texture, tmpLocalBlenderTexture);
+
+  const startsAt = Date.now();
   execSync(`${blenderBin} -b ${blenderScript} -a`);
+  log("blender", startsAt, `${blenderBin} -b ${blenderScript} -a`);
   fs.unlinkSync(tmpLocalBlenderTexture);
 
   const tmpBlenderOutDir = path.join(__dirname, "out");
@@ -27,9 +33,7 @@ function generateTileset(texture: string, blenderBin: string, blenderScript: str
     process.exit(1);
   }
 
-  const tilesetName = path.basename(texture, ".png");
-  const tilesetDir = path.resolve(`${path.dirname(texture)}/tilesets`);
-  createTileset(tilesetName, tmpBlenderOutDir, tilesetDir, ORDERED_SLOPES);
+  await createTileset(tilesetName, texture, tmpBlenderOutDir, tilesetDir, ORDERED_SLOPES);
   fs.rmSync(tmpBlenderOutDir, { recursive: true, force: true });
 }
 
@@ -65,7 +69,7 @@ async function main() {
     )
       throw new Error(`Texture "${path.resolve(texture)}" not found or not a .png file.`);
 
-  for (const texture of textures) generateTileset(texture, blenderBin, blenderScript);
+  for (const texture of textures) await generateTileset(texture, blenderBin, blenderScript);
 }
 
 main();

@@ -9,9 +9,7 @@ import {
 } from "./lib/heightmap.js";
 import { terrainToMetadata, tileableHeightmapToTerrain } from "./lib/terrain.js";
 
-const maxValue = 5;
-
-const tileHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 40, maxValue, scale: 0.07 });
+const tileHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 40, maxValue: 5 });
 printHeightmap(tileHeightmap);
 
 const terrain = tileableHeightmapToTerrain(tileHeightmap);
