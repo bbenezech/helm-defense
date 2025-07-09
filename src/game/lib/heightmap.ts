@@ -1,9 +1,7 @@
-import { Jimp } from "jimp";
 import { createNoise2D, type NoiseFunction2D } from "simplex-noise";
 import alea from "alea";
-import { cross, dot, mat3_mul_vec3_in_place, normalizeInPlace, scale, subtract, type Vector3 } from "./vector.js";
+import { cross, dot, multiplyMatrix3x3Vec3, normalize, scale, subtract, type Vector3 } from "./vector.js";
 import { log } from "./log.js";
-import sharp from "sharp";
 
 export type Heightmap = number[][];
 export type Normalmap = Vector3[][];
@@ -111,13 +109,6 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
   );
 
   return normalmap;
-}
-
-export async function imageToRgbaBuffer(filePath: string): Promise<RgbaBuffer> {
-  const startsAt = Date.now();
-  const image = await Jimp.read(filePath);
-  log(`imageToRgbaBuffer`, startsAt, `Loaded image ${filePath} (${image.bitmap.width}x${image.bitmap.height})`);
-  return { ...image.bitmap, data: new Uint8ClampedArray(image.bitmap.data) };
 }
 
 export function rgbaBufferToHeightmap(rgbaBuffer: RgbaBuffer): Heightmap {
@@ -229,7 +220,11 @@ export function addTileNormalmapToGlobalNormalmap(
   const tileWidth = tileNormalmap[0].length;
   if (pixelsPerTile <= 0) throw new Error("pixelsPerTile must be greater than 0.");
   const initial_T: Vector3 = [1, 0, 0];
-  const resultNormalmap: Normalmap = Array.from({ length: globalHeight }, () => Array(globalWidth));
+  const resultNormalmap: Normalmap = Array.from({ length: globalHeight }, () =>
+    Array.from({ length: globalWidth }, () => [0, 0, 0]),
+  );
+  const B: Vector3 = [0, 0, 0];
+  const T: Vector3 = [0, 0, 0];
 
   for (let y = 0; y < globalHeight; y++) {
     for (let x = 0; x < globalWidth; x++) {
@@ -239,19 +234,19 @@ export function addTileNormalmapToGlobalNormalmap(
       // Get the tangent-space detail normal (D_ts) from the tile map.
       const tileX = Math.floor(((x / pixelsPerTile) * tileWidth) % tileWidth);
       const tileY = Math.floor(((y / pixelsPerTile) * tileHeight) % tileHeight);
-      const D_ts: Vector3 = [...tileNormalmap[tileY][tileX]];
-
-      // Apply the detail strength.
-      D_ts[0] *= detailStrength;
-      D_ts[1] *= detailStrength;
-      normalizeInPlace(D_ts);
+      const D_ts: Vector3 = resultNormalmap[tileY][tileX];
+      const tileNormal = tileNormalmap[tileY][tileX];
+      D_ts[0] = tileNormal[0] * detailStrength;
+      D_ts[1] = tileNormal[1] * detailStrength;
+      D_ts[2] = tileNormal[2];
+      normalize(D_ts, D_ts);
 
       // Establish the TBN (Tangent, Bitangent, Normal) basis matrix.
-      const T = normalizeInPlace(subtract(initial_T, scale(N, dot(initial_T, N))));
-      const B = cross(N, T);
+      normalize(subtract(initial_T, scale(N, dot(initial_T, N), T), T), T); // T
+      cross(N, T, B); // B
 
       // Transform the detail normal into world space and combine.
-      resultNormalmap[y][x] = normalizeInPlace(mat3_mul_vec3_in_place([T, B, N], D_ts));
+      normalize(multiplyMatrix3x3Vec3(T, B, N, D_ts, D_ts), D_ts);
     }
   }
 
@@ -261,31 +256,6 @@ export function addTileNormalmapToGlobalNormalmap(
     `Combined tile normalmap with global normalmap: ${globalWidth}x${globalHeight}, ${tileWidth}x${tileHeight} (pixelsPerTile=${pixelsPerTile}, detailStrength=${detailStrength})`,
   );
   return resultNormalmap;
-}
-
-export async function saveRgbaBufferToImageJimp({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
-  const startsAt = Date.now();
-  await new Jimp({ data: Buffer.from(data), width, height }).write(filename as `${string}.${string}`);
-  log("saveRgbaBufferToImageJimp", startsAt, `Saved RGBA buffer to ${filename} (${width}x${height})`);
-}
-
-export async function saveRgbaBufferToImage({ data, width, height }: RgbaBuffer, filename: string): Promise<void> {
-  const startsAt = Date.now();
-  const info = await sharp(data, { raw: { width: width, height: height, channels: 4 } }).toFile(filename);
-
-  log(
-    "saveRgbaBufferToImageSharp",
-    startsAt,
-    `Saved RGBA buffer to ${filename} (${width}x${height}, ${Math.round(info.size / 1024)}kb)`,
-  );
-}
-
-export async function saveNormalmap(normalmap: Normalmap, filename: string): Promise<void> {
-  await saveRgbaBufferToImage(normalmapToRgbaBuffer(normalmap), filename);
-}
-
-export async function saveHeightmap(heightmap: Heightmap, filename: string): Promise<void> {
-  await saveRgbaBufferToImage(heightmapToRgbaBuffer(heightmap), filename);
 }
 
 export function printNormalmap(normalmap: Normalmap): void {

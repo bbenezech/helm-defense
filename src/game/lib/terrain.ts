@@ -1,6 +1,6 @@
 import type { Heightmap, Normalmap } from "./heightmap.js";
 import { log } from "./log.js";
-import type { Vector3 } from "./vector.js";
+import { barycentricWeights, type Vector3 } from "./vector.js";
 
 const NORMAL_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (level 0 to level 1 elevation on a tile width).
 
@@ -308,25 +308,8 @@ export type NESW = `${number}${number}${number}${number}`;
 
 export type Terrain = TileData[][];
 
-interface Point2D {
-  x: number;
-  y: number;
-}
-interface Point3D extends Point2D {
-  z: number;
-}
-
-const getBarycentricWeightsResult: [number, number, number] = [0, 0, 0];
-function getBarycentricWeights(x: number, y: number, v1: Point2D, v2: Point2D, v3: Point2D): [number, number, number] {
-  const den = (v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y);
-  getBarycentricWeightsResult[0] = ((v2.y - v3.y) * (x - v3.x) + (v3.x - v2.x) * (y - v3.y)) / den;
-  getBarycentricWeightsResult[1] = ((v3.y - v1.y) * (x - v3.x) + (v1.x - v3.x) * (y - v3.y)) / den;
-  getBarycentricWeightsResult[2] = 1 - getBarycentricWeightsResult[0] - getBarycentricWeightsResult[1];
-  return getBarycentricWeightsResult;
-}
-
 interface TileData {
-  tile: TerrainTile; // Your TerrainTile object
+  tile: TerrainTile;
   level: number;
 }
 
@@ -363,6 +346,12 @@ export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain
   return terrain;
 }
 
+interface Point3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export function terrainToMetadata(
   terrain: Terrain,
   pixelsPerTile: number, // Number of pixels per tile in the heightmap and normalmap (definition), use powers of 2 to avoid artefacts on diagonals
@@ -387,6 +376,7 @@ export function terrainToMetadata(
   const vS: Point3D = { x: 1, y: 1, z: 0 };
   const vW: Point3D = { x: 0, y: 1, z: 0 };
   const vC: Point3D = { x: 0.5, y: 0.5, z: 0 };
+  const barycentricWeightsOut: Vector3 = [0, 0, 0];
 
   for (let py = 0; py < fineMapHeight; py++) {
     for (let px = 0; px < fineMapWidth; px++) {
@@ -445,7 +435,7 @@ export function terrainToMetadata(
         }
       }
 
-      const [w1, w2, w3] = getBarycentricWeights(normX, normY, tri_v1, tri_v2, tri_v3);
+      const [w1, w2, w3] = barycentricWeights(normX, normY, tri_v1, tri_v2, tri_v3, barycentricWeightsOut);
       heightmap[py][px] = (level + w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * pxElevation;
       normalmap[py][px] = normal;
     }

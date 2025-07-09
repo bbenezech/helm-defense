@@ -1,4 +1,4 @@
-export function setNormalizedVelocity(
+export function normalizedVelocity(
   azymuthRad: number,
   altitudeRad: number,
   output: Phaser.Math.Vector3,

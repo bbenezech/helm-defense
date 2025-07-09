@@ -1,4 +1,4 @@
-import { TERRAIN_TILE_COUNT, type TerrainTileName } from "./terrain.js";
+import { TERRAIN_TILE_COUNT, type TerrainTileName } from "../../src/game/lib/terrain.js";
 
 export const ORDERED_SLOPES = [
   "SLOPE_FLAT",

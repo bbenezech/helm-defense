@@ -1,25 +1,28 @@
+#!/usr/bin/env -S yarn tsx
+
+import "dotenv/config";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import { ORDERED_SLOPES } from "./lib/blender.js";
 import path from "node:path";
 import fs, { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
-import { getTilemap, terrainToLayers } from "./tilemap.js";
-import { tileableHeightmapToTerrain, TERRAIN_TILE_INDEX, type TerrainTileName, terrainToMetadata } from "./terrain.js";
+import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.js";
+import { tileableHeightmapToTerrain, terrainToMetadata } from "../src/game/lib/terrain.js";
 import {
   addTileNormalmapToGlobalNormalmap,
   generateTilableHeightmap,
   heightmapToNormalmap,
-  imageToRgbaBuffer,
   rgbaBufferToHeightmap,
-  saveHeightmap,
-  saveNormalmap,
-} from "./heightmap.js";
-import { fastBoxBlur, fastBoxBlurVectors } from "./blur.js";
-import { log } from "./log.js";
+} from "../src/game/lib/heightmap.js";
+import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.js";
+import { log } from "../src/game/lib/log.js";
+import { getTileset } from "../src/game/lib/tileset.js";
+import { imageToRgbaBuffer, saveHeightmap, saveNormalmap } from "./lib/file.js";
 
-const TILE_MARGIN = 0; // margin around each tile
-const TILESET_MARGIN = 0; // margin around the whole tileset image
-const TILESET_COLUMNS = 4;
-// blender output with firstgid 1
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const SCRIPT_NAME = "tiles-shading-rotation-fast";
 const EXAMPLE_TILE_INDEXES = [
   [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -89,134 +92,135 @@ const EXAMPLE_TILE_INDEXES = [
   ],
 ];
 
-function getTileset({
-  imageFilename,
-  name,
-  tilecount,
-  tileheight,
-  tilewidth,
-  slopeheight,
-  terrainTileNames,
-}: {
-  name: string;
-  imageFilename: string;
-  tilewidth: number;
-  tileheight: number;
-  tilecount: number;
-  slopeheight: number;
-  terrainTileNames: TerrainTileName[];
-}) {
-  const rows = Math.ceil(tilecount / TILESET_COLUMNS);
-  const columns = Math.min(TILESET_COLUMNS, tilecount);
-  const spacing = TILE_MARGIN * 2;
-  const margin = TILESET_MARGIN + TILE_MARGIN;
-  const imagewidth = (tilewidth + 2 * TILE_MARGIN) * columns + TILESET_MARGIN * 2;
-  const imageheight = (tileheight + 2 * TILE_MARGIN) * rows + TILESET_MARGIN * 2;
-
-  if (tilecount !== terrainTileNames.length)
-    throw new Error(`tilecount must be ${terrainTileNames.length}, got ${tilecount}`);
-
-  const tiles = Array.from({ length: tilecount }, (_, i) => {
-    const tileName = terrainTileNames[i];
-    const terrain = TERRAIN_TILE_INDEX[tileName];
-    return {
-      id: i,
-      probability: 1,
-      properties: [{ name: "NESW" as const, type: "string" as const, value: terrain.NESW }],
-    };
-  });
-
-  return {
-    type: "tileset",
-    name,
-    image: imageFilename,
-    tilewidth,
-    tileheight,
-    tilecount,
-    rows,
-    columns,
-    spacing,
-    margin,
-    imagewidth,
-    imageheight,
-    tiles,
-    version: "1.10",
-    tiledversion: "1.11.2",
-    properties: [{ name: "slope" as const, type: "int" as const, value: slopeheight }],
-  } as const;
-}
-
-export type Tileset = ReturnType<typeof getTileset>;
-
-function createMontage({ tileset, inputDir, output }: { tileset: Tileset; inputDir: string; output: string }) {
-  const startsAt = Date.now();
-  const cmd = `magick montage -define png:exclude-chunk=eXIf ${inputDir}/*.png \
-        -quiet \
-        -tile ${tileset.columns}x${tileset.rows} \
-        -geometry ${tileset.tilewidth}x${tileset.tileheight}+${TILE_MARGIN}+${TILE_MARGIN} \
-        -background transparent \
-        png:- | magick png:- -bordercolor transparent -border ${TILESET_MARGIN} ${output}`;
-
-  execSync(cmd);
-  log(`createMontage`, startsAt, `Tileset image created at ${output} (${tileset.imagewidth}x${tileset.imageheight})`);
-}
-
-export async function createTileset(
-  name: string,
-  texture: string,
-  inputDir: string,
-  outputDir: string,
-  slopes: TerrainTileName[],
-) {
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-  fs.copyFileSync(texture, path.join(outputDir, "texture.png"));
+function createTileset(inputDir: string, outputDir: string, name: string) {
+  const tileMargin = 0; // margin around each tile
+  const tilesetMargin = 0; // margin around the whole tileset image
 
   const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
   if (tilecount < 1) throw new Error(`No PNG files found in input directory: ${inputDir}`);
+  if (tilecount !== ORDERED_SLOPES.length)
+    throw new Error(`tilecount must be ${ORDERED_SLOPES.length}, got ${tilecount}`);
   const firstTilePath = path.join(inputDir, fs.readdirSync(inputDir).find((file) => file.endsWith(".png"))!);
   const tileImage = imageSize(readFileSync(firstTilePath));
-  const tileimagewidth = tileImage.width;
-  if (tileimagewidth % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileimagewidth}`);
-  const pixelsPerTile = tileimagewidth / 8;
-  const tileimageheight = tileImage.height;
-  const tilewidth = tileimagewidth;
-  const tileheight = tilewidth / 2;
-  const slopeheight = (tileimageheight - tileheight) / 2; // one slope height at the top and one slope height at the bottom
+  if (tileImage.width % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileImage.width}`);
 
-  const imageFilename = `${name}.tileset.png`;
+  const imageFilename = "tileset.png";
   const tileset = getTileset({
     name,
     imageFilename,
-    tilewidth: tileimagewidth,
-    tileheight: tileimageheight,
-    slopeheight,
-    tilecount,
-    terrainTileNames: slopes,
+    tilewidth: tileImage.width,
+    tileheight: tileImage.height,
+    slopeheight: (tileImage.height - tileImage.width / 2) / 2,
+    terrainTileNames: ORDERED_SLOPES,
+    tileMargin,
+    tilesetMargin,
   });
+  fs.writeFileSync(path.join(outputDir, "tileset.json"), JSON.stringify(tileset, null, 2));
 
-  createMontage({ tileset, inputDir, output: path.join(outputDir, imageFilename) });
-  fs.writeFileSync(path.join(outputDir, `${name}.tileset.json`), JSON.stringify(tileset, null, 2));
+  const startsAt = Date.now();
+  const imagePath = path.join(outputDir, imageFilename);
+  execSync(`magick montage ${inputDir}/*.png \
+        -quiet \
+        -tile ${tileset.columns}x${tileset.rows} \
+        -geometry ${tileImage.width}x${tileImage.height}+${tileMargin}+${tileMargin} \
+        -background transparent \
+        png:- | magick png:- -bordercolor transparent -border ${tilesetMargin} ${imagePath}`);
+
+  log(
+    `createMontage`,
+    startsAt,
+    `Tileset image created at ${imagePath} (${tileset.imagewidth}x${tileset.imageheight})`,
+  );
+
+  return tileset;
+}
+
+async function generateAssets(texture: string, blenderBin: string, blenderScript: string) {
+  console.log(`\n--- Processing: ${path.basename(texture)} ---`);
+  const name = path.basename(texture, ".png");
+  const outputDir = path.resolve(`${path.dirname(texture)}/tilesets/${name}`);
+
+  // texture.png is read by Blender from the same directory as the script
+  const tmpLocalBlenderTexture = path.join(__dirname, "texture.png");
+  fs.copyFileSync(texture, tmpLocalBlenderTexture);
+
+  const startsAt = Date.now();
+  execSync(`${blenderBin} -b ${blenderScript} -a`);
+  log("blender", startsAt, `${blenderBin} -b ${blenderScript} -a`);
+  fs.unlinkSync(tmpLocalBlenderTexture);
+
+  const inputDir = path.join(__dirname, "out"); // Blender outputs to a fixed .out directory
+  if (!fs.existsSync(inputDir)) {
+    console.error(`Error: Output directory "${inputDir}" does not exist.`);
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  fs.copyFileSync(texture, path.join(outputDir, "texture.png"));
+
+  const tileset = createTileset(inputDir, outputDir, name);
+  fs.rmSync(inputDir, { recursive: true, force: true });
 
   const exampleTilemap = getTilemap(EXAMPLE_TILE_INDEXES, tileset);
-  fs.writeFileSync(path.join(outputDir, `example.map.json`), JSON.stringify(exampleTilemap));
+  fs.writeFileSync(path.join(outputDir, "example.map.json"), JSON.stringify(exampleTilemap));
 
-  const terrain = tileableHeightmapToTerrain(
-    generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 }),
-  );
-  const randomTilemap = getTilemap(terrainToLayers(terrain, tileset), tileset);
+  const tileableHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 });
+  fs.writeFileSync(path.join(outputDir, `random.tileableHeightmap.json`), JSON.stringify(tileableHeightmap));
+
+  const randomTerrain = tileableHeightmapToTerrain(tileableHeightmap);
+  const randomTilemap = getTilemap(terrainToLayers(randomTerrain, tileset), tileset);
   fs.writeFileSync(path.join(outputDir, `random.map.json`), JSON.stringify(randomTilemap));
-  const randomMapMetadata = terrainToMetadata(terrain, pixelsPerTile);
-  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDir, `random-map.heightmap.png`));
-  await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDir, `random-map.normalmap.png`));
+
+  const pixelsPerTile = tileset.tilewidth / 8;
+  const randomMapMetadata = terrainToMetadata(randomTerrain, pixelsPerTile);
+  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDir, `random.heightmap.png`));
+  await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDir, `random.normalmap.png`));
   const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10);
-  await saveNormalmap(softNormalmap, path.join(outputDir, `random-map-soft.normalmap.png`));
+  await saveNormalmap(softNormalmap, path.join(outputDir, `random.soft.normalmap.png`));
   const textureBuffer = await imageToRgbaBuffer(texture);
   const textureHeightmap = fastBoxBlur(rgbaBufferToHeightmap(textureBuffer), 10);
   await saveHeightmap(textureHeightmap, path.join(outputDir, `texture.heightmap.png`));
   const textureNormalmap = heightmapToNormalmap(textureHeightmap);
   const textureNormalmapToroidal = fastBoxBlurVectors(heightmapToNormalmap(textureHeightmap), 10, 4, true);
   await saveNormalmap(textureNormalmap, path.join(outputDir, `texture.normalmap.png`));
-  await saveNormalmap(textureNormalmapToroidal, path.join(outputDir, `texture-toroidal.normalmap.png`));
+  await saveNormalmap(textureNormalmapToroidal, path.join(outputDir, `texture.toroidal.normalmap.png`));
   const finalNormalmap = addTileNormalmapToGlobalNormalmap(softNormalmap, textureNormalmapToroidal, pixelsPerTile);
-  await saveNormalmap(finalNormalmap, path.join(outputDir, `random-map-final.normalmap.png`));
+  await saveNormalmap(finalNormalmap, path.join(outputDir, `random.combined.normalmap.png`));
 }
+
+async function main() {
+  const argv = await yargs(hideBin(process.argv))
+    .usage("Usage: yarn tile <file1> [file2...] [options]")
+    .command("$0 <textures...>", "Generates an isometric tileset for one or more texture files", (y) => {
+      y.positional("textures", {
+        describe: "One or more textures to process (glob patterns like *.png are supported)",
+        type: "string",
+        demandOption: true,
+      });
+    })
+    .help()
+    .alias("h", "help")
+    .strict()
+    .parse();
+
+  const { textures } = argv;
+  const blenderBin = process.env["BLENDER_BIN"];
+  if (!blenderBin) throw new Error(`Blender binary not specified. Set BLENDER_BIN=/path/to/blender`);
+  if (!fs.existsSync(blenderBin))
+    throw new Error(`Blender binary "${blenderBin}" not found, set BLENDER_BIN=/path/to/blender`);
+  const blenderScript = path.resolve(__dirname, `./${SCRIPT_NAME}.blend`);
+  if (!fs.existsSync(blenderScript)) throw new Error(`Blender script "${blenderScript}" not found.`);
+
+  if (!textures || !Array.isArray(textures) || textures.length === 0) throw new Error("No texture file provided.");
+  for (const texture of textures)
+    if (
+      !fs.existsSync(path.resolve(texture)) ||
+      !fs.statSync(path.resolve(texture)).isFile() ||
+      !texture.endsWith(".png")
+    )
+      throw new Error(`Texture "${path.resolve(texture)}" not found or not a .png file.`);
+
+  for (const texture of textures) await generateAssets(texture, blenderBin, blenderScript);
+}
+
+main();

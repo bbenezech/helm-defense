@@ -9,8 +9,9 @@ export function start(parent: string) {
   return new Phaser.Game({
     type: Phaser.WEBGL,
     scene: [GameScene],
-    scale: { mode: Phaser.Scale.RESIZE, autoRound: true },
+    scale: { mode: Phaser.Scale.RESIZE },
     disableContextMenu: import.meta.env.PROD,
+    render: { pixelArt: true },
     title,
     url,
     version: packageJson.version,

@@ -1,5 +1,5 @@
 import { log } from "./log.js";
-import { normalizeXYZ } from "./vector.js";
+import { normalizeXYZ, type Vector3 } from "./vector.js";
 
 function wrapIndex(index: number, max: number): number {
   return ((index % max) + max) % max;
@@ -59,10 +59,7 @@ function boxBlurV(
     let sum = 0;
 
     // Prime the moving average window
-    for (let i = -radius; i <= radius; i++) {
-      const sampleY = getIndex(i, height);
-      sum += source[sampleY][x];
-    }
+    for (let i = -radius; i <= radius; i++) sum += source[getIndex(i, height)][x];
 
     // Slide the window down the column
     for (let y = 0; y < height; y++) {
@@ -75,6 +72,29 @@ function boxBlurV(
       sum += source[leadingIndex][x] - source[trailingIndex][x];
     }
   }
+}
+
+function fastBoxBlurInPlace(
+  heightmap: number[][],
+  radius: number = 4,
+  passes: number = 4,
+  toroidal: boolean = false,
+): number[][] {
+  const height = heightmap.length;
+  if (height === 0) return heightmap;
+  const width = heightmap[0].length;
+  if (width === 0) return heightmap;
+
+  const targetMap: number[][] = Array.from({ length: height }, () => Array(width).fill(0));
+  const invRadius = 1 / (radius * 2 + 1);
+  const getIndex = toroidal ? wrapIndex : clampIndex;
+
+  for (let i = 0; i < passes; i++) {
+    boxBlurH(heightmap, targetMap, width, height, radius, invRadius, getIndex);
+    boxBlurV(targetMap, heightmap, width, height, radius, invRadius, getIndex);
+  }
+
+  return heightmap;
 }
 
 /**
@@ -108,29 +128,6 @@ export function fastBoxBlur(
   return result;
 }
 
-function fastBoxBlurInPlace(
-  heightmap: number[][],
-  radius: number = 4,
-  passes: number = 4,
-  toroidal: boolean = false,
-): number[][] {
-  const height = heightmap.length;
-  if (height === 0) return heightmap;
-  const width = heightmap[0].length;
-  if (width === 0) return heightmap;
-
-  const targetMap: number[][] = Array.from({ length: height }, () => Array(width).fill(0));
-  const invRadius = 1 / (radius * 2 + 1);
-  const getIndex = toroidal ? wrapIndex : clampIndex;
-
-  for (let i = 0; i < passes; i++) {
-    boxBlurH(heightmap, targetMap, width, height, radius, invRadius, getIndex);
-    boxBlurV(targetMap, heightmap, width, height, radius, invRadius, getIndex);
-  }
-
-  return heightmap;
-}
-
 /**
  * Applies a fast, multi-pass box blur to a 2D array of vectors (e.g., a normal map).
  *
@@ -141,16 +138,17 @@ function fastBoxBlurInPlace(
  * @returns A new 2D array with the blurred vectors.
  */
 export function fastBoxBlurVectors(
-  normalmap: [number, number, number][][],
+  normalmap: Vector3[][],
   radius: number,
   passes: number = 3,
   toroidal: boolean = false,
-): [number, number, number][][] {
+): Vector3[][] {
   const startsAt = Date.now();
   const height = normalmap.length;
   if (height === 0) return [];
   const width = normalmap[0].length;
   if (width === 0) return [];
+  const out: Vector3[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => [0, 0, 0]));
 
   const blurredX = fastBoxBlurInPlace(
     normalmap.map((row) => row.map((v) => v[0])),
@@ -170,14 +168,8 @@ export function fastBoxBlurVectors(
     passes,
     toroidal,
   );
-
-  const blurredNormals: [number, number, number][][] = Array.from({ length: height }, () => Array(width));
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      blurredNormals[y][x] = normalizeXYZ(blurredX[y][x], blurredY[y][x], blurredZ[y][x]);
-    }
-  }
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) normalizeXYZ(blurredX[y][x], blurredY[y][x], blurredZ[y][x], out[y][x]);
 
   log(
     "fastBoxBlurVectors",
@@ -185,5 +177,5 @@ export function fastBoxBlurVectors(
     `Blurred normalmap (${width}x${height}, radius=${radius}, passes=${passes}, toroidal=${toroidal})`,
   );
 
-  return blurredNormals;
+  return out;
 }
