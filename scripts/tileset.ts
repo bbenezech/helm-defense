@@ -2,10 +2,10 @@
 
 import "dotenv/config";
 import yargs from "yargs";
+import path from "node:path";
+import fs from "node:fs";
 import { hideBin } from "yargs/helpers";
 import { ORDERED_SLOPES } from "./lib/blender.js";
-import path from "node:path";
-import fs, { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
 import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.js";
@@ -97,11 +97,11 @@ function createTileset(inputDir: string, outputDir: string, name: string) {
   const tilesetMargin = 0; // margin around the whole tileset image
 
   const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
-  if (tilecount < 1) throw new Error(`No PNG files found in input directory: ${inputDir}`);
+  if (tilecount < 1) throw new Error(`No .png files found in input directory: ${inputDir}`);
   if (tilecount !== ORDERED_SLOPES.length)
     throw new Error(`tilecount must be ${ORDERED_SLOPES.length}, got ${tilecount}`);
   const firstTilePath = path.join(inputDir, fs.readdirSync(inputDir).find((file) => file.endsWith(".png"))!);
-  const tileImage = imageSize(readFileSync(firstTilePath));
+  const tileImage = imageSize(fs.readFileSync(firstTilePath));
   if (tileImage.width % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileImage.width}`);
 
   const imageFilename = "tileset.png";
@@ -110,7 +110,7 @@ function createTileset(inputDir: string, outputDir: string, name: string) {
     imageFilename,
     tilewidth: tileImage.width,
     tileheight: tileImage.height,
-    slopeheight: (tileImage.height - tileImage.width / 2) / 2,
+    elevationYOffsetPx: (tileImage.height - tileImage.width / 2) / 2,
     terrainTileNames: ORDERED_SLOPES,
     tileMargin,
     tilesetMargin,
@@ -188,39 +188,35 @@ async function generateAssets(texture: string, blenderBin: string, blenderScript
   await saveNormalmap(finalNormalmap, path.join(outputDir, `random.combined.normalmap.png`));
 }
 
-async function main() {
-  const argv = await yargs(hideBin(process.argv))
-    .usage("Usage: yarn tile <file1> [file2...] [options]")
-    .command("$0 <textures...>", "Generates an isometric tileset for one or more texture files", (y) => {
-      y.positional("textures", {
-        describe: "One or more textures to process (glob patterns like *.png are supported)",
-        type: "string",
-        demandOption: true,
-      });
-    })
-    .help()
-    .alias("h", "help")
-    .strict()
-    .parse();
+const argv = await yargs(hideBin(process.argv))
+  .usage("Usage: yarn tile <file1> [file2...] [options]")
+  .command("$0 <textures...>", "Generates an isometric tileset for one or more texture files", (y) => {
+    y.positional("textures", {
+      describe: "One or more textures to process (glob patterns like *.png are supported)",
+      type: "string",
+      demandOption: true,
+    });
+  })
+  .help()
+  .alias("h", "help")
+  .strict()
+  .parse();
 
-  const { textures } = argv;
-  const blenderBin = process.env["BLENDER_BIN"];
-  if (!blenderBin) throw new Error(`Blender binary not specified. Set BLENDER_BIN=/path/to/blender`);
-  if (!fs.existsSync(blenderBin))
-    throw new Error(`Blender binary "${blenderBin}" not found, set BLENDER_BIN=/path/to/blender`);
-  const blenderScript = path.resolve(__dirname, `./${SCRIPT_NAME}.blend`);
-  if (!fs.existsSync(blenderScript)) throw new Error(`Blender script "${blenderScript}" not found.`);
+const { textures } = argv;
+const blenderBin = process.env["BLENDER_BIN"];
+if (!blenderBin) throw new Error(`Blender binary not specified. Set BLENDER_BIN=/path/to/blender`);
+if (!fs.existsSync(blenderBin))
+  throw new Error(`Blender binary "${blenderBin}" not found, set BLENDER_BIN=/path/to/blender`);
+const blenderScript = path.resolve(__dirname, `./${SCRIPT_NAME}.blend`);
+if (!fs.existsSync(blenderScript)) throw new Error(`Blender script "${blenderScript}" not found.`);
 
-  if (!textures || !Array.isArray(textures) || textures.length === 0) throw new Error("No texture file provided.");
-  for (const texture of textures)
-    if (
-      !fs.existsSync(path.resolve(texture)) ||
-      !fs.statSync(path.resolve(texture)).isFile() ||
-      !texture.endsWith(".png")
-    )
-      throw new Error(`Texture "${path.resolve(texture)}" not found or not a .png file.`);
+if (!textures || !Array.isArray(textures) || textures.length === 0) throw new Error("No texture file provided.");
+for (const texture of textures)
+  if (
+    !fs.existsSync(path.resolve(texture)) ||
+    !fs.statSync(path.resolve(texture)).isFile() ||
+    !texture.endsWith(".png")
+  )
+    throw new Error(`Texture "${path.resolve(texture)}" not found or not a .png file.`);
 
-  for (const texture of textures) await generateAssets(texture, blenderBin, blenderScript);
-}
-
-main();
+for (const texture of textures) await generateAssets(texture, blenderBin, blenderScript);

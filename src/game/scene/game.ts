@@ -4,7 +4,6 @@ import {
   BULLET_SPRITE,
   CANNON_SPRITE,
   ENEMY_SPRITE,
-  TILE_HEIGHT_PX,
   PARTICLE_SPRITE,
   CANNON_WHEELS_SPRITE,
   FLARES,
@@ -23,179 +22,65 @@ import fpsBus from "../../store/fps.js";
 import timeScaleStore from "../../store/time-scale.js";
 import { createPointer } from "../lib/pointer.js";
 import { Coordinates } from "../lib/coordinates.js";
+import { terrainToMetadata, TILE_ELEVATION_RATIO, tileableHeightmapToTerrain, type Terrain } from "../lib/terrain.js";
 
-const TOWN_SPRITE = "town";
-const DUNGEON_SPRITE = "dungeon";
-const TILE_MAP = "map";
-const GROUND_NORMAL = new Phaser.Math.Vector3(0, 0, 1);
+const GRASS = `Grass_23-512x512`;
 
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
 
 export class GameScene extends Phaser.Scene {
-  private _pointerScreen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-  private _projectedSurfaceZ: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
-  controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
-  map!: Phaser.Tilemaps.Tilemap;
-  cannon!: Cannon;
-  cube!: Cube;
-  debugGraphics!: Phaser.GameObjects.Graphics;
-  score = 0;
-  X_FACTOR!: number;
-  Y_FACTOR!: number;
-  Z_FACTOR!: number;
-  screenToWorldHorizontal!: Phaser.Math.Vector3;
-  screenToWorldVertical!: Phaser.Math.Vector3;
-  worldToScreen!: Phaser.Math.Vector3;
-  gravity!: Coordinates;
-  zoom!: number;
-  zooms!: number[];
-  cannonBlast!: Sound;
-  coverZoom!: number;
-  axonometric: boolean;
-  perspective: (typeof PERSPECTIVES)[number];
-  updatePointer!: (this: GameScene, time: number, delta: number) => void;
-  destroyPointer!: (this: GameScene) => void;
+  private _tmpVector2: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private _tmpVector3: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
+  private X_FACTOR!: number;
+  private Y_FACTOR!: number;
+  private Z_FACTOR!: number;
+  private X_FACTOR_INV!: number;
+  private Y_FACTOR_INV!: number;
+  private Z_FACTOR_INV!: number;
+  private halfTileWidthInv!: number;
+  private halfTileHeightInv!: number;
+  private controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
+  private map!: Phaser.Tilemaps.Tilemap;
+  private cannon!: Cannon;
+  private cube!: Cube;
+  private debugGraphics!: Phaser.GameObjects.Graphics;
+  private zoom!: number;
+  private zooms!: number[];
+  private coverZoom!: number;
+  private axonometric: boolean;
+  private perspective: (typeof PERSPECTIVES)[number];
+  private updatePointer!: (this: GameScene, time: number, delta: number) => void;
+  private destroyPointer!: (this: GameScene) => void;
+  private mapBounds!: Phaser.Geom.Rectangle;
+  private mapType!: "isometric" | "orthogonal";
+  private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
+  private tileableHeightmap!: number[][];
+  private terrain!: Terrain;
+  private metadataPixelsPerTile = 8;
+  private heightmap!: number[][];
+  private normalmap!: [number, number, number][][];
+
+  screenToWorldRatioHorizontal!: Phaser.Math.Vector3;
+  screenToWorldRatioVertical!: Phaser.Math.Vector3;
+  worldToScreenRatio!: Phaser.Math.Vector3;
   selectionGraphics!: Phaser.GameObjects.Graphics;
-  // Used to track if the perspective has changed and objects need to update their visuals
   dirty = true;
+  cannonBlast!: Sound;
+  score = 0;
+  gravity!: Coordinates;
 
   constructor() {
     super({ key: "GameScene" });
-    this.perspective = "oblique";
+    this.perspective = "pixelArtIsometric";
     this.axonometric = true;
   }
 
-  setupPerspective() {
-    this.dirty = true;
-    const camRotation = Phaser.Math.DegToRad(PERSPECTIVE_INDEX[this.perspective]);
-    const cosCam = Math.cos(camRotation);
-    const sinCam = Math.sin(camRotation);
-    const cotCam = cosCam / sinCam;
-
-    if (this.axonometric) {
-      this.X_FACTOR = 1;
-      this.Y_FACTOR = sinCam;
-      this.Z_FACTOR = cosCam;
-    } else {
-      // oblique projection
-      this.X_FACTOR = 1;
-      this.Y_FACTOR = 1;
-      this.Z_FACTOR = cotCam;
-    }
-
-    // if Z is constant
-    this.screenToWorldHorizontal = new Phaser.Math.Vector3(1, 1 / this.Y_FACTOR, 0);
-
-    // if Y is constant
-    this.screenToWorldVertical = new Phaser.Math.Vector3(1, 0, 1 / this.Z_FACTOR);
-
-    // convert a world unit to screen pixels on all 3 axes
-    this.worldToScreen = new Phaser.Math.Vector3(1, this.Y_FACTOR, this.Z_FACTOR);
-  }
-
-  changePerspective(perspective: (typeof PERSPECTIVES)[number]) {
-    if (this.perspective === perspective) return;
-    this.perspective = perspective;
-    this.setupPerspective();
-
-    // if projection changes, we need to update their position
-    this.cannon.setWorld(this.tileToWorldPosition(34, 75));
-    this.cube.setWorld(this.tileToWorldPosition(70, 77));
-
-    this.events.emit("perspective-change");
-  }
-
-  // Convert tile coordinates to world position
-  tileToWorldPosition(tileX: number, tileY: number) {
-    const screen = new Phaser.Math.Vector2();
-    screen.x = this.map.tileToWorldX(tileX)!;
-    screen.y = this.map.tileToWorldY(tileY)!;
-
-    const world = this.getSurfaceWorldPosition(screen, new Phaser.Math.Vector3());
-
-    if (screen.x === null || screen.y === null) throw new Error(`Invalid tile coordinates: (${tileX}, ${tileY})`);
-
-    return world;
-  }
-
-  // Get the building tile at the given screen position
-  getBuildingTileFromScreenPosition(screen: Phaser.Types.Math.Vector2Like) {
-    // Caution, Phaser uses "worldXY" for the screen position in our naming convention
-    return this.map.getTileAtWorldXY(screen.x, screen.y, false, undefined, 1);
-  }
-
-  // 0 => mud
-  // 1 => iron
-  getSurfaceHardnessFromWorldPosition(_world: Phaser.Math.Vector3): number {
-    return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
-  }
-
-  getSurfaceNormalFromWorldPosition(_world: Phaser.Math.Vector3): Phaser.Math.Vector3 {
-    return GROUND_NORMAL;
-  }
-
-  // Get the building tile at the given world position
-  // This one is not simple
-  // We need to check for occlusion by buildings (this is a naive approach)
-  // We get 2 heights:
-  // - the surface height of the tile at the world position of the ground (surfaceZ)
-  // - the surface height at the projected screen position of the ground surfaceZ (projectedSurfaceZ)
-  // If they are the same, surface is on a building
-  // If they are different, surface is occluded by a building, return null
-  // null really means world(x,y) is visually behind a building, caller can assume 0 if it makes sense
-  getSurfaceZFromWorldPosition(world: Phaser.Math.Vector3): number | null {
-    const oldWorldZ = world.z; // save the original world z, we are going to mutate it for perf
-    world.z = 0; // set z to 0 to get the screen position at ground level
-    const groundScreen = this.getScreenPosition(world, this._projectedSurfaceZ);
-    const surfaceZ = this.getSurfaceZFromScreenPosition(groundScreen);
-    if (surfaceZ === 0) {
-      world.z = oldWorldZ;
-      return surfaceZ; // nothing can occlude a ground surface at minimum z in a top down view, early return
-    }
-
-    world.z = surfaceZ; // set z to the surface height to get the screen position of the world at surface level
-    const projectedSurfaceZ = this.getSurfaceZFromScreenPosition(
-      this.getScreenPosition(world, this._projectedSurfaceZ),
-    );
-
-    world.z = oldWorldZ;
-    return projectedSurfaceZ === surfaceZ ? surfaceZ : null;
-  }
-
-  // Get the surface height at the given screen position
-  getSurfaceZFromScreenPosition(screen: Phaser.Types.Math.Vector2Like): number {
-    if (this.Z_FACTOR === 0) return 0; // no perspective, no visible height on map
-    const buildingTile = this.getBuildingTileFromScreenPosition(screen);
-
-    // top of building is 2 tiles high
-    return buildingTile ? (2 * TILE_HEIGHT_PX) / this.Z_FACTOR : 0;
-  }
-
-  // Get the screen position of the given world position
-  getScreenPosition(world: Phaser.Math.Vector3, output: Phaser.Math.Vector2) {
-    output.x = world.x * this.X_FACTOR;
-    output.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
-    return output;
-  }
-
-  // Get the world position of the given screen position
-  getSurfaceWorldPosition(screen: Phaser.Types.Math.Vector2Like, output: Phaser.Math.Vector3) {
-    const surfaceZ = this.getSurfaceZFromScreenPosition(screen);
-
-    output.x = screen.x / this.X_FACTOR;
-    output.y = (screen.y + surfaceZ * this.Z_FACTOR) / this.Y_FACTOR;
-    output.z = surfaceZ;
-
-    return output;
-  }
-
   preload() {
-    this.load.tilemapTiledJSON(TILE_MAP, "map.json");
-    this.load.image(TOWN_SPRITE, "town.png");
-    this.load.image(DUNGEON_SPRITE, "dungeon.png");
-
+    this.load.image(GRASS, `${GRASS}/tileset.png`);
+    this.load.tilemapTiledJSON("map", `${GRASS}/random.map.json`);
+    this.load.json("tileableHeightmap", `${GRASS}/random.tileableHeightmap.json`);
     this.load.image(ENEMY_SPRITE, "enemy.png");
     this.load.image(CANNON_WHEELS_SPRITE, "wheels.png");
     this.load.atlas(FLARES, "flares.png", "flares.json");
@@ -221,17 +106,50 @@ export class GameScene extends Phaser.Scene {
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(100000000000);
 
-    // Create the tilemap
-    this.map = this.make.tilemap({ key: TILE_MAP });
-    const townTilesetImage = this.map.addTilesetImage(TOWN_SPRITE, TOWN_SPRITE, 16, 16, 0, 0);
-    const dungeonTilesetImage = this.map.addTilesetImage(DUNGEON_SPRITE, DUNGEON_SPRITE, 16, 16, 0, 0);
+    // TODO: create the terrain inline and create tilemap from the terrain and tileset
+    this.map = this.make.tilemap({ key: "map" });
+    this.tileableHeightmap = this.cache.json.get("tileableHeightmap") as number[][];
 
-    if (!townTilesetImage || !dungeonTilesetImage) throw new Error("Missing asset");
+    this.terrain = tileableHeightmapToTerrain(this.tileableHeightmap);
+    const { heightmap, normalmap } = terrainToMetadata(this.terrain, this.metadataPixelsPerTile);
+    this.heightmap = heightmap;
+    this.normalmap = normalmap;
 
-    this.map.createLayer(0, townTilesetImage, 0, 0, true)!;
-    this.map.createLayer(1, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
-    this.map.createLayer(2, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
-    this.map.createLayer(3, [townTilesetImage, dungeonTilesetImage], 0, 0)!;
+    const tileset = this.map.addTilesetImage(GRASS, GRASS)!;
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 0, tileset, 0, 0));
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 1, tileset, 0, 0));
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 2, tileset, 0, 0));
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 3, tileset, 0, 0));
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 4, tileset, 0, 0));
+    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 5, tileset, 0, 0));
+
+    this.map.layers.forEach((layer) => {
+      this.map.createLayer(layer.name, tileset);
+    });
+    this.reversedLayers = [...this.map.layers.map((l) => l.tilemapLayer)].reverse();
+    this.halfTileWidthInv = 2 / this.map.tileWidth;
+    this.halfTileHeightInv = 2 / this.map.tileHeight;
+
+    const minOffsetY = Math.min(...this.map.layers.map((l) => l.y));
+    const maxOffsetY = Math.max(...this.map.layers.map((l) => l.y));
+    const minOffsetX = Math.min(...this.map.layers.map((l) => l.x));
+    const maxOffsetX = Math.max(...this.map.layers.map((l) => l.x));
+    const fullWidth = this.map.widthInPixels + (maxOffsetX - minOffsetX);
+    const fullHeight = this.map.heightInPixels + (maxOffsetY - minOffsetY);
+
+    this.mapType =
+      String(this.map.orientation) === String(Phaser.Tilemaps.Orientation.ISOMETRIC) ? "isometric" : "orthogonal";
+    if (this.mapType === "isometric") {
+      this.mapBounds = new Phaser.Geom.Rectangle(
+        -this.map.widthInPixels / 2 + this.map.tileWidth / 2 + minOffsetX,
+        this.map.tileHeight / 2 + minOffsetY,
+        fullWidth,
+        fullHeight,
+      );
+    } else if (this.mapType === "orthogonal") {
+      this.mapBounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
+    } else throw new Error(this.mapType satisfies never);
+
     this.selectionGraphics = this.add.graphics();
 
     this.setupCamera();
@@ -265,13 +183,17 @@ export class GameScene extends Phaser.Scene {
 
     this.input.manager.events.on("click", (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return; // left click
-      this._pointerScreen.set(pointer.worldX, pointer.worldY);
+      const screen = new Phaser.Math.Vector2(pointer.worldX, pointer.worldY);
+      this.cannon.requestShoot(screen);
+      const tile = this.screenToTile(screen);
 
-      // this.debugGraphics.clear();
-      // this.debugGraphics.fillStyle(0x00ff00, 1);
-      // this.debugGraphics.fillRect(this._pointerScreen.x - 2, this._pointerScreen.y - 2, 4, 4);
+      if (tile) {
+        tile.tint = tile.tint === 16777215 ? 0x999999 : 16777215; // debug
 
-      this.cannon.requestShoot(this._pointerScreen);
+        // this.debugGraphics.clear();
+        // this.debugGraphics.fillStyle(0x00ff00, 1);
+        // this.debugGraphics.fillRect(tile.x - 4, tile.y - 4, 8, 8);
+      }
     });
 
     this.input.keyboard?.on("keydown", async (e: KeyboardEvent) => {
@@ -326,19 +248,204 @@ export class GameScene extends Phaser.Scene {
 
     this.gravity = new Coordinates(this, GRAVITY_WORLD);
     this.cannon = new Cannon(this, 270);
-    this.cannon.setWorld(this.tileToWorldPosition(34, 75));
+    this.cannon.setWorld(this.tileCoordinatesToWorld(34, 75));
     this.cube = new Cube(this, 5, 5, 5, Math.PI / 4);
-    this.cube.setWorld(this.tileToWorldPosition(70, 77));
+    this.cube.setWorld(this.tileCoordinatesToWorld(70, 77));
+  }
+
+  setupPerspective() {
+    this.dirty = true;
+    const camRotation = Phaser.Math.DegToRad(PERSPECTIVE_INDEX[this.perspective]);
+    const cosCam = Math.cos(camRotation);
+    const sinCam = Math.sin(camRotation);
+    const cotCam = cosCam / sinCam;
+
+    if (this.axonometric) {
+      this.X_FACTOR = 1;
+      this.Y_FACTOR = sinCam;
+      this.Z_FACTOR = cosCam;
+    } else {
+      // oblique projection
+      this.X_FACTOR = 1;
+      this.Y_FACTOR = 1;
+      this.Z_FACTOR = cotCam;
+    }
+
+    this.X_FACTOR_INV = 1 / this.X_FACTOR;
+    this.Y_FACTOR_INV = 1 / this.Y_FACTOR;
+    this.Z_FACTOR_INV = 1 / this.Z_FACTOR;
+
+    // if Z is null
+    this.screenToWorldRatioHorizontal = new Phaser.Math.Vector3(this.X_FACTOR_INV, this.Y_FACTOR_INV, 0);
+
+    // if Y is null
+    this.screenToWorldRatioVertical = new Phaser.Math.Vector3(this.X_FACTOR_INV, 0, this.Z_FACTOR_INV);
+
+    // convert a world unit to screen pixels on all 3 axes
+    this.worldToScreenRatio = new Phaser.Math.Vector3(this.X_FACTOR, this.Y_FACTOR, this.Z_FACTOR);
+  }
+
+  changePerspective(perspective: (typeof PERSPECTIVES)[number]) {
+    if (this.perspective === perspective) return;
+    this.perspective = perspective;
+    this.setupPerspective();
+
+    // if projection changes, we need to update their position
+    this.cannon.setWorld(this.tileCoordinatesToWorld(34, 75));
+    this.cube.setWorld(this.tileCoordinatesToWorld(70, 77));
+
+    this.events.emit("perspective-change");
+  }
+  screenToTileCoordinates(
+    screen: Phaser.Math.Vector2,
+    layer: { x: number; y: number } | null,
+    out = this._tmpVector2,
+  ): Phaser.Math.Vector2 {
+    const x = layer ? screen.x - layer.x : screen.x;
+    const y = layer ? screen.y - layer.y : screen.y;
+    if (this.mapType === "isometric") {
+      out.x = (x * this.halfTileWidthInv + y * this.halfTileHeightInv) * 0.5 - 1;
+      out.y = (y * this.halfTileHeightInv - x * this.halfTileWidthInv) * 0.5;
+    } else if (this.mapType === "orthogonal") {
+      out.x = x * 0.5 * this.halfTileWidthInv;
+      out.y = y * 0.5 * this.halfTileHeightInv;
+    } else throw new Error(this.mapType satisfies never);
+
+    return out;
+  }
+
+  // TODO DOES NOT ALWAYS SEND BACK A TILE
+  screenToTile(screen: Phaser.Math.Vector2) {
+    for (const layer of this.reversedLayers) {
+      const { x, y } = this.screenToTileCoordinates(screen, layer);
+      const tile = this.map.getTileAt(Math.floor(x), Math.floor(y), false, layer);
+      if (tile && tile.index !== -1) return tile;
+    }
+    return null;
+  }
+
+  worldToTile(world: Phaser.Math.Vector3) {
+    const { x, y } = this.screenToTileCoordinates(this.worldFloorToScreen(world), null);
+    for (const layer of this.reversedLayers) {
+      const tile = this.map.getTileAt(Math.floor(x), Math.floor(y), false, layer);
+      if (tile && tile.index !== -1) return tile;
+    }
+    return null;
+  }
+
+  tileToScreen(tile: Phaser.Tilemaps.Tile, out = this._tmpVector2): Phaser.Math.Vector2 {
+    const halfWidth = this.map.tileWidth * 0.5;
+    const halfHeight = this.map.tileHeight * 0.5;
+    if (this.mapType === "isometric") {
+      out.x = (tile.x + 1 - tile.y) * halfWidth + tile.layer.x;
+      out.y = (tile.x + 1 + tile.y) * halfHeight + halfHeight + tile.layer.y;
+      return out;
+    } else if (this.mapType === "orthogonal") {
+      out.x = tile.x * this.map.tileWidth + halfWidth + tile.layer.x;
+      out.y = tile.y * this.map.tileHeight + halfHeight + tile.layer.y;
+      return out;
+    } else throw new Error(this.mapType satisfies never);
+  }
+
+  tileToWorld(tile: Phaser.Tilemaps.Tile, out = this._tmpVector3): Phaser.Math.Vector3 {
+    return this.screenToWorld(this.tileToScreen(tile), this.tileWorldZ(tile), out);
+  }
+
+  screenToWorld(screen: Phaser.Math.Vector2, worldZ: number, out = this._tmpVector3) {
+    out.x = screen.x * this.X_FACTOR_INV;
+    out.y = (screen.y + worldZ * this.Z_FACTOR) * this.Y_FACTOR_INV;
+    out.z = worldZ;
+    return out;
+  }
+
+  screenGroundToWorld(screen: Phaser.Math.Vector2, out = this._tmpVector3) {
+    const tile = this.screenToTile(screen);
+    const worldZ = tile ? this.tileWorldZ(tile) : 0;
+    return this.screenToWorld(screen, worldZ, out);
+  }
+
+  screenFloorToWorld(screen: Phaser.Math.Vector2, out = this._tmpVector3) {
+    return this.screenToWorld(screen, 0, out);
+  }
+
+  worldToMetadata(world: Phaser.Math.Vector3, out = this._tmpVector2): Phaser.Math.Vector2 {
+    const { x, y } = this.screenToTileCoordinates(this.worldFloorToScreen(world), null);
+    out.x = x * this.metadataPixelsPerTile;
+    out.y = y * this.metadataPixelsPerTile;
+    return out;
+  }
+
+  // 0 => mud
+  // 1 => iron
+  groundHardness(_world: Phaser.Math.Vector3): number {
+    // const tile = this.worldToTile(world);
+    return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
+  }
+
+  groundElevation(world: Phaser.Math.Vector3): number | null {
+    const { x, y } = this.worldToMetadata(world, this._tmpVector2);
+    const height = this.heightmap[Math.round(y)]?.[Math.round(x)];
+    if (height === undefined) return null;
+
+    return (height / this.metadataPixelsPerTile) * (this.map.tileWidth * this.X_FACTOR_INV);
+  }
+
+  groundNormal(world: Phaser.Math.Vector3, out = this._tmpVector3): Phaser.Math.Vector3 | null {
+    const { x, y } = this.worldToMetadata(world);
+    const normal = this.normalmap[Math.round(y)]?.[Math.round(x)];
+    if (normal === undefined) return null;
+
+    // inverse y and rotate 45 degrees
+    out.x = (normal[0] + normal[1]) * Math.SQRT1_2;
+    out.y = (normal[0] - normal[1]) * Math.SQRT1_2;
+    out.z = normal[2];
+    return out;
+  }
+
+  worldToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2) {
+    out.x = world.x * this.X_FACTOR;
+    out.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
+    return out;
+  }
+
+  worldFloorToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2) {
+    out.x = world.x * this.X_FACTOR;
+    out.y = world.y * this.Y_FACTOR;
+    return out;
+  }
+
+  tileWorldZ(tile: Phaser.Tilemaps.Tile): number {
+    const centerLevel = tile.properties["CENTER"] as undefined | number;
+    if (centerLevel === undefined || typeof centerLevel !== "number")
+      throw new Error(`Tile has no valid center property: ${JSON.stringify(tile, null, 2)}`);
+    const levelP = tile.layer.properties.find((p: any) => p["name"] === "level") as undefined | { value: number };
+    if (levelP === undefined || typeof levelP.value !== "number")
+      throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tile.layer, null, 2)}`);
+    const layerLevel = levelP.value;
+    const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
+    return (layerLevel + centerLevel) * TILE_ELEVATION_RATIO * tileWidthWorld;
+  }
+
+  tileCoordinatesToWorld(tileX: number, tileY: number, out = this._tmpVector3): Phaser.Math.Vector3 {
+    let tile;
+    for (const layer of this.reversedLayers) {
+      const candidateTile = this.map.getTileAt(tileX, tileY, false, layer);
+      if (candidateTile && candidateTile.index !== -1) {
+        tile = candidateTile;
+        break;
+      }
+    }
+
+    if (!tile) throw new Error(`Tile at (${tileX}, ${tileY}) not found in any layer`);
+
+    return this.tileToWorld(tile, out);
   }
 
   setupCamera() {
-    const mapPixelWidth = this.map.widthInPixels;
-    const mapPixelHeight = this.map.heightInPixels;
     const camera = this.cameras.main;
-    camera.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
-    camera.setRoundPixels(true);
-    camera.scrollX = 0; // Start at the left
-    camera.scrollY = mapPixelHeight - camera.height; // Start at the bottom
+    camera.setBounds(this.mapBounds.x, this.mapBounds.y, this.mapBounds.width, this.mapBounds.height);
+    camera.scrollX = -this.mapBounds.width / 2; // Start at the left
+    camera.scrollY = this.mapBounds.height - camera.height; // Start at the bottom
     this.scale.on("resize", this.handleResize, this);
     this.handleResize(this.game.scale.gameSize);
   }
@@ -381,21 +488,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleResize({ width, height }: { width: number; height: number }) {
-    const mapPixelWidth = this.map.widthInPixels;
-    const mapPixelHeight = this.map.heightInPixels;
     // Zoom level if we were to make the map's width exactly fit the canvas width
-    const scaleToFitWidth = width / mapPixelWidth;
+    const scaleToFitWidth = width / this.mapBounds.width;
     // Zoom level if we were to make the map's height exactly fit the canvas height
-    const scaleToFitHeight = height / mapPixelHeight;
+    const scaleToFitHeight = height / this.mapBounds.height;
     this.coverZoom = Math.max(scaleToFitWidth, scaleToFitHeight);
     this.cameras.main.setSize(width, height);
-    this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter((zoom) => zoom > this.coverZoom + 0.1);
+    this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter((zoom) => zoom > this.coverZoom * 1.25);
     this.zooms.unshift(this.coverZoom);
     if (!this.zooms.includes(this.zoom)) {
       if (this.zoom === undefined) this.zoom = this.zooms[0];
-      else {
-        this.zoom = [...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0];
-      }
+      else this.zoom = [...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0];
     }
     this.cameras.main.setZoom(this.zoom);
   }

@@ -78,6 +78,7 @@ export function bounce(
 
 const TNT_KG_IN_JOULES = 4.184 * 10e6; // 1 TNT kg = 4.184 MJ
 const INV_TNT_KG_IN_JOULES = 1 / TNT_KG_IN_JOULES;
+const normal = new Phaser.Math.Vector3(0, 0, 0);
 
 /**
  * Collides a sphere against height-mapped ground. Calculates bounce magnitude
@@ -89,7 +90,7 @@ const INV_TNT_KG_IN_JOULES = 1 / TNT_KG_IN_JOULES;
  * @returns Splash energy in TNT kg eq. (number), or false if no collision.
  */
 export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: number): number | false {
-  const groundZ = s.gameScene.getSurfaceZFromWorldPosition(s.coordinates) ?? 0;
+  const groundZ = s.gameScene.groundElevation(s.coordinates) ?? 0;
 
   // Penetration & Impact Angle Check ---
   const elevation = s.coordinates.z - groundZ; // Elevation above ground
@@ -99,7 +100,8 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   if (penetrationDepth <= EPSILON) return false; // Not penetrating or just touching
 
   // Check relative direction (velocity vs normal)
-  const normal = s.gameScene.getSurfaceNormalFromWorldPosition(s.coordinates);
+  s.gameScene.groundNormal(s.coordinates, normal);
+  if (normal === null) return false; // No valid normal, cannot collide
   const velocityDotNormal = s.velocity.dot(normal);
 
   // Cosine of the angle between -velocity and normal (impact angle relative to normal)
@@ -120,7 +122,7 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   );
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
-  const hardness = s.gameScene.getSurfaceHardnessFromWorldPosition(s.coordinates);
+  const hardness = s.gameScene.groundHardness(s.coordinates);
 
   let bounce_percentage = hardness * impactBouncePotential;
 

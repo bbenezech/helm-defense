@@ -11,7 +11,7 @@ import {
   BULLET,
 } from "../constants.js";
 import { GameScene } from "../scene/game.js";
-import { setNormalizedVelocity } from "../lib/trigo.js";
+import { normalizedVelocity } from "../lib/trigo.js";
 import timeScaleStore from "../../store/time-scale.js";
 import { Coordinates } from "../lib/coordinates.js";
 import { randomNormal } from "../lib/random.js";
@@ -21,7 +21,7 @@ const RECOIL_DURATION_MS = 500;
 const RECOIL_RETURN_DURATION_MS = 1500;
 const RECOIL_FACTOR = 0.3;
 const CANNON_GROUND_CLEARANCE = 0.5 * WORLD_UNIT_PER_METER;
-const INITIAL_ALTITUDE = Phaser.Math.DegToRad(0);
+const INITIAL_ALTITUDE = Phaser.Math.DegToRad(15);
 const TURN_RATE_RADIANS_PER_SECOND = Phaser.Math.DegToRad(90);
 const COOLDOWN_MS = 2000; // 2 seconds cooldown
 
@@ -251,8 +251,8 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.dirty = true;
   }
 
-  setRequestedAzymuth(targetScreen: Phaser.Types.Math.Vector2Like) {
-    const targetWorld = this.gameScene.getSurfaceWorldPosition(targetScreen, this._targetWorld);
+  setRequestedAzymuth(targetScreen: Phaser.Math.Vector2) {
+    const targetWorld = this.gameScene.screenGroundToWorld(targetScreen, this._targetWorld);
 
     this.requestedAzymuth = Phaser.Math.Angle.BetweenPoints(this.cannonCoordinates, targetWorld);
   }
@@ -305,7 +305,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       .setPosition(this.coordinates.screen.x, this.coordinates.screen.y)
       .setDepth(this.cannonCoordinates.screen.y - 2);
 
-    setNormalizedVelocity(this.azymuth, this.altitude, this.velocity).scale(BULLET.speed);
+    normalizedVelocity(this.azymuth, this.altitude, this.velocity).scale(BULLET.speed);
     this.muzzleCoordinates.addVectors(
       this.cannonCoordinates,
       this._muzzleWorldOffset.copy(this.velocity).normalize().scale(this.barrelLength),
@@ -330,7 +330,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.shadow.scaleX = scaleX;
   }
 
-  requestShoot(targetScreen: Phaser.Types.Math.Vector2Like) {
+  requestShoot(targetScreen: Phaser.Math.Vector2) {
     this.shootRequested = true;
     this.setRequestedAzymuth(targetScreen);
   }

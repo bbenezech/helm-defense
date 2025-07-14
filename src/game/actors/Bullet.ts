@@ -45,7 +45,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     this.shadow = this.gameScene.add
       .image(0, 0, this.texture)
       .setAlpha(0.5)
-      .setScale(this.gameScene.worldToScreen.x, this.gameScene.worldToScreen.y);
+      .setScale(this.gameScene.worldToScreenRatio.x, this.gameScene.worldToScreenRatio.y);
 
     this.velocity = new Coordinates(this, velocity);
     this.coordinates = new Coordinates(this, world);
@@ -62,12 +62,12 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       speedX: () =>
         randomNormal(
           this.explosionVelocity.screen.x,
-          this.explosionVelocity.length() * this.gameScene.worldToScreen.x * 0.1,
+          this.explosionVelocity.length() * this.gameScene.worldToScreenRatio.x * 0.1,
         ),
       speedY: () =>
         randomNormal(
           this.explosionVelocity.screen.y,
-          this.explosionVelocity.length() * this.gameScene.worldToScreen.y * 0.1,
+          this.explosionVelocity.length() * this.gameScene.worldToScreenRatio.y * 0.1,
         ),
       accelerationX: this.gameScene.gravity.screen.x,
       accelerationY: this.gameScene.gravity.screen.y,
@@ -88,19 +88,19 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       lifespan: {
         onEmit: () =>
           (this.explosionVelocity.z * 2 * 1000) / -this.gameScene.gravity.z +
-          (Math.random() * 400 - 200) * this.gameScene.worldToScreen.y +
+          (Math.random() * 400 - 200) * this.gameScene.worldToScreenRatio.y +
           STATIC_PARTICLE_MS,
       },
     });
   }
 
   move(delta: number) {
-    this.dirty = true;
     if (this.velocity.x === 0 && this.velocity.y === 0 && this.velocity.z === 0) return;
+    this.dirty = true;
     const speedSq = this.velocity.lengthSq();
     if (speedSq < 1) {
       this.velocity.reset();
-      this.coordinates.z = this.gameScene.getSurfaceZFromWorldPosition(this.coordinates) ?? 0;
+      this.coordinates.z = this.gameScene.groundElevation(this.coordinates) ?? 0;
       return;
     }
 
@@ -138,7 +138,8 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
   updateVisuals() {
     this.setPosition(this.coordinates.screen.x, this.coordinates.screen.y).setDepth(this.coordinates.screen.y);
-    const surfaceZ = this.gameScene.getSurfaceZFromWorldPosition(this.coordinates);
+    const surfaceZ = this.gameScene.groundElevation(this.coordinates);
+
     if (surfaceZ === null) {
       this.shadow.setVisible(false);
     } else {
@@ -157,8 +158,8 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
       createCraterMark(this.gameScene, this.coordinates.screen.x, this.coordinates.screen.y, {
         rotation: azimuthRadFromVelocityVector(this.velocity),
         radius,
-        stretchX: this.gameScene.worldToScreen.x,
-        stretchY: this.gameScene.worldToScreen.y,
+        stretchX: this.gameScene.worldToScreenRatio.x,
+        stretchY: this.gameScene.worldToScreenRatio.y,
         duration: 10000, // Lasts for 10 seconds
         color: 0x1a1a1a, // A dark, brownish-black
       });

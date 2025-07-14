@@ -114,7 +114,7 @@ class CoordinatesImpl {
 
   public get screen() {
     if (!this.screenUpToDate) {
-      this.gameScene.getScreenPosition(this.world, this.screenVector);
+      this.gameScene.worldToScreen(this.world, this.screenVector);
       this.screenUpToDate = true;
     }
     return this.screenVector;

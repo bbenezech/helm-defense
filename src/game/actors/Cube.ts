@@ -145,7 +145,7 @@ export class Cube extends Phaser.GameObjects.Container {
 
   setWorld(world: Phaser.Math.Vector3) {
     this.world.copy(world);
-    this.screen = this.gameScene.getScreenPosition(this.world, this.screen);
+    this.screen = this.gameScene.worldToScreen(this.world, this.screen);
     this.calculateWorldVertices();
 
     this.dirty = true;
@@ -165,7 +165,7 @@ export class Cube extends Phaser.GameObjects.Container {
 
     // --- Project World Vertices to Screen Space ---
     for (let i = 0; i < this.worldVertices.length; i++) {
-      this.gameScene.getScreenPosition(
+      this.gameScene.worldToScreen(
         this.worldVertices[i],
         this.screenVertices[i], // Update the screen vertices array
       );

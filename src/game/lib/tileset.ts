@@ -5,7 +5,7 @@ export function getTileset({
   name,
   tileheight,
   tilewidth,
-  slopeheight,
+  elevationYOffsetPx,
   terrainTileNames,
   tileMargin,
   tilesetMargin,
@@ -14,7 +14,7 @@ export function getTileset({
   imageFilename: string;
   tilewidth: number;
   tileheight: number;
-  slopeheight: number;
+  elevationYOffsetPx: number;
   terrainTileNames: TerrainTileName[];
   tileMargin: number;
   tilesetMargin: number;
@@ -33,7 +33,10 @@ export function getTileset({
     return {
       id: i,
       probability: 1,
-      properties: [{ name: "NESW" as const, type: "string" as const, value: terrain.NESW }],
+      properties: [
+        { name: "NESW" as const, type: "string" as const, value: terrain.NESW },
+        { name: "CENTER" as const, type: "float" as const, value: terrain.CENTER },
+      ],
     };
   });
 
@@ -53,7 +56,7 @@ export function getTileset({
     tiles,
     version: "1.10",
     tiledversion: "1.11.2",
-    properties: [{ name: "slope" as const, type: "int" as const, value: slopeheight }],
+    properties: [{ name: "elevationYOffsetPx" as const, type: "int" as const, value: elevationYOffsetPx }],
   } as const;
 }
 

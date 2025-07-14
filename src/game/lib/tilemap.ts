@@ -5,26 +5,27 @@ export type TilemapLayer = number[][];
 export type Tilemap = ReturnType<typeof getTilemap>;
 
 export function getTilemap(rawLayers: number[][][], tileset: Tileset) {
-  const slope = tileset.properties[0];
-  if (!slope || slope.name !== "slope") throw new Error("Tileset must have a 'slope' property");
-  const tilewidth = tileset.tilewidth;
-  const tileheight = tileset.tileheight - 2 * slope.value;
+  const elevationYOffsetPx = tileset.properties.find((p) => p.name === "elevationYOffsetPx");
+  if (elevationYOffsetPx === undefined) throw new Error("Tileset must have a 'slopeYOffsetPx' property");
   const layers = rawLayers.map((data, index) => ({
     id: index + 1,
-    name: `level-${index + 1}`,
+    name: `level-${index}`,
     opacity: 1,
     type: "tilelayer",
     visible: true,
     x: 0,
     y: 0,
     offsetx: 0,
-    offsety: -(index * slope.value),
-    width: data[0].length,
+    offsety: -(index * elevationYOffsetPx.value),
     height: data.length,
+    width: data[0].length,
     data: data.flat(),
+    properties: [{ name: "level", type: "int", value: index }],
   }));
-  const width = layers.reduce((max, layer) => Math.max(max, layer.width + layer.x), 0);
   const height = layers.reduce((max, layer) => Math.max(max, layer.height + layer.y), 0);
+  const width = layers.reduce((max, layer) => Math.max(max, layer.width + layer.x), 0);
+  const tileheight = tileset.tileheight - 2 * elevationYOffsetPx.value;
+  const tilewidth = tileset.tilewidth;
 
   return {
     type: "map",

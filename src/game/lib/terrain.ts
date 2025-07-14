@@ -2,7 +2,7 @@ import type { Heightmap, Normalmap } from "./heightmap.js";
 import { log } from "./log.js";
 import { barycentricWeights, type Vector3 } from "./vector.js";
 
-const NORMAL_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (level 0 to level 1 elevation on a tile width).
+const TILE_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (level 0 to level 1 elevation on a tile width).
 
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 type LastOf<T> = UnionToIntersection<T extends any ? () => T : never> extends () => infer R ? R : never;
@@ -29,26 +29,26 @@ type TerrainTile = {
 
 // deal with the 0 to 1 unit elevation on a tile width
 // Math.tan(Math.acos(NORMAL_ELEVATION_VECTOR_Z)) => slope is 20.25% of width => 4.938 : 1 => ground angle is 0.2 rad or 11.45°
-const NORMAL_ELEVATION_ANGLE = Math.acos(NORMAL_ELEVATION_Z); // angle 0.2 rad elevation angle => 11.45° slope to go from 0 to 1 elevation on a tile width
-const NORMAL_ELEVATION_RATIO = Math.tan(NORMAL_ELEVATION_ANGLE); // elevation ratio => 0.20253482585771954 elevation per tile width on a normal slope, 4.938 : 1. It means tile at level 1 is 0.2025 units (tile width) higher than tile at level 0.
+const TILE_ELEVATION_ANGLE = Math.acos(TILE_ELEVATION_Z); // angle 0.2 rad elevation angle => 11.45° slope to go from 0 to 1 elevation on a tile width
+export const TILE_ELEVATION_RATIO = Math.tan(TILE_ELEVATION_ANGLE); // elevation ratio => 0.20253482585771954 elevation per tile width on a normal slope, 4.938 : 1. It means tile at level 1 is 0.2025 units (tile width) higher than tile at level 0.
 
-const NORMAL_ELEVATION_X_OR_Y = Math.sqrt(1 - NORMAL_ELEVATION_Z * NORMAL_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
-const SOUTH_WEST: Vector3 = [0, -NORMAL_ELEVATION_X_OR_Y, NORMAL_ELEVATION_Z];
-const SOUTH_EAST: Vector3 = [NORMAL_ELEVATION_X_OR_Y, 0, NORMAL_ELEVATION_Z];
-const NORTH_WEST: Vector3 = [-NORMAL_ELEVATION_X_OR_Y, 0, NORMAL_ELEVATION_Z];
-const NORTH_EAST: Vector3 = [0, NORMAL_ELEVATION_X_OR_Y, NORMAL_ELEVATION_Z];
+const NORMAL_ELEVATION_X_OR_Y = Math.sqrt(1 - TILE_ELEVATION_Z * TILE_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
+const SOUTH_WEST: Vector3 = [0, -NORMAL_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
+const SOUTH_EAST: Vector3 = [NORMAL_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
+const NORTH_WEST: Vector3 = [-NORMAL_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
+const NORTH_EAST: Vector3 = [0, NORMAL_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
 
 // deal with the 0 to 1 unit elevation on a tile half-diagonal. If width of tile is 1, then half-diagonal is Math.SQRT2/2
 // Math.tan(Math.acos(0.9619)) => slope is 28.46% of width => 3.513 : 1 => ground angle is 0.277 rad or 15.89°
-const HALF_SLOPE_ELEVATION_ANGLE = Math.atan(Math.SQRT2 * Math.tan(NORMAL_ELEVATION_ANGLE)); // 0.277 radians or 15.89°
-const HALF_SLOPE_ELEVATION_Z = Math.cos(HALF_SLOPE_ELEVATION_ANGLE); // 0.9619
-const HALF_SLOPE_ELEVATION_X_AND_Y = Math.sqrt(Math.abs(1 - HALF_SLOPE_ELEVATION_Z * HALF_SLOPE_ELEVATION_Z) / 2); // 0.1933
+const HALF_TILE_ELEVATION_ANGLE = Math.atan(Math.SQRT2 * Math.tan(TILE_ELEVATION_ANGLE)); // 0.277 radians or 15.89°
+const HALF_TILE_ELEVATION_Z = Math.cos(HALF_TILE_ELEVATION_ANGLE); // 0.9619
+const HALF_TILE_ELEVATION_X_AND_Y = Math.sqrt(Math.abs(1 - HALF_TILE_ELEVATION_Z * HALF_TILE_ELEVATION_Z) / 2); // 0.1933
 
 const TOP: Vector3 = [0, 0, 1];
-const SOUTH: Vector3 = [HALF_SLOPE_ELEVATION_X_AND_Y, -HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
-const EAST: Vector3 = [HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
-const WEST: Vector3 = [-HALF_SLOPE_ELEVATION_X_AND_Y, -HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
-const NORTH: Vector3 = [-HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_X_AND_Y, HALF_SLOPE_ELEVATION_Z];
+const SOUTH: Vector3 = [HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const EAST: Vector3 = [HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const WEST: Vector3 = [-HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const NORTH: Vector3 = [-HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
 
 export const TERRAIN_TILE_INDEX = {
   SLOPE_FLAT: {
@@ -341,7 +341,7 @@ export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain
     startsAt,
     `Converted tilable heightmap to terrain (${tilableHeightmap[0].length - 1}x${
       tilableHeightmap.length - 1
-    }), ${TERRAIN_TILE_COUNT} terrain tiles, elevationRatio=${NORMAL_ELEVATION_RATIO.toFixed(4)}`,
+    }), ${TERRAIN_TILE_COUNT} terrain tiles, elevationRatio=${TILE_ELEVATION_RATIO.toFixed(4)}`,
   );
   return terrain;
 }
@@ -369,7 +369,7 @@ export function terrainToMetadata(
   const normalmap: Normalmap = Array.from({ length: fineMapHeight }, () => Array(fineMapWidth).fill([0, 0, 1]));
 
   const invSpan = 1.0 / pixelsPerTile;
-  const pxElevation = NORMAL_ELEVATION_RATIO * pixelsPerTile;
+  const pxElevationRatio = TILE_ELEVATION_RATIO * pixelsPerTile;
 
   const vN: Point3D = { x: 0, y: 0, z: 0 };
   const vE: Point3D = { x: 1, y: 0, z: 0 };
@@ -436,7 +436,7 @@ export function terrainToMetadata(
       }
 
       const [w1, w2, w3] = barycentricWeights(normX, normY, tri_v1, tri_v2, tri_v3, barycentricWeightsOut);
-      heightmap[py][px] = (level + w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * pxElevation;
+      heightmap[py][px] = (level + w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * pxElevationRatio;
       normalmap[py][px] = normal;
     }
   }
@@ -444,7 +444,7 @@ export function terrainToMetadata(
   log(
     `terrainToMetadata`,
     startsAt,
-    `Terrain metadata generated for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${pxElevation.toFixed(4)}`,
+    `Terrain metadata generated for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${TILE_ELEVATION_RATIO.toFixed(4)}, pixelsPerTile=${pixelsPerTile.toFixed(4)}`,
   );
 
   return { heightmap, normalmap };
