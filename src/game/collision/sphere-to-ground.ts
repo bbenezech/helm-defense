@@ -110,15 +110,15 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   const cosImpactAngle = -velocityDotNormal / speed; // Range [0, 1]
 
   // parallelFactor: 1 for grazing (cosImpactAngle=0), 0 for head-on (cosImpactAngle=1)
-  const parallelFactor = Phaser.Math.Clamp(1.0 - cosImpactAngle, 0.0, 1.0);
+  const parallelFactor = Phaser.Math.Clamp(1 - cosImpactAngle, 0, 1);
   // fastFactor: How fast relative to max speed
-  const fastFactor = Phaser.Math.Clamp(speed / BULLET.speed, 0.0, 1.0);
+  const fastFactor = Phaser.Math.Clamp(speed / BULLET.speed, 0, 1);
 
   // Potential for bounce based purely on impact angle and speed
   const impactBouncePotential = Phaser.Math.Clamp(
     parallelFactor * fastFactor, // Higher for fast, grazing impacts
-    0.0,
-    1.0,
+    0,
+    1,
   );
 
   // Combine impact potential with surface properties. Bounce if impact potential > softness.
@@ -127,9 +127,9 @@ export function sphereToGroundCollision(s: Solid, speedSq: number, speed?: numbe
   let bounce_percentage = hardness * impactBouncePotential;
 
   // Apply threshold: weak uninteresting bounces become splashes (no speed retained)
-  if (bounce_percentage < MIN_BOUNCE_THRESHOLD) bounce_percentage = 0.0;
+  if (bounce_percentage < MIN_BOUNCE_THRESHOLD) bounce_percentage = 0;
 
-  const explosion_percentage = 1.0 - bounce_percentage;
+  const explosion_percentage = 1 - bounce_percentage;
   const energy = explosion_percentage * 0.5 * (speedSq * s.mass) * INV_TNT_KG_IN_JOULES;
 
   // Push object out along the normal by the penetration depth

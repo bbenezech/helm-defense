@@ -25,8 +25,8 @@ function boxBlurH(
     let sum = 0;
 
     // Prime the moving average window
-    for (let i = -radius; i <= radius; i++) {
-      const sampleX = getIndex(i, width);
+    for (let index = -radius; index <= radius; index++) {
+      const sampleX = getIndex(index, width);
       sum += source[y][sampleX];
     }
 
@@ -59,7 +59,7 @@ function boxBlurV(
     let sum = 0;
 
     // Prime the moving average window
-    for (let i = -radius; i <= radius; i++) sum += source[getIndex(i, height)][x];
+    for (let index = -radius; index <= radius; index++) sum += source[getIndex(index, height)][x];
 
     // Slide the window down the column
     for (let y = 0; y < height; y++) {
@@ -85,11 +85,11 @@ function fastBoxBlurInPlace(
   const width = heightmap[0].length;
   if (width === 0) return heightmap;
 
-  const targetMap: number[][] = Array.from({ length: height }, () => Array(width).fill(0));
+  const targetMap: number[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => 0));
   const invRadius = 1 / (radius * 2 + 1);
   const getIndex = toroidal ? wrapIndex : clampIndex;
 
-  for (let i = 0; i < passes; i++) {
+  for (let index = 0; index < passes; index++) {
     boxBlurH(heightmap, targetMap, width, height, radius, invRadius, getIndex);
     boxBlurV(targetMap, heightmap, width, height, radius, invRadius, getIndex);
   }

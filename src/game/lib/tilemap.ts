@@ -49,26 +49,25 @@ export function getTilemap(rawLayers: number[][][], tileset: Tileset) {
 type NESWToGids = Record<NESW, { gid: number; probability: number }[]>;
 export function terrainToLayers(terrain: Terrain, tileset: Tileset): TilemapLayer[] {
   const firstgid = 1;
-  const NESWToGids = tileset.tiles.reduce((acc, { id, properties, probability }) => {
+  const NESWToGids = tileset.tiles.reduce((accumulator, { id, properties, probability }) => {
     const NESW = properties.find((p) => p.name === "NESW")?.value;
-    if (NESW !== undefined) (acc[NESW] ??= []).push({ gid: id + firstgid, probability });
-    return acc;
+    if (NESW !== undefined) (accumulator[NESW] ??= []).push({ gid: id + firstgid, probability });
+    return accumulator;
   }, {} as NESWToGids);
 
-  const maxHeight = Math.max(...terrain.flat(2).map((t) => t.level));
+  const maxHeight = Math.max(...terrain.flat().map((t) => t.level));
   const layers: TilemapLayer[] = Array.from({ length: maxHeight + 1 }, () =>
-    Array.from({ length: terrain.length }, () => Array(terrain[0].length).fill(0)),
+    Array.from({ length: terrain.length }, () => Array.from({ length: terrain[0].length })),
   );
 
-  for (let y = 0; y < terrain.length; y++) {
-    for (let x = 0; x < terrain[y].length; x++) {
-      const cell = terrain[y][x];
+  for (const [y, element] of terrain.entries()) {
+    for (const [x, cell] of element.entries()) {
       const candidates = NESWToGids[cell.tile.NESW];
       if (!candidates || candidates.length === 0)
         throw new Error(`No terrain candidates found for terrain tile "${cell.tile.NESW}" at (${x}, ${y})`);
       const totalProbability = candidates.reduce((sum, candidate) => sum + candidate.probability, 0);
       let randomPoint = Math.random() * totalProbability;
-      let chosenCandidate = candidates[candidates.length - 1];
+      let chosenCandidate = candidates.at(-1);
       for (const candidate of candidates) {
         if (randomPoint < candidate.probability) {
           chosenCandidate = candidate;

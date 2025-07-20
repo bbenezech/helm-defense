@@ -21,7 +21,7 @@ import { log } from "../src/game/lib/log.js";
 import { getTileset } from "../src/game/lib/tileset.js";
 import { imageToRgbaBuffer, saveHeightmap, saveNormalmap } from "./lib/file.js";
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __dirname = import.meta.dirname;
 const SCRIPT_NAME = "tiles-shading-rotation-fast";
 const EXAMPLE_TILE_INDEXES = [
   [
@@ -92,15 +92,18 @@ const EXAMPLE_TILE_INDEXES = [
   ],
 ];
 
-function createTileset(inputDir: string, outputDir: string, name: string) {
+function createTileset(inputDirectory: string, outputDirectory: string, name: string) {
   const tileMargin = 0; // margin around each tile
   const tilesetMargin = 0; // margin around the whole tileset image
 
-  const tilecount = fs.readdirSync(inputDir).filter((file) => file.endsWith(".png")).length;
-  if (tilecount < 1) throw new Error(`No .png files found in input directory: ${inputDir}`);
+  const tilecount = fs.readdirSync(inputDirectory).filter((file) => file.endsWith(".png")).length;
+  if (tilecount < 1) throw new Error(`No .png files found in input directory: ${inputDirectory}`);
   if (tilecount !== ORDERED_SLOPES.length)
     throw new Error(`tilecount must be ${ORDERED_SLOPES.length}, got ${tilecount}`);
-  const firstTilePath = path.join(inputDir, fs.readdirSync(inputDir).find((file) => file.endsWith(".png"))!);
+  const firstTilePath = path.join(
+    inputDirectory,
+    fs.readdirSync(inputDirectory).find((file) => file.endsWith(".png"))!,
+  );
   const tileImage = imageSize(fs.readFileSync(firstTilePath));
   if (tileImage.width % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileImage.width}`);
 
@@ -115,11 +118,11 @@ function createTileset(inputDir: string, outputDir: string, name: string) {
     tileMargin,
     tilesetMargin,
   });
-  fs.writeFileSync(path.join(outputDir, "tileset.json"), JSON.stringify(tileset, null, 2));
+  fs.writeFileSync(path.join(outputDirectory, "tileset.json"), JSON.stringify(tileset, null, 2));
 
   const startsAt = Date.now();
-  const imagePath = path.join(outputDir, imageFilename);
-  execSync(`magick montage ${inputDir}/*.png \
+  const imagePath = path.join(outputDirectory, imageFilename);
+  execSync(`magick montage ${inputDirectory}/*.png \
         -quiet \
         -tile ${tileset.columns}x${tileset.rows} \
         -geometry ${tileImage.width}x${tileImage.height}+${tileMargin}+${tileMargin} \
@@ -138,54 +141,54 @@ function createTileset(inputDir: string, outputDir: string, name: string) {
 async function generateAssets(texture: string, blenderBin: string, blenderScript: string) {
   console.log(`\n--- Processing: ${path.basename(texture)} ---`);
   const name = path.basename(texture, ".png");
-  const outputDir = path.resolve(`${path.dirname(texture)}/tilesets/${name}`);
+  const outputDirectory = path.resolve(`${path.dirname(texture)}/tilesets/${name}`);
 
   // texture.png is read by Blender from the same directory as the script
-  const tmpLocalBlenderTexture = path.join(__dirname, "texture.png");
-  fs.copyFileSync(texture, tmpLocalBlenderTexture);
+  const temporaryLocalBlenderTexture = path.join(__dirname, "texture.png");
+  fs.copyFileSync(texture, temporaryLocalBlenderTexture);
 
   const startsAt = Date.now();
   execSync(`${blenderBin} -b ${blenderScript} -a`);
   log("blender", startsAt, `${blenderBin} -b ${blenderScript} -a`);
-  fs.unlinkSync(tmpLocalBlenderTexture);
+  fs.unlinkSync(temporaryLocalBlenderTexture);
 
-  const inputDir = path.join(__dirname, "out"); // Blender outputs to a fixed .out directory
-  if (!fs.existsSync(inputDir)) {
-    console.error(`Error: Output directory "${inputDir}" does not exist.`);
+  const inputDirectory = path.join(__dirname, "out"); // Blender outputs to a fixed .out directory
+  if (!fs.existsSync(inputDirectory)) {
+    console.error(`Error: Output directory "${inputDirectory}" does not exist.`);
     process.exit(1);
   }
 
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-  fs.copyFileSync(texture, path.join(outputDir, "texture.png"));
+  if (!fs.existsSync(outputDirectory)) fs.mkdirSync(outputDirectory, { recursive: true });
+  fs.copyFileSync(texture, path.join(outputDirectory, "texture.png"));
 
-  const tileset = createTileset(inputDir, outputDir, name);
-  fs.rmSync(inputDir, { recursive: true, force: true });
+  const tileset = createTileset(inputDirectory, outputDirectory, name);
+  fs.rmSync(inputDirectory, { recursive: true, force: true });
 
   const exampleTilemap = getTilemap(EXAMPLE_TILE_INDEXES, tileset);
-  fs.writeFileSync(path.join(outputDir, "example.map.json"), JSON.stringify(exampleTilemap));
+  fs.writeFileSync(path.join(outputDirectory, "example.map.json"), JSON.stringify(exampleTilemap));
 
   const tileableHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 });
-  fs.writeFileSync(path.join(outputDir, `random.tileableHeightmap.json`), JSON.stringify(tileableHeightmap));
+  fs.writeFileSync(path.join(outputDirectory, `random.tileableHeightmap.json`), JSON.stringify(tileableHeightmap));
 
   const randomTerrain = tileableHeightmapToTerrain(tileableHeightmap);
   const randomTilemap = getTilemap(terrainToLayers(randomTerrain, tileset), tileset);
-  fs.writeFileSync(path.join(outputDir, `random.map.json`), JSON.stringify(randomTilemap));
+  fs.writeFileSync(path.join(outputDirectory, `random.map.json`), JSON.stringify(randomTilemap));
 
   const pixelsPerTile = tileset.tilewidth / 8;
   const randomMapMetadata = terrainToMetadata(randomTerrain, pixelsPerTile);
-  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDir, `random.heightmap.png`));
-  await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDir, `random.normalmap.png`));
+  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDirectory, `random.heightmap.png`));
+  await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDirectory, `random.normalmap.png`));
   const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10);
-  await saveNormalmap(softNormalmap, path.join(outputDir, `random.soft.normalmap.png`));
+  await saveNormalmap(softNormalmap, path.join(outputDirectory, `random.soft.normalmap.png`));
   const textureBuffer = await imageToRgbaBuffer(texture);
   const textureHeightmap = fastBoxBlur(rgbaBufferToHeightmap(textureBuffer), 10);
-  await saveHeightmap(textureHeightmap, path.join(outputDir, `texture.heightmap.png`));
+  await saveHeightmap(textureHeightmap, path.join(outputDirectory, `texture.heightmap.png`));
   const textureNormalmap = heightmapToNormalmap(textureHeightmap);
   const textureNormalmapToroidal = fastBoxBlurVectors(heightmapToNormalmap(textureHeightmap), 10, 4, true);
-  await saveNormalmap(textureNormalmap, path.join(outputDir, `texture.normalmap.png`));
-  await saveNormalmap(textureNormalmapToroidal, path.join(outputDir, `texture.toroidal.normalmap.png`));
+  await saveNormalmap(textureNormalmap, path.join(outputDirectory, `texture.normalmap.png`));
+  await saveNormalmap(textureNormalmapToroidal, path.join(outputDirectory, `texture.toroidal.normalmap.png`));
   const finalNormalmap = addTileNormalmapToGlobalNormalmap(softNormalmap, textureNormalmapToroidal, pixelsPerTile);
-  await saveNormalmap(finalNormalmap, path.join(outputDir, `random.combined.normalmap.png`));
+  await saveNormalmap(finalNormalmap, path.join(outputDirectory, `random.combined.normalmap.png`));
 }
 
 const argv = await yargs(hideBin(process.argv))

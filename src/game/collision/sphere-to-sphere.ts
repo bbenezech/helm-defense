@@ -10,10 +10,10 @@ export function sphereToSphereCollision(
   const dx = b.coordinates.x - a.coordinates.x;
   const dy = b.coordinates.y - a.coordinates.y;
   const dz = b.coordinates.z - a.coordinates.z;
-  const distSq = dx * dx + dy * dy + dz * dz;
+  const distributionSq = dx * dx + dy * dy + dz * dz;
 
-  if (distSq >= combinedSqRadius) return 0; // outside or just touching
-  if (distSq < 1e-8) return 0; // almost same centre
+  if (distributionSq >= combinedSqRadius) return 0; // outside or just touching
+  if (distributionSq < 1e-8) return 0; // almost same centre
 
   const rvx = a.velocity.x - b.velocity.x;
   const rvy = a.velocity.y - b.velocity.y;
@@ -28,12 +28,12 @@ export function sphereToSphereCollision(
 
   // jVec = -(1+e) * (rv·n) / (invMassSum * |n|²) * n
   // Since |n|² = distSq, we avoid sqrt completely.
-  const safeDistSq = Math.max(distSq, 1e-6);
-  const jFactor = (-(1 + restitution) * rvDotN) / (invMassSum * safeDistSq);
+  const safeDistributionSq = Math.max(distributionSq, 1e-6);
+  const indexFactor = (-(1 + restitution) * rvDotN) / (invMassSum * safeDistributionSq);
 
-  const jx = jFactor * dx;
-  const jy = jFactor * dy;
-  const jz = jFactor * dz;
+  const jx = indexFactor * dx;
+  const jy = indexFactor * dy;
+  const jz = indexFactor * dz;
 
   a.velocity.x += jx * a.invMass;
   a.velocity.y += jy * a.invMass;
@@ -44,6 +44,6 @@ export function sphereToSphereCollision(
   b.velocity.z -= jz * b.invMass;
 
   return computeDamage
-    ? Math.sqrt(jx * jx + jy * jy + jz * jz) // *one* sqrt only when needed
+    ? Math.hypot(jx, jy, jz) // *one* sqrt only when needed
     : 0;
 }

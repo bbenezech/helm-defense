@@ -15,10 +15,10 @@ export class Sound {
     this.gameScene = gameScene;
     this.keys = keys;
     const elevationInPixels = cameraHeight(this.gameScene.map.widthInPixels);
-    const maxDistance = Math.sqrt(
-      this.gameScene.map.widthInPixels * this.gameScene.map.widthInPixels +
-        this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels +
-        elevationInPixels * elevationInPixels,
+    const maxDistance = Math.hypot(
+      this.gameScene.map.widthInPixels,
+      this.gameScene.map.heightInPixels,
+      elevationInPixels,
     );
 
     this.invMaxDistance = 1 / maxDistance;
@@ -42,7 +42,7 @@ export class Sound {
       key = this.keys[0];
     }
 
-    let instance = this.pool[key].find((i) => !i.isPlaying);
+    let instance = this.pool[key].find((index) => !index.isPlaying);
     if (instance === undefined) {
       const newInstance = this.gameScene.sound.add(key);
       if (!(newInstance instanceof Phaser.Sound.WebAudioSound)) return;
@@ -57,7 +57,7 @@ export class Sound {
     const dy = screenY - centerY;
     const dz = cameraHeight(this.gameScene.cameras.main.worldView.width);
 
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const distance = Math.hypot(dx, dy, dz);
     const volume = 1 - distance * this.invMaxDistance;
     const pan = dx * this.invMaxWidth;
     instance.setVolume(volume);

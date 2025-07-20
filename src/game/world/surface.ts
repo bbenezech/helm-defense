@@ -27,15 +27,15 @@ export const SURFACE_HARDNESS: Record<SURFACE, number> = {
 
 // TODO for projections on impact, use the surface colour
 export const SURFACE_COLOURS: Record<SURFACE, number> = {
-  water: 0x00ffff,
-  wetland: 0x00ffff,
-  sand: 0x00ffff,
-  mud: 0x00ffff,
-  grass: 0x00ffff,
-  dirt: 0x00ffff,
-  gravel: 0x00ffff,
-  cobblestone: 0x00ffff,
-  stone: 0x00ffff,
-  iron: 0x00ffff,
-  steel: 0x00ffff,
+  water: 0x00_ff_ff,
+  wetland: 0x00_ff_ff,
+  sand: 0x00_ff_ff,
+  mud: 0x00_ff_ff,
+  grass: 0x00_ff_ff,
+  dirt: 0x00_ff_ff,
+  gravel: 0x00_ff_ff,
+  cobblestone: 0x00_ff_ff,
+  stone: 0x00_ff_ff,
+  iron: 0x00_ff_ff,
+  steel: 0x00_ff_ff,
 };

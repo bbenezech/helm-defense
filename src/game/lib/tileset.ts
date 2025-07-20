@@ -27,11 +27,11 @@ export function getTileset({
   const imagewidth = (tilewidth + 2 * tileMargin) * columns + tilesetMargin * 2;
   const imageheight = (tileheight + 2 * tileMargin) * rows + tilesetMargin * 2;
 
-  const tiles = Array.from({ length: tilecount }, (_, i) => {
-    const tileName = terrainTileNames[i];
+  const tiles = Array.from({ length: tilecount }, (_, index) => {
+    const tileName = terrainTileNames[index];
     const terrain = TERRAIN_TILE_INDEX[tileName];
     return {
-      id: i,
+      id: index,
       probability: 1,
       properties: [
         { name: "NESW" as const, type: "string" as const, value: terrain.NESW },

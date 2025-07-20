@@ -3,13 +3,13 @@ import type { GameScene } from "../scene/game.js";
 
 // Colors for the two squares
 const TOP_COLOR = {
-  fill: 0xff0000, // Red
-  stroke: 0xffffff, // White
+  fill: 0xff_00_00, // Red
+  stroke: 0xff_ff_ff, // White
   alpha: 0.5,
 };
 const BOTTOM_COLOR = {
-  fill: 0xffff00, // Yellow
-  stroke: 0x000000, // Black
+  fill: 0xff_ff_00, // Yellow
+  stroke: 0x00_00_00, // Black
   alpha: 0.5,
 };
 
@@ -131,11 +131,10 @@ export class Cube extends Phaser.GameObjects.Container {
     const sinR = Math.sin(this.worldRotationZ);
 
     // 3. Rotate and translate to final world positions
-    for (let i = 0; i < localVertices.length; i++) {
-      const local = localVertices[i];
+    for (const [index, local] of localVertices.entries()) {
       const rotatedX = local.x * cosR - local.y * sinR;
       const rotatedY = local.x * sinR + local.y * cosR;
-      this.worldVertices[i].set(
+      this.worldVertices[index].set(
         this.world.x + rotatedX,
         this.world.y + rotatedY,
         this.world.z + local.z, // Add world center Z offset
@@ -164,24 +163,24 @@ export class Cube extends Phaser.GameObjects.Container {
     this.setDepth(this.y); // Use screen Y for depth sorting
 
     // --- Project World Vertices to Screen Space ---
-    for (let i = 0; i < this.worldVertices.length; i++) {
+    for (let index = 0; index < this.worldVertices.length; index++) {
       this.gameScene.worldToScreen(
-        this.worldVertices[i],
-        this.screenVertices[i], // Update the screen vertices array
+        this.worldVertices[index],
+        this.screenVertices[index], // Update the screen vertices array
       );
     }
 
     // --- Update Polygon Shapes (Relative to Container) ---
     // Calculate points relative to the container's origin (screenCenter)
     const bottomPointsRelative: number[] = [];
-    for (let i = 0; i <= 3; i++) {
-      bottomPointsRelative.push(this.screenVertices[i].x - this.x, this.screenVertices[i].y - this.y);
+    for (let index = 0; index <= 3; index++) {
+      bottomPointsRelative.push(this.screenVertices[index].x - this.x, this.screenVertices[index].y - this.y);
     }
     this.bottomPolygon.setTo(bottomPointsRelative);
 
     const topPointsRelative: number[] = [];
-    for (let i = 4; i <= 7; i++) {
-      topPointsRelative.push(this.screenVertices[i].x - this.x, this.screenVertices[i].y - this.y);
+    for (let index = 4; index <= 7; index++) {
+      topPointsRelative.push(this.screenVertices[index].x - this.x, this.screenVertices[index].y - this.y);
     }
     this.topPolygon.setTo(topPointsRelative);
   }

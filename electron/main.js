@@ -1,19 +1,17 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } from "electron";
-import path from "path";
+import path from "node:path";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater; // https://github.com/electron-userland/electron-builder/issues/7976
 import log from "electron-log";
-import { fileURLToPath } from "url";
 const USE_DANGEROUS_MAC_HACK_FULL_SCREEN = false; // Set to false to disable the hackish full-screen mode for Macs with notches
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = import.meta.dirname;
 
 log.transports.file.level = "info"; // Set log level to info
 autoUpdater.logger = log;
 
 log.info(`App starting from ${__dirname}...`, process.env["NODE_ENV"]);
-const devTools = process.env["NODE_ENV"] === "development";
+const developmentTools = process.env["NODE_ENV"] === "development";
 
 /** @type {null | BrowserWindow} */
 let mainWindow = null;
@@ -53,19 +51,33 @@ function enterFullScreen(/** @type {keyof typeof fullScreenModes} */ mode) {
   if (currentBounds.width > 100 && currentBounds.height > 100) nonFullScreenBounds = currentBounds;
   log.info("enterFullScreen nonFullScreenBounds", nonFullScreenBounds);
 
-  if (mode === "classic") {
-    mainWindow.setFullScreen(true);
-  } else if (mode === "kiosk") {
-    mainWindow.setKiosk(true);
-  } else if (mode === "mac-old") {
-    mainWindow.setSimpleFullScreen(true);
-  } else if (mode === "mac-hack") {
-    // enter crazy town
-    mainWindow.setFullScreen(true);
-    mainWindow.setSimpleFullScreen(true);
-    mainWindow.setKiosk(true);
-    mainWindow.setEnabled(false);
-    mainWindow.setEnabled(true);
+  switch (mode) {
+    case "classic": {
+      mainWindow.setFullScreen(true);
+
+      break;
+    }
+    case "kiosk": {
+      mainWindow.setKiosk(true);
+
+      break;
+    }
+    case "mac-old": {
+      mainWindow.setSimpleFullScreen(true);
+
+      break;
+    }
+    case "mac-hack": {
+      // enter crazy town
+      mainWindow.setFullScreen(true);
+      mainWindow.setSimpleFullScreen(true);
+      mainWindow.setKiosk(true);
+      mainWindow.setEnabled(false);
+      mainWindow.setEnabled(true);
+
+      break;
+    }
+    // No default
   }
 
   // helps with focus issues on macOS
@@ -116,7 +128,7 @@ function toggleFullScreen() {
 function createWindow() {
   const mac = process.platform === "darwin";
   const webPreferences = {
-    devTools,
+    devTools: developmentTools,
     contextIsolation: true,
     nodeIntegration: false,
     preload: path.join(__dirname, "../electron/preload.js"),
@@ -149,7 +161,7 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:9000");
   }
 
-  if (devTools) mainWindow.webContents.openDevTools({ mode: "right" });
+  if (developmentTools) mainWindow.webContents.openDevTools({ mode: "right" });
 
   mainWindow.on("close", (event) => {
     log.info("mainWindow close");
@@ -180,28 +192,28 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  autoUpdater.checkForUpdatesAndNotify();
+await app.whenReady();
 
-  ipcMain.on("quit-app", () => {
-    log.info("ipcMain quit-app");
-    app.quit();
-  });
+createWindow();
+autoUpdater.checkForUpdatesAndNotify();
 
-  ipcMain.on("toggle-full-screen", () => {
-    log.info("ipcMain toggle-full-screen");
-    toggleFullScreen();
-  });
+ipcMain.on("quit-app", () => {
+  log.info("ipcMain quit-app");
+  app.quit();
+});
 
-  ipcMain.handle("is-full-screen", () => {
-    log.info("ipcMain is-full-screen");
-    return isFullScreen;
-  });
+ipcMain.on("toggle-full-screen", () => {
+  log.info("ipcMain toggle-full-screen");
+  toggleFullScreen();
+});
 
-  ipcMain.on("log", (_event, ...messages) => {
-    log.info("[Renderer]", ...messages);
-  });
+ipcMain.handle("is-full-screen", () => {
+  log.info("ipcMain is-full-screen");
+  return isFullScreen;
+});
+
+ipcMain.on("log", (_event, ...messages) => {
+  log.info("[Renderer]", ...messages);
 });
 
 app.on("will-quit", () => {
@@ -259,19 +271,19 @@ autoUpdater.on("update-not-available", (info) => {
   mainWindow.webContents.send("update-message", "You are on the latest version.");
 });
 
-autoUpdater.on("error", (err) => {
+autoUpdater.on("error", (error) => {
   if (!mainWindow) return;
-  log.error("Error in auto-updater. " + err);
-  mainWindow.webContents.send("update-message", `Error in auto-updater: ${err.message}`);
+  log.error("Error in auto-updater. " + error);
+  mainWindow.webContents.send("update-message", `Error in auto-updater: ${error.message}`);
 });
 
-autoUpdater.on("download-progress", (progressObj) => {
+autoUpdater.on("download-progress", (progressObject) => {
   if (!mainWindow) return;
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + " - Downloaded " + progressObj.percent + "%";
-  log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")";
+  let log_message = "Download speed: " + progressObject.bytesPerSecond;
+  log_message = log_message + " - Downloaded " + progressObject.percent + "%";
+  log_message = log_message + " (" + progressObject.transferred + "/" + progressObject.total + ")";
   log.info(log_message);
-  mainWindow.webContents.send("update-message", `Downloading: ${Math.round(progressObj.percent)}%`);
+  mainWindow.webContents.send("update-message", `Downloading: ${Math.round(progressObject.percent)}%`);
 });
 
 autoUpdater.on("update-downloaded", (info) => {

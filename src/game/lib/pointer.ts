@@ -66,7 +66,7 @@ function onPointerUp(pointer: Phaser.Input.Pointer) {
       const lastPoint = pointerHistory[pointerHistory.length - 1];
       const firstRelevantPointIndex = Math.max(0, pointerHistory.length - pointerHistorySize);
       const firstPoint = pointerHistory[firstRelevantPointIndex];
-      const timeDeltaSeconds = (lastPoint.time - firstPoint.time) / 1000.0;
+      const timeDeltaSeconds = (lastPoint.time - firstPoint.time) / 1000;
 
       if (timeDeltaSeconds > 0.0001) {
         velocityX = (lastPoint.x - firstPoint.x) / timeDeltaSeconds;
@@ -176,43 +176,57 @@ const firefox = (document.body.style as any).MozAppearance !== undefined;
 const safari = (window as any).safari !== undefined;
 
 let lastDetectedScroll: "wheel" | "pan" | undefined;
-let lastLikelyScroll: "wheel" | "pan" | undefined;
+const lastLikelyScrolls: ("wheel" | "pan" | undefined)[] = [];
+const lastLikelyScrollsMaxSize = 30;
 // can be improved by using a frequency analysis of events
-function identifyScrollEvent(event: WheelEvent): "wheel" | "pan" {
-  const e = event as WheelEvent & { wheelDeltaY?: number };
+function identifyScrollEvent(_event: WheelEvent): "wheel" | "pan" {
+  const event = _event as WheelEvent & { wheelDeltaY?: number };
 
   // 100% sure
-  const wheelCertain = Math.floor(e.deltaY) !== e.deltaY || e.deltaMode !== 0;
-  if (wheelCertain) return (lastDetectedScroll = lastLikelyScroll = "wheel");
-  const panCertain = e.deltaX !== 0 || e.deltaY === 0;
-  if (panCertain) return (lastDetectedScroll = lastLikelyScroll = "pan");
+  const wheelCertain = Math.floor(event.deltaY) !== event.deltaY || event.deltaMode !== 0;
+  if (wheelCertain) {
+    lastLikelyScrolls.push("wheel");
+    if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
+    return (lastDetectedScroll = "wheel");
+  }
+  const panCertain = event.deltaX !== 0 || event.deltaY === 0;
+  if (panCertain) {
+    lastLikelyScrolls.push("pan");
+    if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
+    return (lastDetectedScroll = "pan");
+  }
 
   // e.deltaX is 0, there is a good chance this is a wheel event, but we need to detect vertical panning nonetheless
 
   // 99% sure
-  const wheelVeryLikely = firefox
-    ? e.wheelDeltaY! % 48 === 0
+  const wheelLikely = firefox
+    ? event.wheelDeltaY! % 48 === 0
     : chromium
-      ? e.wheelDeltaY! % 120 === 0
+      ? event.wheelDeltaY! % 120 === 0
       : safari
-        ? e.wheelDeltaY! === 12 || e.wheelDeltaY! === -12
+        ? event.wheelDeltaY! === 12 || event.wheelDeltaY! === -12
         : false;
-  const panVeryLikely = Math.abs(e.deltaY) < (firefox ? 16 : 4);
-  const oldLastLikelyScroll = lastLikelyScroll;
-  lastLikelyScroll = panVeryLikely ? "pan" : wheelVeryLikely ? "wheel" : lastLikelyScroll;
+  const panLikely = Math.abs(event.deltaY) < (firefox ? 16 : 4);
 
-  if (wheelVeryLikely && lastDetectedScroll === "wheel") return "wheel";
-  if (wheelVeryLikely && oldLastLikelyScroll === "wheel") return "wheel";
-  if (panVeryLikely && lastDetectedScroll === "pan") return "pan";
-  if (panVeryLikely && oldLastLikelyScroll === "pan") return "pan";
+  const lastLikelyScroll = panLikely ? "pan" : wheelLikely ? "wheel" : undefined;
+  if (lastLikelyScroll) {
+    lastLikelyScrolls.push(lastLikelyScroll);
+    if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
+  }
 
-  // prefer continuity with the last detected scroll type
-  if (lastDetectedScroll && lastDetectedScroll === oldLastLikelyScroll) return lastDetectedScroll;
+  if (wheelLikely && lastDetectedScroll === "wheel") return "wheel";
+  if (panLikely && lastDetectedScroll === "pan") return "pan";
 
-  if (panVeryLikely) return "pan";
-  if (wheelVeryLikely) return "wheel";
+  const likelyScroll =
+    lastLikelyScrolls.filter((s) => s === "wheel").length >= lastLikelyScrollsMaxSize / 2 + 1
+      ? "wheel"
+      : lastLikelyScrolls.filter((s) => s === "pan").length >= lastLikelyScrollsMaxSize / 2 + 1
+        ? "pan"
+        : undefined;
 
-  return lastDetectedScroll || lastLikelyScroll || "wheel";
+  if (likelyScroll === "wheel")
+    console.log({ likelyScroll, lastLikelyScrolls: lastLikelyScrolls.join(","), wheelDeltaY: event.wheelDeltaY });
+  return likelyScroll || lastDetectedScroll || "wheel";
 }
 
 function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
@@ -232,15 +246,23 @@ function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
     return;
   }
 
-  if (type === "pinch") {
-    this.changeZoomContinuous(pointer.deltaY * 10);
-  } else if (type === "wheel") {
-    this.changeZoomContinuous(pointer.deltaY);
-  } else if (type === "pan") {
-    pointer.camera.scrollX += pointer.deltaX;
-    pointer.camera.scrollY += pointer.deltaY;
-  } else {
-    throw new Error(type satisfies never);
+  switch (type) {
+    case "pinch": {
+      this.changeZoomContinuous(pointer.deltaY * 10);
+      break;
+    }
+    case "wheel": {
+      this.changeZoomContinuous(pointer.deltaY);
+      break;
+    }
+    case "pan": {
+      pointer.camera.scrollX += pointer.deltaX;
+      pointer.camera.scrollY += pointer.deltaY;
+      break;
+    }
+    default: {
+      throw new Error(type satisfies never);
+    }
   }
 }
 
@@ -268,7 +290,7 @@ function update(input: Phaser.Input.InputPlugin) {
       camera.scrollY = cameraInitialScrollY - deltaY;
     } else {
       if (velocityX !== 0 || velocityY !== 0) {
-        const deltaTimeSeconds = delta / 1000.0;
+        const deltaTimeSeconds = delta / 1000;
         const damping = Math.pow(dampingFactor, deltaTimeSeconds * 60);
         scrollXDiff += -(velocityX / camera.zoom) * deltaTimeSeconds;
         scrollYDiff += -(velocityY / camera.zoom) * deltaTimeSeconds;
@@ -304,8 +326,10 @@ function update(input: Phaser.Input.InputPlugin) {
       if (scrollYRatio !== 0)
         scrollYDiff += (scrollYRatio >= 0 ? 1 : -1) * scrollYRatio * scrollYRatio * delta * SCROLL_SPEED;
 
-      if (scrollXDiff !== 0 || scrollYDiff !== 0)
+      if (scrollXDiff !== 0 || scrollYDiff !== 0) {
         camera.setScroll(camera.scrollX + scrollXDiff, camera.scrollY + scrollYDiff);
+        input.activePointer.updateWorldPoint(input.cameras.main);
+      }
     }
 
     if (isSelectionDragging) {
@@ -313,7 +337,7 @@ function update(input: Phaser.Input.InputPlugin) {
       const worldX = world.x;
       const worldY = world.y;
 
-      if (!this.selectionGraphics.visible) this.selectionGraphics.setVisible(true).setDepth(1000000);
+      if (!this.selectionGraphics.visible) this.selectionGraphics.setVisible(true).setDepth(1_000_000);
 
       selectionRect.setTo(
         Math.min(worldStartX, worldX),
@@ -323,8 +347,8 @@ function update(input: Phaser.Input.InputPlugin) {
       );
       this.selectionGraphics
         .clear()
-        .lineStyle(1 / this.zoom, 0xffffff, 1)
-        .fillStyle(0xffffff, 0.05)
+        .lineStyle(1 / this.zoom, 0xff_ff_ff, 1)
+        .fillStyle(0xff_ff_ff, 0.05)
         .fillRectShape(selectionRect)
         .strokeRectShape(selectionRect);
     } else if (this.selectionGraphics.visible) this.selectionGraphics.setVisible(false);

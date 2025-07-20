@@ -23,6 +23,7 @@ import timeScaleStore from "../../store/time-scale.js";
 import { createPointer } from "../lib/pointer.js";
 import { Coordinates } from "../lib/coordinates.js";
 import { terrainToMetadata, TILE_ELEVATION_RATIO, tileableHeightmapToTerrain, type Terrain } from "../lib/terrain.js";
+import { LightingFilterController } from "./LightningFilter.js";
 
 const GRASS = `Grass_23-512x512`;
 
@@ -42,18 +43,15 @@ export class GameScene extends Phaser.Scene {
   private halfTileWidthInv!: number;
   private halfTileHeightInv!: number;
   private controls!: Phaser.Cameras.Controls.SmoothedKeyControl;
-  private map!: Phaser.Tilemaps.Tilemap;
   private cannon!: Cannon;
   private cube!: Cube;
   private debugGraphics!: Phaser.GameObjects.Graphics;
-  private zoom!: number;
   private zooms!: number[];
   private coverZoom!: number;
   private axonometric: boolean;
   private perspective: (typeof PERSPECTIVES)[number];
   private updatePointer!: (this: GameScene, time: number, delta: number) => void;
   private destroyPointer!: (this: GameScene) => void;
-  private mapBounds!: Phaser.Geom.Rectangle;
   private mapType!: "isometric" | "orthogonal";
   private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
   private tileableHeightmap!: number[][];
@@ -61,15 +59,18 @@ export class GameScene extends Phaser.Scene {
   private metadataPixelsPerTile = 8;
   private heightmap!: number[][];
   private normalmap!: [number, number, number][][];
+  private lightingFilterController!: LightingFilterController;
 
+  map!: Phaser.Tilemaps.Tilemap;
+  zoom!: number;
   screenToWorldRatioHorizontal!: Phaser.Math.Vector3;
   screenToWorldRatioVertical!: Phaser.Math.Vector3;
   worldToScreenRatio!: Phaser.Math.Vector3;
   selectionGraphics!: Phaser.GameObjects.Graphics;
   dirty = true;
   cannonBlast!: Sound;
-  score = 0;
   gravity!: Coordinates;
+  bounds!: Phaser.Geom.Rectangle;
 
   constructor() {
     super({ key: "GameScene" });
@@ -90,21 +91,22 @@ export class GameScene extends Phaser.Scene {
     const cannonLength = cannonRadius * 8;
 
     createParticleTexture(this, PARTICLE_SPRITE);
-    createCannonTexture(this, CANNON_SPRITE, 0x444444, cannonLength, cannonRadius * 2);
-    createCircleTexture(this, BULLET_SPRITE, 0x000000, bulletRadius * 2);
+    createCannonTexture(this, CANNON_SPRITE, 0x44_44_44, cannonLength, cannonRadius * 2);
+    createCircleTexture(this, BULLET_SPRITE, 0x00_00_00, bulletRadius * 2);
 
     this.load.audio("cannon_blast_1", "cannon_blast_1.mp3");
     this.load.audio("cannon_blast_2", "cannon_blast_2.mp3");
     this.load.audio("cannon_blast_3", "cannon_blast_3.mp3");
     this.load.audio("cannon_blast_4", "cannon_blast_4.mp3");
     this.load.audio("cannon_blast_5", "cannon_blast_5.mp3");
+    this.load.image("checker", `${GRASS}/random.normalmap.png`);
   }
 
   create() {
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
     this.debugGraphics = this.add.graphics();
-    this.debugGraphics.setDepth(100000000000);
+    this.debugGraphics.setDepth(100_000_000_000);
 
     // TODO: create the terrain inline and create tilemap from the terrain and tileset
     this.map = this.make.tilemap({ key: "map" });
@@ -123,10 +125,12 @@ export class GameScene extends Phaser.Scene {
     // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 4, tileset, 0, 0));
     // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 5, tileset, 0, 0));
 
-    this.map.layers.forEach((layer) => {
-      this.map.createLayer(layer.name, tileset);
-    });
-    this.reversedLayers = [...this.map.layers.map((l) => l.tilemapLayer)].reverse();
+    const layerContainer = this.add.container(0, 0);
+    for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
+
+    this.lightingFilterController = new LightingFilterController(this, layerContainer);
+
+    this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
     this.halfTileWidthInv = 2 / this.map.tileWidth;
     this.halfTileHeightInv = 2 / this.map.tileHeight;
 
@@ -140,14 +144,14 @@ export class GameScene extends Phaser.Scene {
     this.mapType =
       String(this.map.orientation) === String(Phaser.Tilemaps.Orientation.ISOMETRIC) ? "isometric" : "orthogonal";
     if (this.mapType === "isometric") {
-      this.mapBounds = new Phaser.Geom.Rectangle(
+      this.bounds = new Phaser.Geom.Rectangle(
         -this.map.widthInPixels / 2 + this.map.tileWidth / 2 + minOffsetX,
         this.map.tileHeight / 2 + minOffsetY,
         fullWidth,
         fullHeight,
       );
     } else if (this.mapType === "orthogonal") {
-      this.mapBounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
+      this.bounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
     } else throw new Error(this.mapType satisfies never);
 
     this.selectionGraphics = this.add.graphics();
@@ -188,7 +192,7 @@ export class GameScene extends Phaser.Scene {
       const tile = this.screenToTile(screen);
 
       if (tile) {
-        tile.tint = tile.tint === 16777215 ? 0x999999 : 16777215; // debug
+        tile.tint = tile.tint === 16_777_215 ? 0x99_99_99 : 16_777_215; // debug
 
         // this.debugGraphics.clear();
         // this.debugGraphics.fillStyle(0x00ff00, 1);
@@ -196,8 +200,8 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    this.input.keyboard?.on("keydown", async (e: KeyboardEvent) => {
-      switch (e.keyCode) {
+    this.input.keyboard?.on("keydown", async (event: KeyboardEvent) => {
+      switch (event.keyCode) {
         case Phaser.Input.Keyboard.KeyCodes.W: {
           const perspective = PERSPECTIVES[PERSPECTIVES.indexOf(this.perspective) + 1];
           if (perspective === undefined) {
@@ -212,29 +216,35 @@ export class GameScene extends Phaser.Scene {
           } else this.changePerspective(perspective);
           break;
         }
-        case Phaser.Input.Keyboard.KeyCodes.SPACE:
+        case Phaser.Input.Keyboard.KeyCodes.SPACE: {
           timeScaleStore.togglePause();
           break;
-        case Phaser.Input.Keyboard.KeyCodes.A:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.A: {
           if (!timeScaleStore.slowDown()) this.nudge();
           break;
-        case Phaser.Input.Keyboard.KeyCodes.D:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.D: {
           if (!timeScaleStore.speedUp()) this.nudge();
           break;
-        case Phaser.Input.Keyboard.KeyCodes.MINUS:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.MINUS: {
           if (!this.changeZoomDiscrete(-1)) this.nudge();
           break;
-        case Phaser.Input.Keyboard.KeyCodes.PLUS:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.PLUS: {
           if (!this.changeZoomDiscrete(1)) this.nudge();
           break;
-        case Phaser.Input.Keyboard.KeyCodes.F:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.F: {
           if (window.electron) {
             window.electron.toggleFullScreen();
           } else {
             window.document.body.requestFullscreen({ navigationUI: "hide" });
           }
           break;
-        case Phaser.Input.Keyboard.KeyCodes.ESC:
+        }
+        case Phaser.Input.Keyboard.KeyCodes.ESC: {
           if (window.electron) {
             if (await window.electron.isFullScreen()) {
               window.electron.toggleFullScreen();
@@ -243,6 +253,7 @@ export class GameScene extends Phaser.Scene {
             }
           }
           break;
+        }
       }
     });
 
@@ -417,10 +428,10 @@ export class GameScene extends Phaser.Scene {
   tileWorldZ(tile: Phaser.Tilemaps.Tile): number {
     const centerLevel = tile.properties["CENTER"] as undefined | number;
     if (centerLevel === undefined || typeof centerLevel !== "number")
-      throw new Error(`Tile has no valid center property: ${JSON.stringify(tile, null, 2)}`);
+      throw new Error(`Tile has no valid center property: ${JSON.stringify(tile, undefined, 2)}`);
     const levelP = tile.layer.properties.find((p: any) => p["name"] === "level") as undefined | { value: number };
     if (levelP === undefined || typeof levelP.value !== "number")
-      throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tile.layer, null, 2)}`);
+      throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tile.layer, undefined, 2)}`);
     const layerLevel = levelP.value;
     const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
     return (layerLevel + centerLevel) * TILE_ELEVATION_RATIO * tileWidthWorld;
@@ -443,9 +454,7 @@ export class GameScene extends Phaser.Scene {
 
   setupCamera() {
     const camera = this.cameras.main;
-    camera.setBounds(this.mapBounds.x, this.mapBounds.y, this.mapBounds.width, this.mapBounds.height);
-    camera.scrollX = -this.mapBounds.width / 2; // Start at the left
-    camera.scrollY = this.mapBounds.height - camera.height; // Start at the bottom
+    camera.setBounds(this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height, true);
     this.scale.on("resize", this.handleResize, this);
     this.handleResize(this.game.scale.gameSize);
   }
@@ -489,16 +498,18 @@ export class GameScene extends Phaser.Scene {
 
   handleResize({ width, height }: { width: number; height: number }) {
     // Zoom level if we were to make the map's width exactly fit the canvas width
-    const scaleToFitWidth = width / this.mapBounds.width;
+    const scaleToFitWidth = width / this.bounds.width;
     // Zoom level if we were to make the map's height exactly fit the canvas height
-    const scaleToFitHeight = height / this.mapBounds.height;
+    const scaleToFitHeight = height / this.bounds.height;
     this.coverZoom = Math.max(scaleToFitWidth, scaleToFitHeight);
     this.cameras.main.setSize(width, height);
     this.zooms = [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2].filter((zoom) => zoom > this.coverZoom * 1.25);
     this.zooms.unshift(this.coverZoom);
     if (!this.zooms.includes(this.zoom)) {
-      if (this.zoom === undefined) this.zoom = this.zooms[0];
-      else this.zoom = [...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0];
+      this.zoom =
+        this.zoom === undefined
+          ? this.zooms[0]
+          : ([...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0]);
     }
     this.cameras.main.setZoom(this.zoom);
   }
@@ -518,6 +529,7 @@ export class GameScene extends Phaser.Scene {
     this.controls.update(delta);
     this.updatePointer(time, delta);
     fpsBus.emitDebounced(this.sys.game.loop.actualFps);
+    this.lightingFilterController.update(time, delta);
   }
 
   shutdown() {

@@ -13,8 +13,7 @@ const randomNormalGenerators: Record<number, Record<number, () => number>> = {};
 
 export function randomNormal(mean: number, std: number): number {
   if (!randomNormalGenerators[mean]) randomNormalGenerators[mean] = {};
-  if (!randomNormalGenerators[mean][std])
-    randomNormalGenerators[mean][std] = d3RandomNormal(mean, std);
+  if (!randomNormalGenerators[mean][std]) randomNormalGenerators[mean][std] = d3RandomNormal(mean, std);
 
   return randomNormalGenerators[mean][std]();
 }

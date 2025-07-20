@@ -28,7 +28,7 @@ export function createCraterMark(
     color?: number;
   },
 ) {
-  const { rotation, radius = 20, stretchX = 1, stretchY = 1, duration = 5000, color = 0x000000 } = options;
+  const { rotation, radius = 20, stretchX = 1, stretchY = 1, duration = 5000, color = 0x00_00_00 } = options;
 
   // 1. Create the Container. This will handle the final position and rotation.
   const container = scene.add.container(x, y);

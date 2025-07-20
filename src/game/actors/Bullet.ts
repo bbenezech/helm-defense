@@ -160,8 +160,8 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
         radius,
         stretchX: this.gameScene.worldToScreenRatio.x,
         stretchY: this.gameScene.worldToScreenRatio.y,
-        duration: 10000, // Lasts for 10 seconds
-        color: 0x1a1a1a, // A dark, brownish-black
+        duration: 10_000, // Lasts for 10 seconds
+        color: 0x1a_1a_1a, // A dark, brownish-black
       });
 
       this.gameScene.nudge(this.explosion / 10);

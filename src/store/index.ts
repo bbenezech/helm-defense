@@ -2,7 +2,7 @@ import debounce from "lodash.debounce";
 
 type EventCallback<T> = (payload: T) => void;
 
-type SetStateAction<T> = T | ((prevState: T) => T);
+type SetStateAction<T> = T | ((previousState: T) => T);
 type Unsubscribe = () => void;
 
 type Options = {
@@ -26,10 +26,12 @@ export function bus<T>(options = optionsDefault): Bus<T> {
   const subscribe = (callback: EventCallback<T>): Unsubscribe => {
     events.push(callback);
     return () => {
-      events = events.filter((cb) => cb !== callback);
+      events = events.filter((callback_) => callback_ !== callback);
     };
   };
-  const emit = (payload: T) => events.forEach((callback) => callback(payload));
+  const emit = (payload: T) => {
+    for (const callback of events) callback(payload);
+  };
   const emitDebounced = debounce(emit, options.debounceDuration, options.debounceOptions);
   return { subscribe, emit, emitDebounced };
 }
@@ -47,11 +49,11 @@ export function memoryStore<T>(initialState: T, options = optionsDefault): Store
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => state;
   const set = (action: SetStateAction<T>) => {
-    state = typeof action === "function" ? (action as (prevState: T) => T)(state) : action;
+    state = typeof action === "function" ? (action as (previousState: T) => T)(state) : action;
     emit(state);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    state = typeof action === "function" ? (action as (prevState: T) => T)(state) : action;
+    state = typeof action === "function" ? (action as (previousState: T) => T)(state) : action;
     emitDebounced(state);
   };
   return { subscribe, set, setDebounced, get };
@@ -65,12 +67,12 @@ export function sessionStore<T>(key: string, defaultValue: T, options = optionsD
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => readSession<T>(key, defaultValue);
   const set = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (prevState: T) => T)(get()) : action;
+    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
     writeSession(key, value, defaultValue);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (prevState: T) => T)(get()) : action;
+    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
     writeSession(key, value, defaultValue);
     emitDebounced(value);
   };
@@ -78,20 +80,20 @@ export function sessionStore<T>(key: string, defaultValue: T, options = optionsD
 }
 
 function readSession<T>(key: string, defaultValue: T): T {
-  const storedValue = window.sessionStorage.getItem(key);
+  const storedValue = globalThis.sessionStorage.getItem(key);
   if (storedValue === null) return defaultValue;
   try {
     return JSON.parse(storedValue);
-  } catch (e) {
+  } catch {
     return defaultValue;
   }
 }
 
 function writeSession<T>(key: string, value: T, defaultValue: T): void {
   if (value === undefined || value === defaultValue) {
-    window.sessionStorage.removeItem(key);
+    globalThis.sessionStorage.removeItem(key);
   } else {
-    window.sessionStorage.setItem(key, JSON.stringify(value));
+    globalThis.sessionStorage.setItem(key, JSON.stringify(value));
   }
 }
 
@@ -102,12 +104,12 @@ export function localStore<T>(key: string, defaultValue: T, options = optionsDef
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => readLocal<T>(key, defaultValue);
   const set = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (prevState: T) => T)(get()) : action;
+    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
     writeLocal(key, value, defaultValue);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (prevState: T) => T)(get()) : action;
+    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
     writeLocal(key, value, defaultValue);
     emitDebounced(value);
   };
@@ -115,19 +117,19 @@ export function localStore<T>(key: string, defaultValue: T, options = optionsDef
 }
 
 function readLocal<T>(key: string, defaultValue: T): T {
-  const storedValue = window.localStorage.getItem(key);
+  const storedValue = globalThis.localStorage.getItem(key);
   if (storedValue === null) return defaultValue;
   try {
     return JSON.parse(storedValue);
-  } catch (e) {
+  } catch {
     return defaultValue;
   }
 }
 
 function writeLocal<T>(key: string, value: T, defaultValue: T): void {
   if (value === undefined || value === defaultValue) {
-    window.localStorage.removeItem(key);
+    globalThis.localStorage.removeItem(key);
   } else {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    globalThis.localStorage.setItem(key, JSON.stringify(value));
   }
 }

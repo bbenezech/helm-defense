@@ -5,15 +5,15 @@ export function normalize(v: Vector3, out: Vector3): Vector3 {
 }
 
 export function normalizeXYZ(x: number, y: number, z: number, out: Vector3): Vector3 {
-  const len = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
-  if (len === 0) {
+  const length = Math.hypot(x, y, z);
+  if (length === 0) {
     out[0] = 0;
     out[1] = 0;
     out[2] = 1;
   } else {
-    out[0] = x / len;
-    out[1] = y / len;
-    out[2] = z / len;
+    out[0] = x / length;
+    out[1] = y / length;
+    out[2] = z / length;
   }
 
   return out;

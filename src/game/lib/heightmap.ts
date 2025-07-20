@@ -1,4 +1,4 @@
-import { createNoise2D, type NoiseFunction2D } from "simplex-noise";
+import { createNoise2D } from "simplex-noise";
 import alea from "alea";
 import { cross, dot, multiplyMatrix3x3Vec3, normalize, scale, subtract, type Vector3 } from "./vector.js";
 import { log } from "./log.js";
@@ -6,22 +6,10 @@ import { log } from "./log.js";
 export type Heightmap = number[][];
 export type Normalmap = Vector3[][];
 export type RgbaBuffer = { data: Uint8ClampedArray; width: number; height: number };
-export function fbm2d(noise2D: NoiseFunction2D, octaves: number): NoiseFunction2D {
-  return function fbm2dFn(x: number, y: number) {
-    let value = 0.0;
-    let amplitude = 1;
-    for (let i = 0; i < octaves; i++) {
-      value += noise2D(x * 0.07, y * 0.07) * amplitude;
-      x *= 10;
-      y *= 10;
-      amplitude *= 0.9;
-    }
-    return value;
-  };
-}
+
 // Generates a tilable heightmap
 // height is an integer between 0 and maxValue (inclusive)
-// each height can connect to its 4 cardinal neighbors with a maximum difference of 1
+// each height can connect to its 4 cardinal neighbors with a maximum difference of 1 unit
 // after normalization to 0-2, this rule implies that the heightmap can be tiled on each minimum square of 4 values with 19 variants
 // 0 0 | 1 2 | 2 1 | 1 0 | 0 1 | 0 1 | 1 0 | 0 0 | 0 0 | 1 0 | 0 1 | 1 1 | 1 1 | 0 1 | 1 0 | 1 1 | 0 0 | 1 0 | 0 1
 // 0 0 | 0 1 | 1 0 | 2 1 | 1 2 | 0 0 | 0 0 | 1 0 | 0 1 | 0 1 | 1 0 | 0 1 | 1 0 | 1 1 | 1 1 | 0 0 | 1 1 | 1 0 | 0 1
@@ -39,9 +27,7 @@ export function generateTilableHeightmap({
   const height = tileHeight + 1;
   const width = tileWidth + 1;
 
-  const heightmap: Heightmap = Array(height)
-    .fill(0)
-    .map(() => Array(width).fill(0));
+  const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
   const noise2D = createNoise2D(alea("1"));
 
   for (let y = 0; y < height; y++) {
@@ -69,16 +55,16 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
   if (width === 0) return [];
 
   if (kernelSize < 1) throw new Error("kernelSize must be an integer greater than or equal to 1.");
-  const normalmap: Normalmap = Array.from({ length: height }, () => Array(width).fill([0, 0, 1]));
+  const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const horizontalValues: number[] = [];
       const verticalValues: number[] = [];
 
-      for (let i = -kernelSize; i <= kernelSize; i++) {
-        if (heightmap[y][x + i] !== undefined) horizontalValues.push(heightmap[y][x + i]);
-        if (heightmap[y + i] !== undefined) verticalValues.push(heightmap[y + i][x]);
+      for (let index = -kernelSize; index <= kernelSize; index++) {
+        if (heightmap[y][x + index] !== undefined) horizontalValues.push(heightmap[y][x + index]);
+        if (heightmap[y + index] !== undefined) verticalValues.push(heightmap[y + index][x]);
       }
       const dx_pixels = horizontalValues.length - 1;
       const dy_pixels = verticalValues.length - 1;
@@ -88,14 +74,14 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
       const normal: [number, number, number] = [
         dx_pixels > 0 ? -dz_dx / dx_pixels : 0,
         dy_pixels > 0 ? dz_dy / dy_pixels : 0,
-        1.0,
+        1,
       ];
 
-      const len = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2);
-      if (len > 0) {
-        normal[0] /= len;
-        normal[1] /= len;
-        normal[2] /= len;
+      const length = Math.hypot(normal[0], normal[1], normal[2]);
+      if (length > 0) {
+        normal[0] /= length;
+        normal[1] /= length;
+        normal[2] /= length;
       }
 
       normalmap[y][x] = normal;
@@ -114,7 +100,7 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
 export function rgbaBufferToHeightmap(rgbaBuffer: RgbaBuffer): Heightmap {
   const startsAt = Date.now();
   const { data, width, height } = rgbaBuffer;
-  const heightmap: Heightmap = Array.from({ length: height }, () => Array(width).fill(0));
+  const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -147,14 +133,14 @@ export function heightmapToRgbaBuffer(heightmap: Heightmap) {
   let max = -Infinity;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const val = heightmap[y][x];
-      if (val < min) min = val;
-      if (val > max) max = val;
+      const value = heightmap[y][x];
+      if (value < min) min = value;
+      if (value > max) max = value;
     }
   }
 
   const range = max - min;
-  const invRange = range > 0 ? 1.0 / range : 0;
+  const invRange = range > 0 ? 1 / range : 0;
   const buffer = new Uint8ClampedArray(width * height * 4);
 
   for (let y = 0; y < height; y++) {
@@ -209,7 +195,7 @@ export function addTileNormalmapToGlobalNormalmap(
   globalNormalmap: Normalmap,
   tileNormalmap: Normalmap,
   pixelsPerTile: number,
-  detailStrength: number = 1.0,
+  detailStrength: number = 1,
 ): Normalmap {
   const startsAt = Date.now();
   const globalHeight = globalNormalmap.length;
@@ -234,7 +220,7 @@ export function addTileNormalmapToGlobalNormalmap(
       // Get the tangent-space detail normal (D_ts) from the tile map.
       const tileX = Math.floor(((x / pixelsPerTile) * tileWidth) % tileWidth);
       const tileY = Math.floor(((y / pixelsPerTile) * tileHeight) % tileHeight);
-      const D_ts: Vector3 = resultNormalmap[tileY][tileX];
+      const D_ts: Vector3 = resultNormalmap[y][x];
       const tileNormal = tileNormalmap[tileY][tileX];
       D_ts[0] = tileNormal[0] * detailStrength;
       D_ts[1] = tileNormal[1] * detailStrength;
@@ -263,11 +249,11 @@ export function printNormalmap(normalmap: Normalmap): void {
   const flatChar = "·";
   const flatThreshold = 0.1;
 
-  normalmap.forEach((row) => {
+  for (const row of normalmap) {
     let line = "";
-    row.forEach((normal) => {
+    for (const normal of row) {
       const [nx, ny] = normal;
-      if (Math.sqrt(nx ** 2 + ny ** 2) < flatThreshold) {
+      if (Math.hypot(nx, ny) < flatThreshold) {
         line += flatChar + " ";
       } else {
         let angle = Math.atan2(ny, nx);
@@ -278,9 +264,9 @@ export function printNormalmap(normalmap: Normalmap): void {
 
         line += chars[index] + " ";
       }
-    });
+    }
     console.log(line);
-  });
+  }
 }
 
 export function printHeightmap(map: Heightmap): void {
@@ -288,16 +274,16 @@ export function printHeightmap(map: Heightmap): void {
   const chars = [" ", "░", "▒", "▓", "█"];
   const step = Math.max(1, maxValue) / chars.length;
 
-  map.forEach((row) => {
+  for (const row of map) {
     let line = "";
-    row.forEach((value) => {
+    for (const value of row) {
       const charIndex = Math.max(0, Math.min(Math.floor(value / step), chars.length - 1));
       if (chars[charIndex] === undefined)
         throw new Error(
           `Invalid character index: ${charIndex} for value: ${value} in ${chars.map((c) => c).join(", ")} in row ${row.join(", ")}`,
         );
       line += chars[charIndex] + " ";
-    });
+    }
     console.log(line);
-  });
+  }
 }

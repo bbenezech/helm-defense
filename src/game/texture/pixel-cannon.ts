@@ -103,10 +103,10 @@ function calculateCannonPoints(
   // Total angle sweep is 180 degrees counter-clockwise (PI radians)
   const angleStep = Math.PI / arcPointsCount;
 
-  for (let i = 0; i <= arcPointsCount; i++) {
+  for (let index = 0; index <= arcPointsCount; index++) {
     // Calculate the angle for this point on the arc
     // Start at 90 deg and add steps counter-clockwise
-    const currentAngle = startAngle + i * angleStep;
+    const currentAngle = startAngle + index * angleStep;
 
     const px = circleCenterX + radius * Math.cos(currentAngle);
     const py = circleCenterY + radius * Math.sin(currentAngle);

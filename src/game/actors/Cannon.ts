@@ -75,7 +75,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     this.setOrigin(originX, originY);
     this.shadow = this.gameScene.add
       .sprite(0, 0, CANNON_SPRITE)
-      .setTint(0x000000)
+      .setTint(0x00_00_00)
       .setAlpha(0.3)
       .setOrigin(originX, originY);
 
@@ -100,7 +100,7 @@ export class Cannon extends Phaser.GameObjects.Image {
     });
 
     this.muzzleFlashEmitter = this.gameScene.add.particles(0, 0, FLARES, {
-      color: [0xfacc22, 0xf89800, 0xf83600, 0x040404],
+      color: [0xfa_cc_22, 0xf8_98_00, 0xf8_36_00, 0x04_04_04],
       colorEase: "quart.out",
       scale: 0.2,
       lifespan: { min: 0, max: 1500 },
@@ -287,7 +287,7 @@ export class Cannon extends Phaser.GameObjects.Image {
       this.azymuth = Phaser.Math.Angle.RotateTo(
         this.azymuth,
         this.requestedAzymuth,
-        TURN_RATE_RADIANS_PER_SECOND * (delta / 1000.0),
+        TURN_RATE_RADIANS_PER_SECOND * (delta / 1000),
       );
 
       this.dirty = true;

@@ -3,12 +3,13 @@ import bodyParser from "body-parser";
 import react from "@vitejs/plugin-react";
 import { IncomingMessage } from "node:http";
 
-const prod = process.env["NODE_ENV"] === "production";
-const dev = !prod;
+const production = process.env["NODE_ENV"] === "production";
+const development = !production;
 const host = process.env["HOST"] || "0.0.0.0";
-const port = parseInt(process.env["PORT"] || "9000");
+const port = Number.parseInt(process.env["PORT"] || "9000");
 
 export default defineConfig(({ mode }) => ({
+  assetsInclude: ["**/*.glsl", "**/*.frag", "**/*.vert"],
   base: mode === "gh-pages" ? `/helm-defense/` : "./",
   esbuild: { sourcemap: false, target: "esnext" },
   server: {
@@ -33,19 +34,19 @@ export default defineConfig(({ mode }) => ({
   build: { chunkSizeWarningLimit: 2000, sourcemap: false, target: "esnext" },
   hmr: host ? { protocol: "ws", host, port: port + 1 } : undefined,
   clearScreen: false,
-  plugins: dev
+  plugins: development
     ? [
         react(),
         {
           name: "log-viewer-middleware",
           configureServer(server) {
             server.middlewares.use(bodyParser.json());
-            server.middlewares.use("/api/log", (req: IncomingMessage, res, next) => {
-              if (req.method === "POST") {
+            server.middlewares.use("/api/log", (request: IncomingMessage, response, next) => {
+              if (request.method === "POST") {
                 // @ts-expect-error no body in IncomingMessage?
-                console.log("[Client]:", ...(req.body?.messages ?? []));
-                res.statusCode = 200;
-                res.end();
+                console.log("[Client]:", ...(request.body?.messages ?? []));
+                response.statusCode = 200;
+                response.end();
               } else {
                 next();
               }

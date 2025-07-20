@@ -319,7 +319,7 @@ export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain
     Object.values(TERRAIN_TILE_INDEX).map((tile) => [tile.NESW, tile]),
   );
   const terrain: Terrain = Array.from({ length: tilableHeightmap.length - 1 }, () =>
-    Array(tilableHeightmap[0].length - 1).fill(null),
+    Array.from({ length: tilableHeightmap[0].length - 1 }),
   );
 
   for (let y = 0; y < tilableHeightmap.length - 1; y++) {
@@ -365,10 +365,10 @@ export function terrainToMetadata(
   const fineMapWidth = mapWidth * pixelsPerTile;
   const fineMapHeight = mapHeight * pixelsPerTile;
 
-  const heightmap: Heightmap = Array.from({ length: fineMapHeight }, () => Array(fineMapWidth).fill(0));
-  const normalmap: Normalmap = Array.from({ length: fineMapHeight }, () => Array(fineMapWidth).fill([0, 0, 1]));
+  const heightmap: Heightmap = Array.from({ length: fineMapHeight }, () => Array.from({ length: fineMapWidth }));
+  const normalmap: Normalmap = Array.from({ length: fineMapHeight }, () => Array.from({ length: fineMapWidth }));
 
-  const invSpan = 1.0 / pixelsPerTile;
+  const invSpan = 1 / pixelsPerTile;
   const pxElevationRatio = TILE_ELEVATION_RATIO * pixelsPerTile;
 
   const vN: Point3D = { x: 0, y: 0, z: 0 };
@@ -437,7 +437,7 @@ export function terrainToMetadata(
 
       const [w1, w2, w3] = barycentricWeights(normX, normY, tri_v1, tri_v2, tri_v3, barycentricWeightsOut);
       heightmap[py][px] = (level + w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * pxElevationRatio;
-      normalmap[py][px] = normal;
+      normalmap[py][px] = [...normal];
     }
   }
 
