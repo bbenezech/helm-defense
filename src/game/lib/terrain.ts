@@ -357,6 +357,7 @@ export function terrainToMetadata(
   pixelsPerTile: number, // Number of pixels per tile in the heightmap and normalmap (definition), use powers of 2 to avoid artefacts on diagonals
 ): { heightmap: Heightmap; normalmap: Normalmap } {
   const startsAt = Date.now();
+
   const mapHeight = terrain.length;
   if (mapHeight === 0) return { heightmap: [], normalmap: [] };
   const mapWidth = terrain[0].length;
@@ -437,7 +438,7 @@ export function terrainToMetadata(
 
       const [w1, w2, w3] = barycentricWeights(normX, normY, tri_v1, tri_v2, tri_v3, barycentricWeightsOut);
       heightmap[py][px] = (level + w1 * tri_v1.z + w2 * tri_v2.z + w3 * tri_v3.z) * pxElevationRatio;
-      normalmap[py][px] = [...normal];
+      normalmap[py][px] = normal;
     }
   }
 

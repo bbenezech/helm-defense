@@ -177,28 +177,36 @@ const safari = (window as any).safari !== undefined;
 
 let lastDetectedScroll: "wheel" | "pan" | undefined;
 const lastLikelyScrolls: ("wheel" | "pan" | undefined)[] = [];
-const lastLikelyScrollsMaxSize = 30;
+const lastLikelyScrollsMaxSize = 10;
+const preferedScroll: "wheel" | "pan" | undefined = undefined;
+
 // can be improved by using a frequency analysis of events
 function identifyScrollEvent(_event: WheelEvent): "wheel" | "pan" {
+  if (preferedScroll !== undefined) return preferedScroll;
+
   const event = _event as WheelEvent & { wheelDeltaY?: number };
 
-  // 100% sure
+  // 100% sure wheel event
   const wheelCertain = Math.floor(event.deltaY) !== event.deltaY || event.deltaMode !== 0;
   if (wheelCertain) {
+    lastDetectedScroll = "wheel";
     lastLikelyScrolls.push("wheel");
     if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
-    return (lastDetectedScroll = "wheel");
+    return "wheel";
   }
+
+  // 100% sure pan event
   const panCertain = event.deltaX !== 0 || event.deltaY === 0;
   if (panCertain) {
+    lastDetectedScroll = "pan";
     lastLikelyScrolls.push("pan");
     if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
-    return (lastDetectedScroll = "pan");
+    return "pan";
   }
 
   // e.deltaX is 0, there is a good chance this is a wheel event, but we need to detect vertical panning nonetheless
 
-  // 99% sure
+  // 99% sure wheel event
   const wheelLikely = firefox
     ? event.wheelDeltaY! % 48 === 0
     : chromium
@@ -206,27 +214,35 @@ function identifyScrollEvent(_event: WheelEvent): "wheel" | "pan" {
       : safari
         ? event.wheelDeltaY! === 12 || event.wheelDeltaY! === -12
         : false;
+
+  // 99% sure pan event
   const panLikely = Math.abs(event.deltaY) < (firefox ? 16 : 4);
 
-  const lastLikelyScroll = panLikely ? "pan" : wheelLikely ? "wheel" : undefined;
+  const lastLikelyScroll = panLikely && !wheelLikely ? "pan" : wheelLikely && !panLikely ? "wheel" : undefined;
   if (lastLikelyScroll) {
     lastLikelyScrolls.push(lastLikelyScroll);
     if (lastLikelyScrolls.length > lastLikelyScrollsMaxSize) lastLikelyScrolls.shift();
   }
 
-  if (wheelLikely && lastDetectedScroll === "wheel") return "wheel";
-  if (panLikely && lastDetectedScroll === "pan") return "pan";
+  if (lastLikelyScroll && lastLikelyScroll === lastDetectedScroll) return lastLikelyScroll;
 
-  const likelyScroll =
-    lastLikelyScrolls.filter((s) => s === "wheel").length >= lastLikelyScrollsMaxSize / 2 + 1
+  let wheelLikelyScrollCount = 0;
+  let panLikelyScrollCount = 0;
+  for (const scroll of lastLikelyScrolls) {
+    if (scroll === "wheel") wheelLikelyScrollCount++;
+    else if (scroll === "pan") panLikelyScrollCount++;
+  }
+  const statLikelyScroll =
+    wheelLikelyScrollCount >= lastLikelyScrollsMaxSize / 2 + 1
       ? "wheel"
-      : lastLikelyScrolls.filter((s) => s === "pan").length >= lastLikelyScrollsMaxSize / 2 + 1
+      : panLikelyScrollCount >= lastLikelyScrollsMaxSize / 2 + 1
         ? "pan"
         : undefined;
 
-  if (likelyScroll === "wheel")
-    console.log({ likelyScroll, lastLikelyScrolls: lastLikelyScrolls.join(","), wheelDeltaY: event.wheelDeltaY });
-  return likelyScroll || lastDetectedScroll || "wheel";
+  if (lastLikelyScroll && lastLikelyScroll === statLikelyScroll) return lastLikelyScroll;
+  if (lastDetectedScroll && lastDetectedScroll === statLikelyScroll) return lastDetectedScroll;
+
+  return lastDetectedScroll ?? statLikelyScroll ?? lastLikelyScroll ?? "wheel";
 }
 
 function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {

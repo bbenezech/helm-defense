@@ -44,6 +44,6 @@ export function sphereToSphereCollision(
   b.velocity.z -= jz * b.invMass;
 
   return computeDamage
-    ? Math.hypot(jx, jy, jz) // *one* sqrt only when needed
+    ? Math.sqrt(jx * jx + jy * jy + jz * jz) // *one* sqrt only when needed
     : 0;
 }

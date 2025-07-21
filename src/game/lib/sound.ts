@@ -15,10 +15,10 @@ export class Sound {
     this.gameScene = gameScene;
     this.keys = keys;
     const elevationInPixels = cameraHeight(this.gameScene.map.widthInPixels);
-    const maxDistance = Math.hypot(
-      this.gameScene.map.widthInPixels,
-      this.gameScene.map.heightInPixels,
-      elevationInPixels,
+    const maxDistance = Math.sqrt(
+      this.gameScene.map.widthInPixels * this.gameScene.map.widthInPixels +
+        this.gameScene.map.heightInPixels * this.gameScene.map.heightInPixels +
+        elevationInPixels * elevationInPixels,
     );
 
     this.invMaxDistance = 1 / maxDistance;
@@ -57,7 +57,7 @@ export class Sound {
     const dy = screenY - centerY;
     const dz = cameraHeight(this.gameScene.cameras.main.worldView.width);
 
-    const distance = Math.hypot(dx, dy, dz);
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const volume = 1 - distance * this.invMaxDistance;
     const pan = dx * this.invMaxWidth;
     instance.setVolume(volume);

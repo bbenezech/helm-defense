@@ -9,102 +9,127 @@ function clampIndex(index: number, max: number): number {
   return Math.max(0, Math.min(index, max - 1));
 }
 
+type GetIndexFunction = (index: number, max: number) => number;
+
+class ImageBuffer {
+  readonly data: Float32Array;
+  readonly width: number;
+  readonly height: number;
+  readonly channels: number;
+
+  constructor(width: number, height: number, channels: number) {
+    this.data = new Float32Array(width * height * channels);
+    this.width = width;
+    this.height = height;
+    this.channels = channels;
+  }
+
+  clone(): ImageBuffer {
+    const newBuffer = new ImageBuffer(this.width, this.height, this.channels);
+    newBuffer.data.set(this.data);
+    return newBuffer;
+  }
+}
+
+// --- Internal Blur Implementations ---
+
 /**
- * Performs a horizontal box blur, supporting both clamped and toroidal (wrapping) edges.
+ * Performs a horizontal box blur using a provided edge-handling function.
  */
 function boxBlurH(
-  source: number[][],
-  target: number[][],
-  width: number,
-  height: number,
+  source: ImageBuffer,
+  out: ImageBuffer,
   radius: number,
   invRadius: number,
-  getIndex: (index: number, max: number) => number,
-): void {
+  getIndex: GetIndexFunction,
+) {
+  const { width, height, channels } = source;
+  const sourceData = source.data;
+  const outData = out.data;
+
   for (let y = 0; y < height; y++) {
-    let sum = 0;
-
-    // Prime the moving average window
-    for (let index = -radius; index <= radius; index++) {
-      const sampleX = getIndex(index, width);
-      sum += source[y][sampleX];
-    }
-
-    // Slide the window across the row
-    for (let x = 0; x < width; x++) {
-      target[y][x] = sum * invRadius;
-
-      // Update the sum for the next window
-      const trailingIndex = getIndex(x - radius, width);
-      const leadingIndex = getIndex(x + radius + 1, width);
-
-      sum += source[y][leadingIndex] - source[y][trailingIndex];
+    const yOffset = y * width * channels;
+    for (let c = 0; c < channels; c++) {
+      let sum = 0;
+      // 1. Prime the moving average window
+      for (let index = -radius; index <= radius; index++) {
+        const x = getIndex(index, width);
+        sum += sourceData[yOffset + x * channels + c];
+      }
+      // 2. Slide the window across the row
+      for (let x = 0; x < width; x++) {
+        outData[yOffset + x * channels + c] = sum * invRadius;
+        const trailX = getIndex(x - radius, width);
+        const leadX = getIndex(x + radius + 1, width);
+        sum += sourceData[yOffset + leadX * channels + c] - sourceData[yOffset + trailX * channels + c];
+      }
     }
   }
 }
 
 /**
- * Performs a vertical box blur, supporting both clamped and toroidal (wrapping) edges.
+ * Performs a vertical box blur using a provided edge-handling function.
  */
 function boxBlurV(
-  source: number[][],
-  target: number[][],
-  width: number,
-  height: number,
+  source: ImageBuffer,
+  out: ImageBuffer,
   radius: number,
   invRadius: number,
-  getIndex: (index: number, max: number) => number,
-): void {
+  getIndex: GetIndexFunction,
+) {
+  const { width, height, channels } = source;
+  const sourceData = source.data;
+  const outData = out.data;
+  const widthByChannels = width * channels;
+
   for (let x = 0; x < width; x++) {
-    let sum = 0;
-
-    // Prime the moving average window
-    for (let index = -radius; index <= radius; index++) sum += source[getIndex(index, height)][x];
-
-    // Slide the window down the column
-    for (let y = 0; y < height; y++) {
-      target[y][x] = sum * invRadius;
-
-      // Update the sum for the next window
-      const trailingIndex = getIndex(y - radius, height);
-      const leadingIndex = getIndex(y + radius + 1, height);
-
-      sum += source[leadingIndex][x] - source[trailingIndex][x];
+    for (let c = 0; c < channels; c++) {
+      const xOffset = x * channels + c;
+      let sum = 0;
+      // 1. Prime the window
+      for (let index = -radius; index <= radius; index++) {
+        const y = getIndex(index, height);
+        sum += sourceData[y * widthByChannels + xOffset];
+      }
+      // 2. Slide the window
+      for (let y = 0; y < height; y++) {
+        outData[y * widthByChannels + xOffset] = sum * invRadius;
+        const trailY = getIndex(y - radius, height);
+        const leadY = getIndex(y + radius + 1, height);
+        sum += sourceData[leadY * widthByChannels + xOffset] - sourceData[trailY * widthByChannels + xOffset];
+      }
     }
   }
 }
 
-function fastBoxBlurInPlace(
-  heightmap: number[][],
-  radius: number = 4,
-  passes: number = 4,
-  toroidal: boolean = false,
-): number[][] {
-  const height = heightmap.length;
-  if (height === 0) return heightmap;
-  const width = heightmap[0].length;
-  if (width === 0) return heightmap;
-
-  const targetMap: number[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => 0));
-  const invRadius = 1 / (radius * 2 + 1);
-  const getIndex = toroidal ? wrapIndex : clampIndex;
-
-  for (let index = 0; index < passes; index++) {
-    boxBlurH(heightmap, targetMap, width, height, radius, invRadius, getIndex);
-    boxBlurV(targetMap, heightmap, width, height, radius, invRadius, getIndex);
-  }
-
-  return heightmap;
-}
+// --- Main Orchestrator Function ---
 
 /**
- * Applies a fast, multi-pass box blur to a 2D array of numbers.
- *
- * @param heightmap The 2D array of numbers to blur.
- * @param radius The blur radius.
- * @param passes The number of blur passes to apply.
- * @param toroidal If true, the blur will wrap around the edges; otherwise, edges are clamped. Defaults to false.
- * @returns A new 2D array with the blurred data.
+ * Core blur logic that orchestrates ping-ponging between buffers.
+ */
+function blurBuffer(source: ImageBuffer, radius: number, passes: number, toroidal: boolean): void {
+  const getIndex = toroidal ? wrapIndex : clampIndex;
+
+  // We use two buffers and "ping-pong" between them to avoid allocating new memory on each pass.
+  const writeBuffer = new ImageBuffer(source.width, source.height, source.channels);
+
+  const invRadius = 1 / (radius * 2 + 1);
+
+  for (let index = 0; index < passes; index++) {
+    // Horizontal pass reads from `readBuffer` and writes to `writeBuffer`
+    boxBlurH(source, writeBuffer, radius, invRadius, getIndex);
+    // Vertical pass reads from `writeBuffer` and writes to `readBuffer`
+    boxBlurV(writeBuffer, source, radius, invRadius, getIndex);
+  }
+
+  // The final, complete result is always in `source` after the final vertical pass.
+}
+
+// --- Public API Functions ---
+
+/**
+ * Applies a fast, multi-pass box blur to a 2D array of numbers (heightmap).
+ * @returns A new 2D array `number[][]` with the blurred data.
  */
 export function fastBoxBlur(
   heightmap: number[][],
@@ -113,63 +138,81 @@ export function fastBoxBlur(
   toroidal: boolean = false,
 ): number[][] {
   const startsAt = Date.now();
-  const result = fastBoxBlurInPlace(
-    heightmap.map((row) => [...row]),
-    radius,
-    passes,
-    toroidal,
-  );
+  const height = heightmap.length;
+  if (height === 0) return [];
+  const width = heightmap[0].length;
+  if (width === 0) return [];
+
+  // 1. Convert user-friendly 2D array to our performant internal format.
+  const sourceBuffer = new ImageBuffer(width, height, 1);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      sourceBuffer.data[y * width + x] = heightmap[y][x];
+    }
+  }
+
+  // 2. Run the highly optimized blur logic.
+  blurBuffer(sourceBuffer, radius, passes, toroidal);
+
+  // 3. Convert back to the user-friendly 2D array format.
+  const outMap: number[][] = Array.from({ length: height }, () => Array.from({ length: width }));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      outMap[y][x] = sourceBuffer.data[y * width + x];
+    }
+  }
+
   log(
     "fastBoxBlur",
     startsAt,
-    `Blurred heightmap (${heightmap[0].length}x${heightmap.length}, radius=${radius}, passes=${passes}, toroidal=${toroidal})`,
+    `Blurred heightmap (${width}x${height}, radius=${radius}, passes=${passes}, toroidal=${toroidal})`,
   );
 
-  return result;
+  return outMap;
 }
 
 /**
- * Applies a fast, multi-pass box blur to a 2D array of vectors (e.g., a normal map).
- *
- * @param normalmap The 2D array of vectors to blur.
- * @param radius The blur radius.
- * @param passes The number of blur passes.
- * @param toroidal If true, the blur will wrap around the edges; otherwise, edges are clamped. Defaults to false.
- * @returns A new 2D array with the blurred vectors.
+ * Applies a fast, multi-pass box blur to a normal map.
+ * @returns A new 2D array `Vector3[][]` with the blurred and re-normalized vectors.
  */
 export function fastBoxBlurVectors(
-  normalmap: Vector3[][],
+  vector3s: Vector3[][],
   radius: number,
   passes: number = 3,
   toroidal: boolean = false,
 ): Vector3[][] {
   const startsAt = Date.now();
-  const height = normalmap.length;
-  if (height === 0) return [];
-  const width = normalmap[0].length;
-  if (width === 0) return [];
-  const out: Vector3[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => [0, 0, 0]));
 
-  const blurredX = fastBoxBlurInPlace(
-    normalmap.map((row) => row.map((v) => v[0])),
-    radius,
-    passes,
-    toroidal,
-  );
-  const blurredY = fastBoxBlurInPlace(
-    normalmap.map((row) => row.map((v) => v[1])),
-    radius,
-    passes,
-    toroidal,
-  );
-  const blurredZ = fastBoxBlurInPlace(
-    normalmap.map((row) => row.map((v) => v[2])),
-    radius,
-    passes,
-    toroidal,
-  );
-  for (let y = 0; y < height; y++)
-    for (let x = 0; x < width; x++) normalizeXYZ(blurredX[y][x], blurredY[y][x], blurredZ[y][x], out[y][x]);
+  const height = vector3s.length;
+  if (height === 0) return [];
+  const width = vector3s[0].length;
+  if (width === 0) return [];
+
+  // 1. Convert to performant internal format (interleaved Float32Array).
+  const sourceBuffer = new ImageBuffer(width, height, 3);
+  let index = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = vector3s[y][x];
+      sourceBuffer.data[index++] = v[0];
+      sourceBuffer.data[index++] = v[1];
+      sourceBuffer.data[index++] = v[2];
+    }
+  }
+
+  // 2. Run the blur on the interleaved vector data.
+  blurBuffer(sourceBuffer, radius, passes, toroidal);
+
+  // 3. Post-process: Convert back to Vector3[][] and re-normalize all vectors.
+  const out: Vector3[][] = Array.from({ length: height }, () => Array.from({ length: width }));
+  const resultData = sourceBuffer.data;
+  let index_ = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      out[y][x] = normalizeXYZ(resultData[index_], resultData[index_ + 1], resultData[index_ + 2], [0, 0, 0]);
+      index_ += 3;
+    }
+  }
 
   log(
     "fastBoxBlurVectors",

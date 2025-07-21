@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { Jimp } from "jimp";
 import {
-  heightmapToRgbaBuffer,
+  heightmapToPrettyRgbaBuffer,
   normalmapToRgbaBuffer,
   type Heightmap,
   type Normalmap,
@@ -24,8 +24,8 @@ export async function saveNormalmap(normalmap: Normalmap, filename: string): Pro
   await saveRgbaBufferToImage(normalmapToRgbaBuffer(normalmap), filename);
 }
 
-export async function saveHeightmap(heightmap: Heightmap, filename: string): Promise<void> {
-  await saveRgbaBufferToImage(heightmapToRgbaBuffer(heightmap), filename);
+export async function savePrettyHeightmap(heightmap: Heightmap, filename: string): Promise<void> {
+  await saveRgbaBufferToImage(heightmapToPrettyRgbaBuffer(heightmap), filename);
 }
 
 export async function imageToRgbaBuffer(filePath: string): Promise<RgbaBuffer> {

@@ -14,12 +14,12 @@ import {
   addTileNormalmapToGlobalNormalmap,
   generateTilableHeightmap,
   heightmapToNormalmap,
-  rgbaBufferToHeightmap,
+  extractHeightmapFromTextureRgbaBuffer,
 } from "../src/game/lib/heightmap.js";
 import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.js";
 import { log } from "../src/game/lib/log.js";
 import { getTileset } from "../src/game/lib/tileset.js";
-import { imageToRgbaBuffer, saveHeightmap, saveNormalmap } from "./lib/file.js";
+import { imageToRgbaBuffer, savePrettyHeightmap, saveNormalmap } from "./lib/file.js";
 
 const __dirname = import.meta.dirname;
 const SCRIPT_NAME = "tiles-shading-rotation-fast";
@@ -176,15 +176,17 @@ async function generateAssets(texture: string, blenderBin: string, blenderScript
 
   const pixelsPerTile = tileset.tilewidth / 8;
   const randomMapMetadata = terrainToMetadata(randomTerrain, pixelsPerTile);
-  await saveHeightmap(randomMapMetadata.heightmap, path.join(outputDirectory, `random.heightmap.png`));
+  await savePrettyHeightmap(randomMapMetadata.heightmap, path.join(outputDirectory, `random.heightmap.png`));
   await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDirectory, `random.normalmap.png`));
-  const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10);
+  const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10, 3, false);
   await saveNormalmap(softNormalmap, path.join(outputDirectory, `random.soft.normalmap.png`));
   const textureBuffer = await imageToRgbaBuffer(texture);
-  const textureHeightmap = fastBoxBlur(rgbaBufferToHeightmap(textureBuffer), 10);
-  await saveHeightmap(textureHeightmap, path.join(outputDirectory, `texture.heightmap.png`));
+  const textureHeightmap = fastBoxBlur(extractHeightmapFromTextureRgbaBuffer(textureBuffer), 10, 3, false);
+  await savePrettyHeightmap(textureHeightmap, path.join(outputDirectory, `texture.heightmap.png`));
+  const textureHeightmapToroidal = fastBoxBlur(extractHeightmapFromTextureRgbaBuffer(textureBuffer), 10, 3, true);
+  await savePrettyHeightmap(textureHeightmapToroidal, path.join(outputDirectory, `texture.toroidal.heightmap.png`));
   const textureNormalmap = heightmapToNormalmap(textureHeightmap);
-  const textureNormalmapToroidal = fastBoxBlurVectors(heightmapToNormalmap(textureHeightmap), 10, 4, true);
+  const textureNormalmapToroidal = fastBoxBlurVectors(heightmapToNormalmap(textureHeightmap), 10, 3, true);
   await saveNormalmap(textureNormalmap, path.join(outputDirectory, `texture.normalmap.png`));
   await saveNormalmap(textureNormalmapToroidal, path.join(outputDirectory, `texture.toroidal.normalmap.png`));
   const finalNormalmap = addTileNormalmapToGlobalNormalmap(softNormalmap, textureNormalmapToroidal, pixelsPerTile);

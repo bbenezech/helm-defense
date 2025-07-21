@@ -37,6 +37,7 @@ export default tseslint.config(
       "unicorn/prefer-single-call": "off",
       "unicorn/prefer-module": "off",
       "unicorn/prefer-at": "off",
+      "unicorn/prefer-modern-math-apis": "off", // hypoth is too slow
     },
   },
   {

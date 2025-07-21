@@ -6,6 +6,7 @@ import { log } from "./log.js";
 export type Heightmap = number[][];
 export type Normalmap = Vector3[][];
 export type RgbaBuffer = { data: Uint8ClampedArray; width: number; height: number };
+export type Metadata = { buffer: RgbaBuffer; minHeight: number; maxHeight: number };
 
 // Generates a tilable heightmap
 // height is an integer between 0 and maxValue (inclusive)
@@ -47,6 +48,74 @@ export function generateTilableHeightmap({
   return heightmap;
 }
 
+export function packMetadata(heightmap: Heightmap, normalmap: Normalmap): Metadata {
+  const startsAt = Date.now();
+  const height = heightmap.length;
+  if (height === 0)
+    return { buffer: { data: new Uint8ClampedArray(), width: 0, height: 0 }, minHeight: 0, maxHeight: 0 };
+  const width = heightmap[0].length;
+  if (width === 0)
+    return { buffer: { data: new Uint8ClampedArray(), width: 0, height: 0 }, minHeight: 0, maxHeight: 0 };
+
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = heightmap[y][x];
+      if (value < minHeight) minHeight = value;
+      if (value > maxHeight) maxHeight = value;
+    }
+  }
+
+  const data = new Uint8ClampedArray(width * height * 4);
+  const heightRangeInv255 = (1 / (maxHeight - minHeight)) * 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const value = heightmap[y][x];
+      const normal = normalmap[y][x];
+
+      data[index] = (normal[0] * 0.5 + 0.5) * 255; // R
+      data[index + 1] = (normal[1] * 0.5 + 0.5) * 255; // G
+      data[index + 2] = (normal[2] * 0.5 + 0.5) * 255; // B
+      data[index + 3] = (value - minHeight) * heightRangeInv255; // A
+    }
+  }
+
+  log(
+    `packMetadata`,
+    startsAt,
+    `Packed metadata from heightmap (${width}x${height}, min=${minHeight}, max=${maxHeight})`,
+  );
+
+  return { buffer: { data, width, height }, minHeight, maxHeight };
+}
+
+export function unpackMetadata(metadata: Metadata): { heightmap: Heightmap; normalmap: Normalmap } {
+  const startsAt = Date.now();
+  const { data, width, height } = metadata.buffer;
+  const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
+  const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
+  const inv255 = 1 / 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const r = data[index] * inv255 * 2 - 1; // Normalize to [0, 1]
+      const g = data[index + 1] * inv255 * 2 - 1;
+      const b = data[index + 2] * inv255 * 2 - 1;
+      const a = data[index + 3] * inv255 * (metadata.maxHeight - metadata.minHeight) + metadata.minHeight;
+
+      // Map the color back to the normal vector in the range [-1, 1]
+      normalmap[y][x] = [r, g, b];
+      heightmap[y][x] = a; // Height is already normalized
+    }
+  }
+
+  log(`unpackMetadata`, startsAt, `Unpacked metadata to heightmap and normalmap (${width}x${height})`);
+
+  return { heightmap, normalmap };
+}
+
 export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 3): Normalmap {
   const startsAt = Date.now();
   const height = heightmap.length;
@@ -56,18 +125,25 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
 
   if (kernelSize < 1) throw new Error("kernelSize must be an integer greater than or equal to 1.");
   const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
+  const horizontalValues: number[] = [];
+  const verticalValues: number[] = [];
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const horizontalValues: number[] = [];
-      const verticalValues: number[] = [];
-
+      let horizontalIndex = 0;
+      let verticalIndex = 0;
       for (let index = -kernelSize; index <= kernelSize; index++) {
-        if (heightmap[y][x + index] !== undefined) horizontalValues.push(heightmap[y][x + index]);
-        if (heightmap[y + index] !== undefined) verticalValues.push(heightmap[y + index][x]);
+        if (heightmap[y][x + index] !== undefined) {
+          horizontalValues[horizontalIndex] = heightmap[y][x + index];
+          horizontalIndex++;
+        }
+        if (heightmap[y + index] !== undefined) {
+          verticalValues[verticalIndex] = heightmap[y + index][x];
+          verticalIndex++;
+        }
       }
-      const dx_pixels = horizontalValues.length - 1;
-      const dy_pixels = verticalValues.length - 1;
+      const dx_pixels = horizontalIndex - 1;
+      const dy_pixels = verticalIndex - 1;
       const dz_dx = dx_pixels > 0 ? horizontalValues[dx_pixels] - horizontalValues[0] : 0;
       const dz_dy = dy_pixels > 0 ? verticalValues[dy_pixels] - verticalValues[0] : 0;
 
@@ -77,11 +153,16 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
         1,
       ];
 
-      const length = Math.hypot(normal[0], normal[1], normal[2]);
+      const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + 1);
       if (length > 0) {
-        normal[0] /= length;
-        normal[1] /= length;
-        normal[2] /= length;
+        const invLength = 1 / length;
+        normal[0] *= invLength;
+        normal[1] *= invLength;
+        normal[2] *= invLength;
+      } else {
+        normal[0] = 0;
+        normal[1] = 0;
+        normal[2] = 1;
       }
 
       normalmap[y][x] = normal;
@@ -97,7 +178,7 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
   return normalmap;
 }
 
-export function rgbaBufferToHeightmap(rgbaBuffer: RgbaBuffer): Heightmap {
+export function extractHeightmapFromTextureRgbaBuffer(rgbaBuffer: RgbaBuffer): Heightmap {
   const startsAt = Date.now();
   const { data, width, height } = rgbaBuffer;
   const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
@@ -116,12 +197,16 @@ export function rgbaBufferToHeightmap(rgbaBuffer: RgbaBuffer): Heightmap {
     }
   }
 
-  log(`rgbaBufferToHeightmap`, startsAt, `Converted RGBA buffer to heightmap (${width}x${height})`);
+  log(
+    `extractHeightmapFromTextureRgbaBuffer`,
+    startsAt,
+    `Extracted heightmap from texture RGBA buffer (${width}x${height})`,
+  );
 
   return heightmap;
 }
 
-export function heightmapToRgbaBuffer(heightmap: Heightmap) {
+export function heightmapToPrettyRgbaBuffer(heightmap: Heightmap) {
   const startsAt = Date.now();
   const height = heightmap.length;
   if (height === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
@@ -154,7 +239,7 @@ export function heightmapToRgbaBuffer(heightmap: Heightmap) {
       buffer[index] = colorValue; // R
       buffer[index + 1] = colorValue; // G
       buffer[index + 2] = colorValue; // B
-      buffer[index + 3] = 255; // A (fully opaque)
+      buffer[index + 3] = colorValue; // A
     }
   }
 
@@ -189,6 +274,27 @@ export function normalmapToRgbaBuffer(normalmap: Normalmap): RgbaBuffer {
 
   log(`normalmapToRgbaBuffer`, startsAt, `Converted normalmap to RGBA buffer (${width}x${height})`);
   return { data: buffer, width, height };
+}
+
+export function rgbaBufferToNormalmap(rgbaBuffer: RgbaBuffer): Normalmap {
+  const startsAt = Date.now();
+  const { data, width, height } = rgbaBuffer;
+  const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const r = data[index] / 255; // Normalize to [0, 1]
+      const g = data[index + 1] / 255;
+      const b = data[index + 2] / 255;
+
+      // Map the color back to the normal vector in the range [-1, 1]
+      normalmap[y][x] = [r * 2 - 1, g * 2 - 1, b * 2 - 1];
+    }
+  }
+
+  log(`rgbaBufferToNormalmap`, startsAt, `Converted RGBA buffer to normalmap (${width}x${height})`);
+  return normalmap;
 }
 
 export function addTileNormalmapToGlobalNormalmap(
@@ -253,7 +359,7 @@ export function printNormalmap(normalmap: Normalmap): void {
     let line = "";
     for (const normal of row) {
       const [nx, ny] = normal;
-      if (Math.hypot(nx, ny) < flatThreshold) {
+      if (Math.sqrt(nx * nx + ny * ny) < flatThreshold) {
         line += flatChar + " ";
       } else {
         let angle = Math.atan2(ny, nx);

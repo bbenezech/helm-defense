@@ -5,7 +5,7 @@ export function normalize(v: Vector3, out: Vector3): Vector3 {
 }
 
 export function normalizeXYZ(x: number, y: number, z: number, out: Vector3): Vector3 {
-  const length = Math.hypot(x, y, z);
+  const length = Math.sqrt(x * x + y * y + z * z);
   if (length === 0) {
     out[0] = 0;
     out[1] = 0;
@@ -77,9 +77,9 @@ export function barycentricWeights(
   v3: { x: number; y: number },
   out: Vector3,
 ): Vector3 {
-  const den = (v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y);
-  const a = ((v2.y - v3.y) * (x - v3.x) + (v3.x - v2.x) * (y - v3.y)) / den;
-  const b = ((v3.y - v1.y) * (x - v3.x) + (v1.x - v3.x) * (y - v3.y)) / den;
+  const denInv = 1 / ((v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y));
+  const a = ((v2.y - v3.y) * (x - v3.x) + (v3.x - v2.x) * (y - v3.y)) * denInv;
+  const b = ((v3.y - v1.y) * (x - v3.x) + (v1.x - v3.x) * (y - v3.y)) * denInv;
   const c = 1 - a - b;
 
   out[0] = a;
