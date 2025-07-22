@@ -19,7 +19,7 @@ import {
 import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.js";
 import { log } from "../src/game/lib/log.js";
 import { getTileset } from "../src/game/lib/tileset.js";
-import { imageToRgbaBuffer, savePrettyHeightmap, saveNormalmap } from "./lib/file.js";
+import { imageToImageData, savePrettyHeightmap, saveNormalmap } from "./lib/file.js";
 
 const __dirname = import.meta.dirname;
 const SCRIPT_NAME = "tiles-shading-rotation-fast";
@@ -180,7 +180,7 @@ async function generateAssets(texture: string, blenderBin: string, blenderScript
   await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDirectory, `random.normalmap.png`));
   const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10, 3, false);
   await saveNormalmap(softNormalmap, path.join(outputDirectory, `random.soft.normalmap.png`));
-  const textureBuffer = await imageToRgbaBuffer(texture);
+  const textureBuffer = await imageToImageData(texture);
   const textureHeightmap = fastBoxBlur(extractHeightmapFromTextureRgbaBuffer(textureBuffer), 10, 3, false);
   await savePrettyHeightmap(textureHeightmap, path.join(outputDirectory, `texture.heightmap.png`));
   const textureHeightmapToroidal = fastBoxBlur(extractHeightmapFromTextureRgbaBuffer(textureBuffer), 10, 3, true);

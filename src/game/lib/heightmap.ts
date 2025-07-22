@@ -5,8 +5,13 @@ import { log } from "./log.js";
 
 export type Heightmap = number[][];
 export type Normalmap = Vector3[][];
-export type RgbaBuffer = { data: Uint8ClampedArray; width: number; height: number };
-export type Metadata = { buffer: RgbaBuffer; minHeight: number; maxHeight: number };
+export type ImageData = {
+  data: Uint8ClampedArray<ArrayBuffer>;
+  width: number;
+  height: number;
+  channels: 1 | 2 | 3 | 4;
+};
+export type Metadata = { imageData: ImageData; minHeight: number; maxHeight: number };
 
 // Generates a tilable heightmap
 // height is an integer between 0 and maxValue (inclusive)
@@ -51,11 +56,9 @@ export function generateTilableHeightmap({
 export function packMetadata(heightmap: Heightmap, normalmap: Normalmap): Metadata {
   const startsAt = Date.now();
   const height = heightmap.length;
-  if (height === 0)
-    return { buffer: { data: new Uint8ClampedArray(), width: 0, height: 0 }, minHeight: 0, maxHeight: 0 };
+  if (height === 0) throw new Error("Heightmap cannot be empty.");
   const width = heightmap[0].length;
-  if (width === 0)
-    return { buffer: { data: new Uint8ClampedArray(), width: 0, height: 0 }, minHeight: 0, maxHeight: 0 };
+  if (width === 0) throw new Error("Heightmap cannot be empty.");
 
   let minHeight = Infinity;
   let maxHeight = -Infinity;
@@ -82,18 +85,14 @@ export function packMetadata(heightmap: Heightmap, normalmap: Normalmap): Metada
     }
   }
 
-  log(
-    `packMetadata`,
-    startsAt,
-    `Packed metadata from heightmap (${width}x${height}, min=${minHeight}, max=${maxHeight})`,
-  );
+  log(`packMetadata`, startsAt, `Packed metadata (${width}x${height}, min=${minHeight}, max=${maxHeight})`);
 
-  return { buffer: { data, width, height }, minHeight, maxHeight };
+  return { imageData: { data, width, height, channels: 4 }, minHeight, maxHeight };
 }
 
 export function unpackMetadata(metadata: Metadata): { heightmap: Heightmap; normalmap: Normalmap } {
   const startsAt = Date.now();
-  const { data, width, height } = metadata.buffer;
+  const { data, width, height } = metadata.imageData;
   const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
   const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
   const inv255 = 1 / 255;
@@ -178,9 +177,9 @@ export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 
   return normalmap;
 }
 
-export function extractHeightmapFromTextureRgbaBuffer(rgbaBuffer: RgbaBuffer): Heightmap {
+export function extractHeightmapFromTextureImageData(image: ImageData): Heightmap {
   const startsAt = Date.now();
-  const { data, width, height } = rgbaBuffer;
+  const { data, width, height } = image;
   const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
 
   for (let y = 0; y < height; y++) {
@@ -206,13 +205,13 @@ export function extractHeightmapFromTextureRgbaBuffer(rgbaBuffer: RgbaBuffer): H
   return heightmap;
 }
 
-export function heightmapToPrettyRgbaBuffer(heightmap: Heightmap) {
+export function heightmapToPrettyImageData(heightmap: Heightmap): ImageData {
   const startsAt = Date.now();
   const height = heightmap.length;
-  if (height === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
+  if (height === 0) throw new Error("Heightmap cannot be empty.");
 
   const width = heightmap[0].length;
-  if (width === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
+  if (width === 0) throw new Error("Heightmap cannot be empty.");
 
   let min = Infinity;
   let max = -Infinity;
@@ -226,7 +225,7 @@ export function heightmapToPrettyRgbaBuffer(heightmap: Heightmap) {
 
   const range = max - min;
   const invRange = range > 0 ? 1 / range : 0;
-  const buffer = new Uint8ClampedArray(width * height * 4);
+  const data = new Uint8ClampedArray(width * height * 4);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -236,49 +235,46 @@ export function heightmapToPrettyRgbaBuffer(heightmap: Heightmap) {
       const normalizedValue = (heightmap[y][x] - min) * invRange;
       const colorValue = normalizedValue * 255;
 
-      buffer[index] = colorValue; // R
-      buffer[index + 1] = colorValue; // G
-      buffer[index + 2] = colorValue; // B
-      buffer[index + 3] = colorValue; // A
+      data[index] = colorValue; // R
+      data[index + 1] = colorValue; // G
+      data[index + 2] = colorValue; // B
+      data[index + 3] = colorValue; // A
     }
   }
 
   log("heightmapToRgbaBuffer", startsAt, `Converted heightmap to RGBA buffer (${width}x${height})`);
 
-  return { data: buffer, width, height };
+  return { data, width, height, channels: 4 };
 }
 
-export function normalmapToRgbaBuffer(normalmap: Normalmap): RgbaBuffer {
+export function normalmapToImageData(normalmap: Normalmap): ImageData {
   const startsAt = Date.now();
   const height = normalmap.length;
-  if (height === 0) return { data: new Uint8ClampedArray(), width: 0, height: 0 };
+  if (height === 0) throw new Error("Normalmap cannot be empty.");
   const width = normalmap[0].length;
-  if (width === 0) return { data: new Uint8ClampedArray(), width: 0, height: height };
+  if (width === 0) throw new Error("Normalmap cannot be empty.");
 
-  // Create a flat buffer for RGBA data. 4 bytes per pixel (R, G, B, A).
-  const buffer = new Uint8ClampedArray(width * height * 4);
+  const data = new Uint8ClampedArray(width * height * 4);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const normal = normalmap[y][x];
       const index = (y * width + x) * 4;
 
-      // Map the normal vector from the [-1, 1] range to the [0, 255] color range.
-      // Uint8ClampedArray will automatically clamp values to the 0-255 range.
-      buffer[index] = (normal[0] * 0.5 + 0.5) * 255; // R
-      buffer[index + 1] = (normal[1] * 0.5 + 0.5) * 255; // G
-      buffer[index + 2] = (normal[2] * 0.5 + 0.5) * 255; // B
-      buffer[index + 3] = 255; // A (fully opaque)
+      data[index] = (normal[0] * 0.5 + 0.5) * 255; // R
+      data[index + 1] = (normal[1] * 0.5 + 0.5) * 255; // G
+      data[index + 2] = (normal[2] * 0.5 + 0.5) * 255; // B
+      data[index + 3] = 255; // A
     }
   }
 
   log(`normalmapToRgbaBuffer`, startsAt, `Converted normalmap to RGBA buffer (${width}x${height})`);
-  return { data: buffer, width, height };
+  return { data, width, height, channels: 4 };
 }
 
-export function rgbaBufferToNormalmap(rgbaBuffer: RgbaBuffer): Normalmap {
+export function rgbaBufferToNormalmap(image: ImageData): Normalmap {
   const startsAt = Date.now();
-  const { data, width, height } = rgbaBuffer;
+  const { data, width, height } = image;
   const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
 
   for (let y = 0; y < height; y++) {
@@ -288,7 +284,6 @@ export function rgbaBufferToNormalmap(rgbaBuffer: RgbaBuffer): Normalmap {
       const g = data[index + 1] / 255;
       const b = data[index + 2] / 255;
 
-      // Map the color back to the normal vector in the range [-1, 1]
       normalmap[y][x] = [r * 2 - 1, g * 2 - 1, b * 2 - 1];
     }
   }

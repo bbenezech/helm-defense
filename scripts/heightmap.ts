@@ -1,17 +1,14 @@
 #!/usr/bin/env -S yarn tsx
 
-import { generateTilableHeightmap, heightmapToNormalmap, printHeightmap } from "../src/game/lib/heightmap.js";
+import { generateTilableHeightmap, packMetadata, printHeightmap } from "../src/game/lib/heightmap.js";
 import { terrainToMetadata, tileableHeightmapToTerrain } from "../src/game/lib/terrain.js";
-import { savePrettyHeightmap, saveNormalmap } from "./lib/file.js";
+import { saveImageDataToImage, saveNormalmap } from "./lib/file.js";
 
 const tileHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 40, maxValue: 5 });
 printHeightmap(tileHeightmap);
 
 const terrain = tileableHeightmapToTerrain(tileHeightmap);
 const metadata = terrainToMetadata(terrain, 16);
-
-heightmapToNormalmap(metadata.heightmap, 10);
-
-savePrettyHeightmap(metadata.heightmap, "heightmap.png");
-saveNormalmap(metadata.normalmap, "normalmap1.png");
-saveNormalmap(heightmapToNormalmap(metadata.heightmap), "normalmap2.png");
+const packedMetadata = packMetadata(metadata.heightmap, metadata.normalmap);
+saveImageDataToImage(packedMetadata.imageData, "heightmap.png");
+saveNormalmap(metadata.normalmap, "normalmap.png");

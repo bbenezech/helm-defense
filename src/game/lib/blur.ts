@@ -11,24 +11,9 @@ function clampIndex(index: number, max: number): number {
 
 type GetIndexFunction = (index: number, max: number) => number;
 
-class ImageBuffer {
-  readonly data: Float32Array;
-  readonly width: number;
-  readonly height: number;
-  readonly channels: number;
-
-  constructor(width: number, height: number, channels: number) {
-    this.data = new Float32Array(width * height * channels);
-    this.width = width;
-    this.height = height;
-    this.channels = channels;
-  }
-
-  clone(): ImageBuffer {
-    const newBuffer = new ImageBuffer(this.width, this.height, this.channels);
-    newBuffer.data.set(this.data);
-    return newBuffer;
-  }
+type Buffer = { data: Float32Array; width: number; height: number; channels: number };
+function createBuffer(width: number, height: number, channels: number): Buffer {
+  return { data: new Float32Array(width * height * channels), width, height, channels };
 }
 
 // --- Internal Blur Implementations ---
@@ -36,13 +21,7 @@ class ImageBuffer {
 /**
  * Performs a horizontal box blur using a provided edge-handling function.
  */
-function boxBlurH(
-  source: ImageBuffer,
-  out: ImageBuffer,
-  radius: number,
-  invRadius: number,
-  getIndex: GetIndexFunction,
-) {
+function boxBlurH(source: Buffer, out: Buffer, radius: number, invRadius: number, getIndex: GetIndexFunction) {
   const { width, height, channels } = source;
   const sourceData = source.data;
   const outData = out.data;
@@ -70,13 +49,7 @@ function boxBlurH(
 /**
  * Performs a vertical box blur using a provided edge-handling function.
  */
-function boxBlurV(
-  source: ImageBuffer,
-  out: ImageBuffer,
-  radius: number,
-  invRadius: number,
-  getIndex: GetIndexFunction,
-) {
+function boxBlurV(source: Buffer, out: Buffer, radius: number, invRadius: number, getIndex: GetIndexFunction) {
   const { width, height, channels } = source;
   const sourceData = source.data;
   const outData = out.data;
@@ -107,11 +80,11 @@ function boxBlurV(
 /**
  * Core blur logic that orchestrates ping-ponging between buffers.
  */
-function blurBuffer(source: ImageBuffer, radius: number, passes: number, toroidal: boolean): void {
+function blurBuffer(source: Buffer, radius: number, passes: number, toroidal: boolean): void {
   const getIndex = toroidal ? wrapIndex : clampIndex;
 
   // We use two buffers and "ping-pong" between them to avoid allocating new memory on each pass.
-  const writeBuffer = new ImageBuffer(source.width, source.height, source.channels);
+  const writeBuffer = createBuffer(source.width, source.height, source.channels);
 
   const invRadius = 1 / (radius * 2 + 1);
 
@@ -144,7 +117,7 @@ export function fastBoxBlur(
   if (width === 0) return [];
 
   // 1. Convert user-friendly 2D array to our performant internal format.
-  const sourceBuffer = new ImageBuffer(width, height, 1);
+  const sourceBuffer = createBuffer(width, height, 1);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       sourceBuffer.data[y * width + x] = heightmap[y][x];
@@ -189,7 +162,7 @@ export function fastBoxBlurVectors(
   if (width === 0) return [];
 
   // 1. Convert to performant internal format (interleaved Float32Array).
-  const sourceBuffer = new ImageBuffer(width, height, 3);
+  const sourceBuffer = createBuffer(width, height, 3);
   let index = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

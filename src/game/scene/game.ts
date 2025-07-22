@@ -129,7 +129,7 @@ export class GameScene extends Phaser.Scene {
     for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
 
     this.lightingFilterController = new LightingFilterController(this, layerContainer);
-
+    this.lightingFilterController.setMetadata(this.heightmap, this.normalmap);
     this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
     this.halfTileWidthInv = 2 / this.map.tileWidth;
     this.halfTileHeightInv = 2 / this.map.tileHeight;
@@ -307,6 +307,7 @@ export class GameScene extends Phaser.Scene {
 
     this.events.emit("perspective-change");
   }
+
   screenToTileCoordinates(
     screen: Phaser.Math.Vector2,
     layer: { x: number; y: number } | null,
