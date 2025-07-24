@@ -11,7 +11,6 @@ export type ImageData = {
   height: number;
   channels: 1 | 2 | 3 | 4;
 };
-export type Metadata = { imageData: ImageData; minHeight: number; maxHeight: number };
 
 // Generates a tilable heightmap
 // height is an integer between 0 and maxValue (inclusive)
@@ -51,68 +50,6 @@ export function generateTilableHeightmap({
   log(`generateTilableHeightmap`, startsAt, `Generated tilable heightmap (${width}x${height}, maxValue=${maxValue})`);
 
   return heightmap;
-}
-
-export function packMetadata(heightmap: Heightmap, normalmap: Normalmap): Metadata {
-  const startsAt = Date.now();
-  const height = heightmap.length;
-  if (height === 0) throw new Error("Heightmap cannot be empty.");
-  const width = heightmap[0].length;
-  if (width === 0) throw new Error("Heightmap cannot be empty.");
-
-  let minHeight = Infinity;
-  let maxHeight = -Infinity;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const value = heightmap[y][x];
-      if (value < minHeight) minHeight = value;
-      if (value > maxHeight) maxHeight = value;
-    }
-  }
-
-  const data = new Uint8ClampedArray(width * height * 4);
-  const heightRangeInv255 = (1 / (maxHeight - minHeight)) * 255;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const index = (y * width + x) * 4;
-      const value = heightmap[y][x];
-      const normal = normalmap[y][x];
-
-      data[index] = (normal[0] * 0.5 + 0.5) * 255; // R
-      data[index + 1] = (normal[1] * 0.5 + 0.5) * 255; // G
-      data[index + 2] = (normal[2] * 0.5 + 0.5) * 255; // B
-      data[index + 3] = (value - minHeight) * heightRangeInv255; // A
-    }
-  }
-
-  log(`packMetadata`, startsAt, `Packed metadata (${width}x${height}, min=${minHeight}, max=${maxHeight})`);
-
-  return { imageData: { data, width, height, channels: 4 }, minHeight, maxHeight };
-}
-
-export function unpackMetadata(metadata: Metadata): { heightmap: Heightmap; normalmap: Normalmap } {
-  const startsAt = Date.now();
-  const { data, width, height } = metadata.imageData;
-  const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
-  const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
-  const inv255 = 1 / 255;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const index = (y * width + x) * 4;
-      const r = data[index] * inv255 * 2 - 1; // Normalize to [0, 1]
-      const g = data[index + 1] * inv255 * 2 - 1;
-      const b = data[index + 2] * inv255 * 2 - 1;
-      const a = data[index + 3] * inv255 * (metadata.maxHeight - metadata.minHeight) + metadata.minHeight;
-
-      // Map the color back to the normal vector in the range [-1, 1]
-      normalmap[y][x] = [r, g, b];
-      heightmap[y][x] = a; // Height is already normalized
-    }
-  }
-
-  log(`unpackMetadata`, startsAt, `Unpacked metadata to heightmap and normalmap (${width}x${height})`);
-
-  return { heightmap, normalmap };
 }
 
 export function heightmapToNormalmap(heightmap: Heightmap, kernelSize: number = 3): Normalmap {

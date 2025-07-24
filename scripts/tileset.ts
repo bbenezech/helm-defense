@@ -9,7 +9,7 @@ import { ORDERED_SLOPES } from "./lib/blender.js";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
 import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.js";
-import { tileableHeightmapToTerrain, terrainToMetadata } from "../src/game/lib/terrain.js";
+import { tileableHeightmapToTileData, tileDataToTerrain } from "../src/game/lib/terrain.js";
 import {
   addTileNormalmapToGlobalNormalmap,
   generateTilableHeightmap,
@@ -170,12 +170,12 @@ async function generateAssets(texture: string, blenderBin: string, blenderScript
   const tileableHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 });
   fs.writeFileSync(path.join(outputDirectory, `random.tileableHeightmap.json`), JSON.stringify(tileableHeightmap));
 
-  const randomTerrain = tileableHeightmapToTerrain(tileableHeightmap);
+  const randomTerrain = tileableHeightmapToTileData(tileableHeightmap);
   const randomTilemap = getTilemap(terrainToLayers(randomTerrain, tileset), tileset);
   fs.writeFileSync(path.join(outputDirectory, `random.map.json`), JSON.stringify(randomTilemap));
 
   const pixelsPerTile = tileset.tilewidth / 8;
-  const randomMapMetadata = terrainToMetadata(randomTerrain, pixelsPerTile);
+  const randomMapMetadata = tileDataToTerrain(randomTerrain, pixelsPerTile);
   await savePrettyHeightmap(randomMapMetadata.heightmap, path.join(outputDirectory, `random.heightmap.png`));
   await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDirectory, `random.normalmap.png`));
   const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10, 3, false);

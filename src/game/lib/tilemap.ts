@@ -1,4 +1,4 @@
-import { type NESW, type Terrain } from "./terrain.js";
+import { type NESW, type TileData } from "./terrain.js";
 import type { Tileset } from "./tileset.js";
 
 export type TilemapLayer = number[][];
@@ -47,7 +47,7 @@ export function getTilemap(rawLayers: number[][][], tileset: Tileset) {
 }
 
 type NESWToGids = Record<NESW, { gid: number; probability: number }[]>;
-export function terrainToLayers(terrain: Terrain, tileset: Tileset): TilemapLayer[] {
+export function terrainToLayers(terrain: TileData[][], tileset: Tileset): TilemapLayer[] {
   const firstgid = 1;
   const NESWToGids = tileset.tiles.reduce((accumulator, { id, properties, probability }) => {
     const NESW = properties.find((p) => p.name === "NESW")?.value;

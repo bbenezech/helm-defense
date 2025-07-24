@@ -1,4 +1,4 @@
-import { WORLD_UNIT_PER_METER } from "../constants.js";
+import { Coordinates } from "../lib/coordinates.js";
 import type { GameScene } from "../scene/game.js";
 
 // Colors for the two squares
@@ -23,7 +23,7 @@ const BOTTOM_COLOR = {
  */
 export class Cube extends Phaser.GameObjects.Container {
   gameScene: GameScene;
-  world: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
+  coordinates: Coordinates;
   halfSizeX: number; // Half size in world units for X
   halfSizeY: number; // Half size in world units for Y
   sizeZ: number; // Size in world units for Z (height)
@@ -40,21 +40,14 @@ export class Cube extends Phaser.GameObjects.Container {
   screen: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   dirty: boolean = true;
 
-  constructor(
-    gameScene: GameScene,
-    sizeXMeters: number,
-    sizeYMeters: number,
-    sizeZMeters: number,
-    worldRotationZ: number,
-  ) {
+  constructor(gameScene: GameScene, sizeX: number, sizeY: number, sizeZ: number, worldRotationZ: number) {
     super(gameScene, 0, 0);
     this.gameScene = gameScene;
     this.worldRotationZ = worldRotationZ; // Default rotation
+    this.coordinates = new Coordinates(this);
 
     // Calculate sizes in world units
-    const sizeX = sizeXMeters * WORLD_UNIT_PER_METER;
-    const sizeY = sizeYMeters * WORLD_UNIT_PER_METER;
-    this.sizeZ = sizeZMeters * WORLD_UNIT_PER_METER;
+    this.sizeZ = sizeZ;
     this.halfSizeX = sizeX / 2;
     this.halfSizeY = sizeY / 2;
 
@@ -135,16 +128,15 @@ export class Cube extends Phaser.GameObjects.Container {
       const rotatedX = local.x * cosR - local.y * sinR;
       const rotatedY = local.x * sinR + local.y * cosR;
       this.worldVertices[index].set(
-        this.world.x + rotatedX,
-        this.world.y + rotatedY,
-        this.world.z + local.z, // Add world center Z offset
+        this.coordinates.x + rotatedX,
+        this.coordinates.y + rotatedY,
+        this.coordinates.z + local.z, // Add world center Z offset
       );
     }
   }
 
   setWorld(world: Phaser.Math.Vector3) {
-    this.world.copy(world);
-    this.screen = this.gameScene.worldToScreen(this.world, this.screen);
+    this.coordinates.copy(world);
     this.calculateWorldVertices();
 
     this.dirty = true;

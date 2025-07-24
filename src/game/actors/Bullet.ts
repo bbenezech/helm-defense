@@ -100,7 +100,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
     const speedSq = this.velocity.lengthSq();
     if (speedSq < 1) {
       this.velocity.reset();
-      this.coordinates.z = this.gameScene.groundElevation(this.coordinates) ?? 0;
+      this.coordinates.z = this.gameScene.getGroundElevationAt(this.coordinates) ?? 0;
       return;
     }
 
@@ -138,7 +138,7 @@ export class Bullet extends Phaser.GameObjects.Image implements Solid {
 
   updateVisuals() {
     this.setPosition(this.coordinates.screen.x, this.coordinates.screen.y).setDepth(this.coordinates.screen.y);
-    const surfaceZ = this.gameScene.groundElevation(this.coordinates);
+    const surfaceZ = this.gameScene.getGroundElevationAt(this.coordinates);
 
     if (surfaceZ === null) {
       this.shadow.setVisible(false);

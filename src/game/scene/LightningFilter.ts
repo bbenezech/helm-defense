@@ -1,6 +1,7 @@
 import { ScaleModes } from "phaser";
-import { packMetadata, type Heightmap, type Normalmap } from "../lib/heightmap.js";
+import {} from "../lib/heightmap.js";
 import type { GameScene } from "./game.js";
+import { packTerrain, type Terrain } from "../lib/terrain.js";
 
 const name = "LightningFilter";
 class LightingFilter extends Phaser.Renderer.WebGL.RenderNodes.BaseFilterShader {
@@ -11,42 +12,58 @@ class LightingFilter extends Phaser.Renderer.WebGL.RenderNodes.BaseFilterShader 
       name,
       /*glsl*/ `
         precision mediump float;
-
+        // Passed by Phaser
         uniform sampler2D uMainSampler;
-        uniform sampler2D iChannel0;
-        uniform float time;
-        uniform float zoom;
-        uniform vec2 pointer;
-        uniform vec2 resolution;
+        varying vec2 outTexCoord;
+        uniform vec2 resolution; // The width and height of the screen/camera
+
+        uniform sampler2D iChannel0; // The packed normal+height texture
+        uniform float uTime;
+        uniform float uZoom;
+        uniform vec2 uPointer;
         uniform float uMinHeight;
         uniform float uMaxHeight;
         uniform vec2 uMetadataResolution;
+        uniform vec2 uCameraWorld;
+        uniform vec2 uHalfTileInv;
+        uniform vec2 uMapTileSize;
+        uniform float uParallaxAmount;
 
-        varying vec2 outTexCoord;
+        vec2 screenToTile(vec2 screen) {
+          vec2 worldPos = uCameraWorld + (vec2(screen.x, resolution.y - screen.y) / uZoom);
+          vec2 tileCoord;
+          tileCoord.x = (worldPos.x * uHalfTileInv.x + worldPos.y * uHalfTileInv.y) * 0.5 - 1.0;
+          tileCoord.y = (worldPos.y * uHalfTileInv.y - worldPos.x * uHalfTileInv.x) * 0.5;
+          return tileCoord / uMapTileSize;
+        }
 
-        // gl_FragColor
-        // gl_FragCoord
+        void main() {          
+          vec2 metadataUv = screenToTile(gl_FragCoord.xy);
+          vec4 heightMetadata = texture2D(iChannel0, metadataUv);
+          float height = heightMetadata.a * (uMaxHeight - uMinHeight) + uMinHeight;
 
-        void main() {
-          vec4 originalColor = texture2D(uMainSampler, outTexCoord);
-          vec4 metadata = texture2D(iChannel0, outTexCoord);
+          vec2 normalMetadataUv = screenToTile(vec2(gl_FragCoord.x, gl_FragCoord.y -  height));
+          vec4 normalMetadata = texture2D(iChannel0, normalMetadataUv);
+
           vec3 normal;
-          normal.x = (metadata.r * 2.0) - 1.0;
-          normal.y = (metadata.g * 2.0) - 1.0;
-          normal.z = (metadata.b * 2.0) - 1.0;
-          float height = metadata.a * (uMaxHeight - uMinHeight) + uMinHeight;
-          gl_FragColor = vec4(metadata.rgb, 1.0);
+          normal.x = normalMetadata.r * 2.0 - 1.0;
+          normal.y = normalMetadata.g * 2.0 - 1.0;
+          normal.z = normalMetadata.b * 2.0 - 1.0;
 
-           // float distance = distance(outTexCoord, pointer/resolution);
-           // float radius = 0.5 * zoom;
-           // float softness = radius/2.0;
-           // float lightAmount = 1.0 - smoothstep(radius, radius + softness, distance);
-           // vec3 finalColor = originalColor.rgb * lightAmount;
+          vec4 originalColor = texture2D(uMainSampler, outTexCoord);
+
+          float distance = distance(outTexCoord, uPointer/resolution);
+          float radius = 0.2 * uZoom;
+          float softness = radius/2.0;
+          float lightAmount = 1.0 - smoothstep(radius, radius + softness, distance);
+
+          // float inBounds = step(0.0, metadataUv.x) * step(0.0, metadataUv.y) * (1.0 - step(1.0, metadataUv.x)) * (1.0 - step(1.0, metadataUv.y));
+          
+          gl_FragColor = mix(originalColor, normalMetadata, 0.0);
         }
     `,
     );
   }
-
   resolution = [0, 0];
   override setupUniforms(controller: LightingFilterController, drawingContext: Phaser.Renderer.WebGL.DrawingContext) {
     this.resolution[0] = drawingContext.width;
@@ -76,12 +93,16 @@ export class LightingFilterController extends Phaser.Filters.Controller {
   metadataTexture: Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper | null = null;
   uniforms = {
     iChannel0: 1,
-    pointer: [0, 0],
-    time: 0,
-    zoom: 0,
+    uPointer: [0, 0],
+    uTime: 0,
+    uZoom: 0,
     uMinHeight: 0,
     uMaxHeight: 0,
+    uParallaxAmount: 18, // parallax ratio height to px
     uMetadataResolution: [0, 0],
+    uCameraWorld: [0, 0], // The camera's top-left corner in world coordinates
+    uHalfTileInv: [0, 0], // The inverse dimensions of a single tile (for isometric projection math)
+    uMapTileSize: [0, 0], // The total size of the map in tiles
   };
   game: GameScene;
 
@@ -91,19 +112,26 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     container.enableFilters().filters!.internal.add(this);
     const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
     if (!renderer.renderNodes.hasNode(name)) renderer.renderNodes.addNodeConstructor(name, LightingFilter);
+    const map = this.game.map;
+    this.uniforms.uHalfTileInv[0] = 2 / map.tileWidth;
+    this.uniforms.uHalfTileInv[1] = 2 / map.tileHeight;
+    this.uniforms.uMapTileSize[0] = map.width;
+    this.uniforms.uMapTileSize[1] = map.height;
   }
 
-  setMetadata(heightmap: Heightmap, normalmap: Normalmap) {
-    const { imageData: image, maxHeight, minHeight } = packMetadata(heightmap, normalmap);
+  setTerrain(terrain: Terrain) {
+    const { imageData: image, maxHeight, minHeight } = packTerrain(terrain);
     const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
-    // Disable premultiplied alpha for the metadata texture to ensure normal map colors are untouched.
+
     renderer.gl.pixelStorei(renderer.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     const texture = renderer.createTextureFromSource(
       new ImageData(image.data, image.width, image.height),
       image.width,
       image.height,
       ScaleModes.LINEAR,
-    );
+      true, // renderer.gl.CLAMP_TO_EDGE : Tell the texture to not repeat at the edges
+      false, // Sets the `UNPACK_FLIP_Y_WEBGL` to false
+    )!;
     renderer.gl.pixelStorei(renderer.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 
     this.metadataTexture = texture;
@@ -116,14 +144,11 @@ export class LightingFilterController extends Phaser.Filters.Controller {
   update(time: number, _delta: number) {
     const pointer = this.game.input.activePointer;
     const camera = this.game.cameras.main;
-
-    this.uniforms.zoom = camera.zoom;
-    this.uniforms.pointer[0] = pointer.x;
-    this.uniforms.pointer[1] = camera.height - pointer.y;
-    // this.uniforms.map[0] = this.game.bounds.width;
-    // this.uniforms.map[1] = this.game.bounds.height;
-    // this.uniforms.mapPointer[0] = pointer.worldX - this.game.bounds.x;
-    // this.uniforms.mapPointer[1] = this.game.bounds.height - (pointer.worldY - this.game.bounds.y);
-    this.uniforms.time = time / 1000;
+    this.uniforms.uPointer[0] = pointer.x;
+    this.uniforms.uPointer[1] = camera.height - pointer.y;
+    this.uniforms.uTime = time / 1000;
+    this.uniforms.uZoom = camera.zoom;
+    this.uniforms.uCameraWorld[0] = camera.worldView.x;
+    this.uniforms.uCameraWorld[1] = camera.worldView.y;
   }
 }

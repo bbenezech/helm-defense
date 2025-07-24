@@ -22,11 +22,14 @@ import fpsBus from "../../store/fps.js";
 import timeScaleStore from "../../store/time-scale.js";
 import { createPointer } from "../lib/pointer.js";
 import { Coordinates } from "../lib/coordinates.js";
-import { terrainToMetadata, TILE_ELEVATION_RATIO, tileableHeightmapToTerrain, type Terrain } from "../lib/terrain.js";
+import { tileDataToTerrain, TILE_ELEVATION_RATIO, tileableHeightmapToTileData, type Terrain } from "../lib/terrain.js";
 import { LightingFilterController } from "./LightningFilter.js";
 
-const GRASS = `Grass_23-512x512`;
+type Vector2 = { x: number; y: number };
 
+const GRASS = `Grass_23-512x512`;
+const CUBE = { x: 61.5, y: 75.5 };
+const CANNON = { x: 0.5, y: 1.5 };
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
@@ -56,9 +59,6 @@ export class GameScene extends Phaser.Scene {
   private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
   private tileableHeightmap!: number[][];
   private terrain!: Terrain;
-  private metadataPixelsPerTile = 8;
-  private heightmap!: number[][];
-  private normalmap!: [number, number, number][][];
   private lightingFilterController!: LightingFilterController;
 
   map!: Phaser.Tilemaps.Tilemap;
@@ -111,11 +111,7 @@ export class GameScene extends Phaser.Scene {
     // TODO: create the terrain inline and create tilemap from the terrain and tileset
     this.map = this.make.tilemap({ key: "map" });
     this.tileableHeightmap = this.cache.json.get("tileableHeightmap") as number[][];
-
-    this.terrain = tileableHeightmapToTerrain(this.tileableHeightmap);
-    const { heightmap, normalmap } = terrainToMetadata(this.terrain, this.metadataPixelsPerTile);
-    this.heightmap = heightmap;
-    this.normalmap = normalmap;
+    this.terrain = tileDataToTerrain(tileableHeightmapToTileData(this.tileableHeightmap), 8);
 
     const tileset = this.map.addTilesetImage(GRASS, GRASS)!;
     // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 0, tileset, 0, 0));
@@ -129,7 +125,7 @@ export class GameScene extends Phaser.Scene {
     for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
 
     this.lightingFilterController = new LightingFilterController(this, layerContainer);
-    this.lightingFilterController.setMetadata(this.heightmap, this.normalmap);
+    this.lightingFilterController.setTerrain(this.terrain);
     this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
     this.halfTileWidthInv = 2 / this.map.tileWidth;
     this.halfTileHeightInv = 2 / this.map.tileHeight;
@@ -189,14 +185,11 @@ export class GameScene extends Phaser.Scene {
       if (pointer.button !== 0) return; // left click
       const screen = new Phaser.Math.Vector2(pointer.worldX, pointer.worldY);
       this.cannon.requestShoot(screen);
-      const tile = this.screenToTile(screen);
+      const tile = this.getTileFromScreen(screen);
 
       if (tile) {
+        console.log(tile);
         tile.tint = tile.tint === 16_777_215 ? 0x99_99_99 : 16_777_215; // debug
-
-        // this.debugGraphics.clear();
-        // this.debugGraphics.fillStyle(0x00ff00, 1);
-        // this.debugGraphics.fillRect(tile.x - 4, tile.y - 4, 8, 8);
       }
     });
 
@@ -259,9 +252,9 @@ export class GameScene extends Phaser.Scene {
 
     this.gravity = new Coordinates(this, GRAVITY_WORLD);
     this.cannon = new Cannon(this, 270);
-    this.cannon.setWorld(this.tileCoordinatesToWorld(34, 75));
-    this.cube = new Cube(this, 5, 5, 5, Math.PI / 4);
-    this.cube.setWorld(this.tileCoordinatesToWorld(70, 77));
+    this.cannon.setWorld(this.tileToWorld(CANNON));
+    this.cube = new Cube(this, 96, 96, 96, Math.PI / 4);
+    this.cube.setWorld(this.tileToWorld(CUBE));
   }
 
   setupPerspective() {
@@ -299,68 +292,14 @@ export class GameScene extends Phaser.Scene {
   changePerspective(perspective: (typeof PERSPECTIVES)[number]) {
     if (this.perspective === perspective) return;
     this.perspective = perspective;
+    console.log(`Changing perspective to ${perspective}`);
     this.setupPerspective();
 
     // if projection changes, we need to update their position
-    this.cannon.setWorld(this.tileCoordinatesToWorld(34, 75));
-    this.cube.setWorld(this.tileCoordinatesToWorld(70, 77));
+    this.cannon.setWorld(this.tileToWorld(CANNON));
+    this.cube.setWorld(this.tileToWorld(CUBE));
 
     this.events.emit("perspective-change");
-  }
-
-  screenToTileCoordinates(
-    screen: Phaser.Math.Vector2,
-    layer: { x: number; y: number } | null,
-    out = this._tmpVector2,
-  ): Phaser.Math.Vector2 {
-    const x = layer ? screen.x - layer.x : screen.x;
-    const y = layer ? screen.y - layer.y : screen.y;
-    if (this.mapType === "isometric") {
-      out.x = (x * this.halfTileWidthInv + y * this.halfTileHeightInv) * 0.5 - 1;
-      out.y = (y * this.halfTileHeightInv - x * this.halfTileWidthInv) * 0.5;
-    } else if (this.mapType === "orthogonal") {
-      out.x = x * 0.5 * this.halfTileWidthInv;
-      out.y = y * 0.5 * this.halfTileHeightInv;
-    } else throw new Error(this.mapType satisfies never);
-
-    return out;
-  }
-
-  // TODO DOES NOT ALWAYS SEND BACK A TILE
-  screenToTile(screen: Phaser.Math.Vector2) {
-    for (const layer of this.reversedLayers) {
-      const { x, y } = this.screenToTileCoordinates(screen, layer);
-      const tile = this.map.getTileAt(Math.floor(x), Math.floor(y), false, layer);
-      if (tile && tile.index !== -1) return tile;
-    }
-    return null;
-  }
-
-  worldToTile(world: Phaser.Math.Vector3) {
-    const { x, y } = this.screenToTileCoordinates(this.worldFloorToScreen(world), null);
-    for (const layer of this.reversedLayers) {
-      const tile = this.map.getTileAt(Math.floor(x), Math.floor(y), false, layer);
-      if (tile && tile.index !== -1) return tile;
-    }
-    return null;
-  }
-
-  tileToScreen(tile: Phaser.Tilemaps.Tile, out = this._tmpVector2): Phaser.Math.Vector2 {
-    const halfWidth = this.map.tileWidth * 0.5;
-    const halfHeight = this.map.tileHeight * 0.5;
-    if (this.mapType === "isometric") {
-      out.x = (tile.x + 1 - tile.y) * halfWidth + tile.layer.x;
-      out.y = (tile.x + 1 + tile.y) * halfHeight + halfHeight + tile.layer.y;
-      return out;
-    } else if (this.mapType === "orthogonal") {
-      out.x = tile.x * this.map.tileWidth + halfWidth + tile.layer.x;
-      out.y = tile.y * this.map.tileHeight + halfHeight + tile.layer.y;
-      return out;
-    } else throw new Error(this.mapType satisfies never);
-  }
-
-  tileToWorld(tile: Phaser.Tilemaps.Tile, out = this._tmpVector3): Phaser.Math.Vector3 {
-    return this.screenToWorld(this.tileToScreen(tile), this.tileWorldZ(tile), out);
   }
 
   screenToWorld(screen: Phaser.Math.Vector2, worldZ: number, out = this._tmpVector3) {
@@ -371,40 +310,108 @@ export class GameScene extends Phaser.Scene {
   }
 
   screenGroundToWorld(screen: Phaser.Math.Vector2, out = this._tmpVector3) {
-    const tile = this.screenToTile(screen);
-    const worldZ = tile ? this.tileWorldZ(tile) : 0;
+    const tile = this.getTileFromScreen(screen);
+    const worldZ = tile ? this.getTileObjectWorldZ(tile) : 0;
     return this.screenToWorld(screen, worldZ, out);
   }
 
-  screenFloorToWorld(screen: Phaser.Math.Vector2, out = this._tmpVector3) {
-    return this.screenToWorld(screen, 0, out);
+  screenToTile(screen: Phaser.Math.Vector2, layer: Vector2 | null, out = this._tmpVector2): Phaser.Math.Vector2 {
+    const x = layer ? screen.x - layer.x : screen.x;
+    const y = layer ? screen.y - layer.y : screen.y;
+    if (this.mapType === "isometric") {
+      out.x = (x * this.halfTileWidthInv + y * this.halfTileHeightInv) * 0.5;
+      out.y = (y * this.halfTileHeightInv - x * this.halfTileWidthInv) * 0.5;
+    } else if (this.mapType === "orthogonal") {
+      out.x = x * 0.5 * this.halfTileWidthInv;
+      out.y = y * 0.5 * this.halfTileHeightInv;
+    } else throw new Error(this.mapType satisfies never);
+
+    return out;
   }
 
-  worldToMetadata(world: Phaser.Math.Vector3, out = this._tmpVector2): Phaser.Math.Vector2 {
-    const { x, y } = this.screenToTileCoordinates(this.worldFloorToScreen(world), null);
-    out.x = x * this.metadataPixelsPerTile;
-    out.y = y * this.metadataPixelsPerTile;
+  worldToTerrain(world: Phaser.Math.Vector3, out = this._tmpVector2): Phaser.Math.Vector2 {
+    const tile = this.screenToTile(this.worldIgnoringZToScreen(world), null);
+    out.x = tile.x * this.terrain.precision;
+    out.y = tile.y * this.terrain.precision;
     return out;
+  }
+
+  worldToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2): Phaser.Math.Vector2 {
+    out.x = world.x * this.X_FACTOR;
+    out.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
+    return out;
+  }
+
+  worldIgnoringZToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2): Phaser.Math.Vector2 {
+    out.x = world.x * this.X_FACTOR;
+    out.y = world.y * this.Y_FACTOR;
+    return out;
+  }
+
+  tileToScreen(tile: Vector2, layer: Vector2, out = this._tmpVector2): Phaser.Math.Vector2 {
+    if (this.mapType === "isometric") {
+      out.x = (tile.x - tile.y) * this.map.tileWidth * 0.5 + this.map.tileWidth * 0.5 + layer.x;
+      out.y = (tile.x + tile.y) * this.map.tileHeight * 0.5 + this.map.tileHeight * 0.5 + layer.y; // + layer.y => offset
+      return out;
+    } else if (this.mapType === "orthogonal") {
+      out.x = tile.x * this.map.tileWidth + layer.x;
+      out.y = tile.y * this.map.tileHeight + layer.y;
+      return out;
+    } else throw new Error(this.mapType satisfies never);
+  }
+
+  tileToWorld(tile: Vector2, out = this._tmpVector3): Phaser.Math.Vector3 {
+    const tileObject = this.getTileObject(tile);
+
+    const worldZ = this.getTileObjectWorldZ(tileObject);
+    const screen = this.tileToScreen(tile, tileObject.layer);
+    return this.screenToWorld(screen, worldZ, out);
+  }
+
+  getTileObject(tile: Vector2): Phaser.Tilemaps.Tile {
+    let tileObject;
+
+    for (const layer of this.reversedLayers) {
+      const candidateTile = this.map.getTileAt(Math.floor(tile.x), Math.floor(tile.y), false, layer); // -1 to account for Phaser bug
+      if (candidateTile && candidateTile.index !== -1) {
+        tileObject = candidateTile;
+        break;
+      }
+    }
+
+    if (!tileObject) throw new Error(`Tile at (${Math.floor(tile.x)}, ${Math.floor(tile.y)}) not found in any layer`);
+
+    return tileObject;
+  }
+
+  // TODO DOES NOT ALWAYS SEND BACK A TILE
+  getTileFromScreen(screen: Phaser.Math.Vector2) {
+    for (const layer of this.reversedLayers) {
+      const { x, y } = this.screenToTile(screen, layer);
+      const tile = this.map.getTileAt(Math.floor(x) - 1, Math.floor(y), false, layer); // -1 to account for Phaser bug
+      if (tile && tile.index !== -1) return tile;
+    }
+    return null;
   }
 
   // 0 => mud
   // 1 => iron
-  groundHardness(_world: Phaser.Math.Vector3): number {
+  getGroundHardnessAt(_world: Phaser.Math.Vector3): number {
     // const tile = this.worldToTile(world);
     return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
-  groundElevation(world: Phaser.Math.Vector3): number | null {
-    const { x, y } = this.worldToMetadata(world, this._tmpVector2);
-    const height = this.heightmap[Math.round(y)]?.[Math.round(x)];
+  getGroundElevationAt(world: Phaser.Math.Vector3): number | null {
+    const { x, y } = this.worldToTerrain(world);
+    const height = this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
     if (height === undefined) return null;
 
-    return (height / this.metadataPixelsPerTile) * (this.map.tileWidth * this.X_FACTOR_INV);
+    return (height / this.terrain.precision) * (this.map.tileWidth * this.X_FACTOR_INV);
   }
 
-  groundNormal(world: Phaser.Math.Vector3, out = this._tmpVector3): Phaser.Math.Vector3 | null {
-    const { x, y } = this.worldToMetadata(world);
-    const normal = this.normalmap[Math.round(y)]?.[Math.round(x)];
+  getGroundNormalAt(world: Phaser.Math.Vector3, out = this._tmpVector3): Phaser.Math.Vector3 | null {
+    const { x, y } = this.worldToTerrain(world);
+    const normal = this.terrain.normalmap[Math.round(y)]?.[Math.round(x)];
     if (normal === undefined) return null;
 
     // inverse y and rotate 45 degrees
@@ -414,43 +421,16 @@ export class GameScene extends Phaser.Scene {
     return out;
   }
 
-  worldToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2) {
-    out.x = world.x * this.X_FACTOR;
-    out.y = world.y * this.Y_FACTOR - world.z * this.Z_FACTOR;
-    return out;
-  }
-
-  worldFloorToScreen(world: Phaser.Math.Vector3, out = this._tmpVector2) {
-    out.x = world.x * this.X_FACTOR;
-    out.y = world.y * this.Y_FACTOR;
-    return out;
-  }
-
-  tileWorldZ(tile: Phaser.Tilemaps.Tile): number {
-    const centerLevel = tile.properties["CENTER"] as undefined | number;
+  getTileObjectWorldZ(tileObject: Phaser.Tilemaps.Tile): number {
+    const centerLevel = tileObject.properties["CENTER"] as undefined | number;
     if (centerLevel === undefined || typeof centerLevel !== "number")
-      throw new Error(`Tile has no valid center property: ${JSON.stringify(tile, undefined, 2)}`);
-    const levelP = tile.layer.properties.find((p: any) => p["name"] === "level") as undefined | { value: number };
+      throw new Error(`Tile has no valid center property: ${JSON.stringify(tileObject, undefined, 2)}`);
+    const levelP = tileObject.layer.properties.find((p: any) => p["name"] === "level") as undefined | { value: number };
     if (levelP === undefined || typeof levelP.value !== "number")
-      throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tile.layer, undefined, 2)}`);
+      throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tileObject.layer, undefined, 2)}`);
     const layerLevel = levelP.value;
     const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
     return (layerLevel + centerLevel) * TILE_ELEVATION_RATIO * tileWidthWorld;
-  }
-
-  tileCoordinatesToWorld(tileX: number, tileY: number, out = this._tmpVector3): Phaser.Math.Vector3 {
-    let tile;
-    for (const layer of this.reversedLayers) {
-      const candidateTile = this.map.getTileAt(tileX, tileY, false, layer);
-      if (candidateTile && candidateTile.index !== -1) {
-        tile = candidateTile;
-        break;
-      }
-    }
-
-    if (!tile) throw new Error(`Tile at (${tileX}, ${tileY}) not found in any layer`);
-
-    return this.tileToWorld(tile, out);
   }
 
   setupCamera() {

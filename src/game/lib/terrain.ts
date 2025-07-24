@@ -1,4 +1,4 @@
-import type { Heightmap, Normalmap } from "./heightmap.js";
+import type { Heightmap, Normalmap, ImageData } from "./heightmap.js";
 import { log } from "./log.js";
 import { barycentricWeights, type Vector3 } from "./vector.js";
 
@@ -32,11 +32,11 @@ type TerrainTile = {
 const TILE_ELEVATION_ANGLE = Math.acos(TILE_ELEVATION_Z); // angle 0.2 rad elevation angle => 11.45° slope to go from 0 to 1 elevation on a tile width
 export const TILE_ELEVATION_RATIO = Math.tan(TILE_ELEVATION_ANGLE); // elevation ratio => 0.20253482585771954 elevation per tile width on a normal slope, 4.938 : 1. It means tile at level 1 is 0.2025 units (tile width) higher than tile at level 0.
 
-const NORMAL_ELEVATION_X_OR_Y = Math.sqrt(1 - TILE_ELEVATION_Z * TILE_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
-const SOUTH_WEST: Vector3 = [0, -NORMAL_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
-const SOUTH_EAST: Vector3 = [NORMAL_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
-const NORTH_WEST: Vector3 = [-NORMAL_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
-const NORTH_EAST: Vector3 = [0, NORMAL_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
+const TILE_ELEVATION_X_OR_Y = Math.sqrt(1 - TILE_ELEVATION_Z * TILE_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
+const SOUTH_WEST: Vector3 = [0, -TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
+const SOUTH_EAST: Vector3 = [TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
+const NORTH_WEST: Vector3 = [-TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
+const NORTH_EAST: Vector3 = [0, TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
 
 // deal with the 0 to 1 unit elevation on a tile half-diagonal. If width of tile is 1, then half-diagonal is Math.SQRT2/2
 // Math.tan(Math.acos(0.9619)) => slope is 28.46% of width => 3.513 : 1 => ground angle is 0.277 rad or 15.89°
@@ -306,19 +306,24 @@ export const TERRAIN_TILE_COUNT: Count<TerrainTileName> = 19;
 
 export type NESW = `${number}${number}${number}${number}`;
 
-export type Terrain = TileData[][];
-
-interface TileData {
+export interface TileData {
   tile: TerrainTile;
   level: number;
 }
 
-export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain {
+export interface Terrain {
+  tileData: TileData[][];
+  heightmap: Heightmap;
+  normalmap: Normalmap;
+  precision: number; // terrain precision in pixel per tile
+}
+
+export function tileableHeightmapToTileData(tilableHeightmap: Heightmap): TileData[][] {
   const startsAt = Date.now();
   const NESWToTerrainTile: Record<NESW, TerrainTile> = Object.fromEntries(
     Object.values(TERRAIN_TILE_INDEX).map((tile) => [tile.NESW, tile]),
   );
-  const terrain: Terrain = Array.from({ length: tilableHeightmap.length - 1 }, () =>
+  const terrain: TileData[][] = Array.from({ length: tilableHeightmap.length - 1 }, () =>
     Array.from({ length: tilableHeightmap[0].length - 1 }),
   );
 
@@ -337,9 +342,9 @@ export function tileableHeightmapToTerrain(tilableHeightmap: Heightmap): Terrain
   }
 
   log(
-    `tileableHeightmapToTerrain`,
+    `tileableHeightmapToTileData`,
     startsAt,
-    `Converted tilable heightmap to terrain (${tilableHeightmap[0].length - 1}x${
+    `Converted tilable heightmap to tile data (${tilableHeightmap[0].length - 1}x${
       tilableHeightmap.length - 1
     }), ${TERRAIN_TILE_COUNT} terrain tiles, elevationRatio=${TILE_ELEVATION_RATIO.toFixed(4)}`,
   );
@@ -352,25 +357,25 @@ interface Point3D {
   z: number;
 }
 
-export function terrainToMetadata(
-  terrain: Terrain,
-  pixelsPerTile: number, // Number of pixels per tile in the heightmap and normalmap (definition), use powers of 2 to avoid artefacts on diagonals
-): { heightmap: Heightmap; normalmap: Normalmap } {
+export function tileDataToTerrain(
+  tileData: TileData[][],
+  precision: number, // Number of pixels per tile in the heightmap and normalmap (definition), use powers of 2 to avoid artefacts on diagonals
+): Terrain {
   const startsAt = Date.now();
 
-  const mapHeight = terrain.length;
-  if (mapHeight === 0) return { heightmap: [], normalmap: [] };
-  const mapWidth = terrain[0].length;
-  if (mapWidth === 0) return { heightmap: [], normalmap: [] };
+  const mapHeight = tileData.length;
+  if (mapHeight === 0) return { heightmap: [], normalmap: [], precision, tileData };
+  const mapWidth = tileData[0].length;
+  if (mapWidth === 0) return { heightmap: [], normalmap: [], precision, tileData };
 
-  const fineMapWidth = mapWidth * pixelsPerTile;
-  const fineMapHeight = mapHeight * pixelsPerTile;
+  const fineMapWidth = mapWidth * precision;
+  const fineMapHeight = mapHeight * precision;
 
   const heightmap: Heightmap = Array.from({ length: fineMapHeight }, () => Array.from({ length: fineMapWidth }));
   const normalmap: Normalmap = Array.from({ length: fineMapHeight }, () => Array.from({ length: fineMapWidth }));
 
-  const invSpan = 1 / pixelsPerTile;
-  const pxElevationRatio = TILE_ELEVATION_RATIO * pixelsPerTile;
+  const invSpan = 1 / precision;
+  const pxElevationRatio = TILE_ELEVATION_RATIO * precision;
 
   const vN: Point3D = { x: 0, y: 0, z: 0 };
   const vE: Point3D = { x: 1, y: 0, z: 0 };
@@ -393,7 +398,7 @@ export function terrainToMetadata(
       const normX = globalX - tx;
       const normY = globalY - ty;
 
-      const { tile, level } = terrain[ty][tx];
+      const { tile, level } = tileData[ty][tx];
 
       vN.z = tile.N;
       vE.z = tile.E;
@@ -443,10 +448,74 @@ export function terrainToMetadata(
   }
 
   log(
-    `terrainToMetadata`,
+    `tileDataToTerrain`,
     startsAt,
-    `Terrain metadata generated for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${TILE_ELEVATION_RATIO.toFixed(4)}, pixelsPerTile=${pixelsPerTile.toFixed(4)}`,
+    `Terrain generated for ${mapWidth}x${mapHeight} tiles, ${fineMapWidth}x${fineMapHeight}px, elevationRatio=${TILE_ELEVATION_RATIO.toFixed(4)}, precision=${precision.toFixed(4)}`,
   );
+
+  return { heightmap, normalmap, precision, tileData };
+}
+
+export type TerrainData = { imageData: ImageData; minHeight: number; maxHeight: number };
+
+export function packTerrain(terrain: Terrain): TerrainData {
+  const startsAt = Date.now();
+  const height = terrain.heightmap.length;
+  if (height === 0) throw new Error("Heightmap cannot be empty.");
+  const width = terrain.heightmap[0].length;
+  if (width === 0) throw new Error("Heightmap cannot be empty.");
+
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = terrain.heightmap[y][x];
+      if (value < minHeight) minHeight = value;
+      if (value > maxHeight) maxHeight = value;
+    }
+  }
+
+  const data = new Uint8ClampedArray(width * height * 4);
+  const heightRangeInv255 = (1 / (maxHeight - minHeight)) * 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const value = terrain.heightmap[y][x];
+      const normal = terrain.normalmap[y][x];
+
+      data[index] = (normal[0] * 0.5 + 0.5) * 255; // R
+      data[index + 1] = (normal[1] * 0.5 + 0.5) * 255; // G
+      data[index + 2] = (normal[2] * 0.5 + 0.5) * 255; // B
+      data[index + 3] = (value - minHeight) * heightRangeInv255; // A
+    }
+  }
+
+  log(`packMetadata`, startsAt, `Packed metadata (${width}x${height}, min=${minHeight}, max=${maxHeight})`);
+
+  return { imageData: { data, width, height, channels: 4 }, minHeight, maxHeight };
+}
+
+export function unpackTerrainData(terrainData: TerrainData): { heightmap: Heightmap; normalmap: Normalmap } {
+  const startsAt = Date.now();
+  const { data, width, height } = terrainData.imageData;
+  const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
+  const normalmap: Normalmap = Array.from({ length: height }, () => Array.from({ length: width }));
+  const inv255 = 1 / 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const r = data[index] * inv255 * 2 - 1; // Normalize to [0, 1]
+      const g = data[index + 1] * inv255 * 2 - 1;
+      const b = data[index + 2] * inv255 * 2 - 1;
+      const a = data[index + 3] * inv255 * (terrainData.maxHeight - terrainData.minHeight) + terrainData.minHeight;
+
+      // Map the color back to the normal vector in the range [-1, 1]
+      normalmap[y][x] = [r, g, b];
+      heightmap[y][x] = a; // Height is already normalized
+    }
+  }
+
+  log(`unpackTerrain`, startsAt, `Unpacked terrain data to heightmap and normalmap (${width}x${height})`);
 
   return { heightmap, normalmap };
 }

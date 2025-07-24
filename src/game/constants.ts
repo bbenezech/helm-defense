@@ -1,4 +1,3 @@
-export const TILE_HEIGHT_PX = 16;
 export const WORLD_UNIT_PER_METER = 16; // World unit per meter. With our camera, 1px on x = 1 world unit
 export const ENEMY_SPRITE = "enemy"; // Enemy sprite key
 export const CANNON_SPRITE = "cannon"; // Cannon sprite key
@@ -58,8 +57,7 @@ export const INVISIBLE_UPDATE_INTERVAL_MS = 100; // Target 10 FPS when invisible
 // threeQuarter          60.0°       0.8660          0.5000                 0.5774                         Significant perspective. Y noticeably compressed. Balanced Z influence.
 // oblique               45.0°       0.7071          0.7071                 1.0000                         Balanced Orthographic factors. Floor-Aligned Z-factor matches Cavalier.
 // trueIsometric         35.264°     0.5774          0.8165                 1.4142                         Mathematically precise Isometric angle. High Z influence.
-// simpleIsometric       30.0°       0.5000          0.8660                 1.7321                         Common game Isometric. Y compressed by half. Very high Z influence.
-// pixelArtIsometric     26.565°     0.4472          0.8944                 2.0000                         Used for 2:1 pixel art lines. Extreme Z influence.
+// pixelArtIsometric     30.0°       0.5000          0.8660                 1.7321                         Common game Isometric. Y compressed by half. Very high Z influence.
 export const PERSPECTIVE_INDEX = {
   // in parentheses: the ratio z/y lengths in non axonometric projection, length of the z axis in axonometric projection
   topDown: 90,
@@ -68,8 +66,7 @@ export const PERSPECTIVE_INDEX = {
   threeQuarter: 60,
   oblique: 45,
   trueIsometric: 35.264,
-  simpleIsometric: 30,
-  pixelArtIsometric: 26.565,
+  pixelArtIsometric: 30, // arctan(sin(30°)) is equal to ≈26.565° and forms a 2:1 pixel ratio https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Isometric_camera_view_30_degrees_color.png/1920px-Isometric_camera_view_30_degrees_color.png
   platformer: 10,
 };
 
