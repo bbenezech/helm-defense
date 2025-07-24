@@ -251,9 +251,12 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.gravity = new Coordinates(this, GRAVITY_WORLD);
-    this.cannon = new Cannon(this, 270);
+    this.cannon = new Cannon(this, 0);
     this.cannon.setWorld(this.tileToWorld(CANNON));
-    this.cube = new Cube(this, 96, 96, 96, Math.PI / 4);
+    const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
+    const cubeSideLength = tileWidthWorld * Math.SQRT1_2;
+    const cubeRotation = this.mapType === "isometric" ? Math.PI / 4 : 0;
+    this.cube = new Cube(this, cubeSideLength, cubeSideLength, cubeSideLength, cubeRotation);
     this.cube.setWorld(this.tileToWorld(CUBE));
   }
 
