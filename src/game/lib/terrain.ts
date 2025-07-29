@@ -33,10 +33,6 @@ const TILE_ELEVATION_ANGLE = Math.acos(TILE_ELEVATION_Z); // angle 0.2 rad eleva
 export const TILE_ELEVATION_RATIO = Math.tan(TILE_ELEVATION_ANGLE); // elevation ratio => 0.20253482585771954 elevation per tile width on a normal slope, 4.938 : 1. It means tile at level 1 is 0.2025 units (tile width) higher than tile at level 0.
 
 const TILE_ELEVATION_X_OR_Y = Math.sqrt(1 - TILE_ELEVATION_Z * TILE_ELEVATION_Z); // 0.1985 X or Y component (if the other is 0) of the normalized slope vector (0 to 1 elevation on a tile width)
-const SOUTH_WEST: Vector3 = [0, -TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
-const SOUTH_EAST: Vector3 = [TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
-const NORTH_WEST: Vector3 = [-TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
-const NORTH_EAST: Vector3 = [0, TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
 
 // deal with the 0 to 1 unit elevation on a tile half-diagonal. If width of tile is 1, then half-diagonal is Math.SQRT2/2
 // Math.tan(Math.acos(0.9619)) => slope is 28.46% of width => 3.513 : 1 => ground angle is 0.277 rad or 15.89°
@@ -45,10 +41,15 @@ const HALF_TILE_ELEVATION_Z = Math.cos(HALF_TILE_ELEVATION_ANGLE); // 0.9619
 const HALF_TILE_ELEVATION_X_AND_Y = Math.sqrt(Math.abs(1 - HALF_TILE_ELEVATION_Z * HALF_TILE_ELEVATION_Z) / 2); // 0.1933
 
 const TOP: Vector3 = [0, 0, 1];
-const SOUTH: Vector3 = [HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+
 const EAST: Vector3 = [HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
-const WEST: Vector3 = [-HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const NORTH_EAST: Vector3 = [0, TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
 const NORTH: Vector3 = [-HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const NORTH_WEST: Vector3 = [-TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
+const WEST: Vector3 = [-HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const SOUTH_WEST: Vector3 = [0, -TILE_ELEVATION_X_OR_Y, TILE_ELEVATION_Z];
+const SOUTH: Vector3 = [HALF_TILE_ELEVATION_X_AND_Y, -HALF_TILE_ELEVATION_X_AND_Y, HALF_TILE_ELEVATION_Z];
+const SOUTH_EAST: Vector3 = [TILE_ELEVATION_X_OR_Y, 0, TILE_ELEVATION_Z];
 
 export const TERRAIN_TILE_INDEX = {
   SLOPE_FLAT: {
@@ -456,7 +457,7 @@ export function tileDataToTerrain(
   return { heightmap, normalmap, precision, tileData };
 }
 
-export type TerrainData = { imageData: ImageData; minHeight: number; maxHeight: number };
+export type TerrainData = { imageData: ImageData; minHeight: number; maxHeight: number; precision: number };
 
 export function packTerrain(terrain: Terrain): TerrainData {
   const startsAt = Date.now();
@@ -492,7 +493,7 @@ export function packTerrain(terrain: Terrain): TerrainData {
 
   log(`packMetadata`, startsAt, `Packed metadata (${width}x${height}, min=${minHeight}, max=${maxHeight})`);
 
-  return { imageData: { data, width, height, channels: 4 }, minHeight, maxHeight };
+  return { imageData: { data, width, height, channels: 4 }, minHeight, maxHeight, precision: terrain.precision };
 }
 
 export function unpackTerrainData(terrainData: TerrainData): { heightmap: Heightmap; normalmap: Normalmap } {

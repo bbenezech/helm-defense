@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
   private _tmpVector3: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private X_FACTOR!: number;
   private Y_FACTOR!: number;
-  private Z_FACTOR!: number;
+  Z_FACTOR!: number;
   private X_FACTOR_INV!: number;
   private Y_FACTOR_INV!: number;
   private Z_FACTOR_INV!: number;
@@ -57,11 +57,10 @@ export class GameScene extends Phaser.Scene {
   private destroyPointer!: (this: GameScene) => void;
   private mapType!: "isometric" | "orthogonal";
   private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
-  private tileableHeightmap!: number[][];
-  private terrain!: Terrain;
   private lightingFilterController!: LightingFilterController;
 
   map!: Phaser.Tilemaps.Tilemap;
+  terrain!: Terrain;
   zoom!: number;
   screenToWorldRatioHorizontal!: Phaser.Math.Vector3;
   screenToWorldRatioVertical!: Phaser.Math.Vector3;
@@ -107,51 +106,9 @@ export class GameScene extends Phaser.Scene {
 
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(100_000_000_000);
-
-    // TODO: create the terrain inline and create tilemap from the terrain and tileset
-    this.map = this.make.tilemap({ key: "map" });
-    this.tileableHeightmap = this.cache.json.get("tileableHeightmap") as number[][];
-    this.terrain = tileDataToTerrain(tileableHeightmapToTileData(this.tileableHeightmap), 8);
-
-    const tileset = this.map.addTilesetImage(GRASS, GRASS)!;
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 0, tileset, 0, 0));
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 1, tileset, 0, 0));
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 2, tileset, 0, 0));
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 3, tileset, 0, 0));
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 4, tileset, 0, 0));
-    // this.add.existing(new IsometricTilemapGPULayer(this, this.map, 5, tileset, 0, 0));
-
-    const layerContainer = this.add.container(0, 0);
-    for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
-
-    this.lightingFilterController = new LightingFilterController(this, layerContainer);
-    this.lightingFilterController.setTerrain(this.terrain);
-    this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
-    this.halfTileWidthInv = 2 / this.map.tileWidth;
-    this.halfTileHeightInv = 2 / this.map.tileHeight;
-
-    const minOffsetY = Math.min(...this.map.layers.map((l) => l.y));
-    const maxOffsetY = Math.max(...this.map.layers.map((l) => l.y));
-    const minOffsetX = Math.min(...this.map.layers.map((l) => l.x));
-    const maxOffsetX = Math.max(...this.map.layers.map((l) => l.x));
-    const fullWidth = this.map.widthInPixels + (maxOffsetX - minOffsetX);
-    const fullHeight = this.map.heightInPixels + (maxOffsetY - minOffsetY);
-
-    this.mapType =
-      String(this.map.orientation) === String(Phaser.Tilemaps.Orientation.ISOMETRIC) ? "isometric" : "orthogonal";
-    if (this.mapType === "isometric") {
-      this.bounds = new Phaser.Geom.Rectangle(
-        -this.map.widthInPixels / 2 + this.map.tileWidth / 2 + minOffsetX,
-        this.map.tileHeight / 2 + minOffsetY,
-        fullWidth,
-        fullHeight,
-      );
-    } else if (this.mapType === "orthogonal") {
-      this.bounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
-    } else throw new Error(this.mapType satisfies never);
-
     this.selectionGraphics = this.add.graphics();
 
+    this.setTerrain();
     this.setupCamera();
     this.setupPerspective();
 
@@ -188,7 +145,6 @@ export class GameScene extends Phaser.Scene {
       const tile = this.getTileFromScreen(screen);
 
       if (tile) {
-        console.log(tile);
         tile.tint = tile.tint === 16_777_215 ? 0x99_99_99 : 16_777_215; // debug
       }
     });
@@ -258,6 +214,45 @@ export class GameScene extends Phaser.Scene {
     const cubeRotation = this.mapType === "isometric" ? Math.PI / 4 : 0;
     this.cube = new Cube(this, cubeSideLength, cubeSideLength, cubeSideLength, cubeRotation);
     this.cube.setWorld(this.tileToWorld(CUBE));
+  }
+
+  setTerrain() {
+    const tileableHeightmap = this.cache.json.get("tileableHeightmap") as number[][];
+    if (tileableHeightmap === undefined) throw new Error("Missing tileableHeightmap");
+
+    this.terrain = tileDataToTerrain(tileableHeightmapToTileData(tileableHeightmap), 8);
+    this.map = this.make.tilemap({ key: "map" });
+
+    const tileset = this.map.addTilesetImage(GRASS, GRASS)!;
+    const layerContainer = this.add.container(0, 0);
+    for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
+
+    this.lightingFilterController = new LightingFilterController(this, layerContainer);
+    this.lightingFilterController.setMap(this.map);
+    this.lightingFilterController.setTerrain(this.terrain);
+    this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
+    this.halfTileWidthInv = 2 / this.map.tileWidth;
+    this.halfTileHeightInv = 2 / this.map.tileHeight;
+
+    const minOffsetY = Math.min(...this.map.layers.map((l) => l.y));
+    const maxOffsetY = Math.max(...this.map.layers.map((l) => l.y));
+    const minOffsetX = Math.min(...this.map.layers.map((l) => l.x));
+    const maxOffsetX = Math.max(...this.map.layers.map((l) => l.x));
+    const fullWidth = this.map.widthInPixels + (maxOffsetX - minOffsetX);
+    const fullHeight = this.map.heightInPixels + (maxOffsetY - minOffsetY);
+
+    this.mapType =
+      String(this.map.orientation) === String(Phaser.Tilemaps.Orientation.ISOMETRIC) ? "isometric" : "orthogonal";
+    if (this.mapType === "isometric") {
+      this.bounds = new Phaser.Geom.Rectangle(
+        -this.map.widthInPixels / 2 + this.map.tileWidth / 2 + minOffsetX,
+        this.map.tileHeight / 2 + minOffsetY,
+        fullWidth,
+        fullHeight,
+      );
+    } else if (this.mapType === "orthogonal") {
+      this.bounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
+    } else throw new Error(this.mapType satisfies never);
   }
 
   setupPerspective() {
@@ -513,7 +508,7 @@ export class GameScene extends Phaser.Scene {
     this.controls.update(delta);
     this.updatePointer(time, delta);
     fpsBus.emitDebounced(this.sys.game.loop.actualFps);
-    this.lightingFilterController.update(time, delta);
+    this.lightingFilterController.update(this, time);
   }
 
   shutdown() {

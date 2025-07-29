@@ -11,7 +11,7 @@ export function start(parent: string) {
     scene: [GameScene],
     scale: { mode: Phaser.Scale.RESIZE },
     disableContextMenu: import.meta.env.PROD,
-    render: { pixelArt: true },
+    render: { smoothPixelArt: true },
     title,
     url,
     version: packageJson.version,
