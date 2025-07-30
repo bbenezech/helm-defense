@@ -7,7 +7,7 @@ import {
   type Normalmap,
 } from "../../src/game/lib/heightmap.js";
 import { log } from "../../src/game/lib/log.js";
-type ImageData = { data: Uint8ClampedArray; width: number; height: number; channels: 1 | 2 | 3 | 4 };
+type ImageData = { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number; channels: 1 | 2 | 3 | 4 };
 
 export async function saveImageDataToImage(
   { data, width, height, channels }: ImageData,

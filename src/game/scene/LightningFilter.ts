@@ -42,15 +42,15 @@ export class LightingFilterController extends Phaser.Filters.Controller {
   surfaceTexture?: Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper;
   uniforms = {
     iChannel0: 1,
-    uPointer: [0, 0],
+    uCameraPointer: [0, 0],
     uTime: 0,
-    uZoomInv: 0,
-    uMinHeight: 0,
-    uMaxHeight: 0,
+    uSurfaceMinHeight: 0,
+    uSurfaceMaxHeight: 0,
+    uCameraZoomInv: 0,
     uCameraWorld: [0, 0], // The camera's top-left corner in world coordinates
-    uHalfTileInv: [0, 0], // The inverse dimensions of a single tile (for isometric projection math)
-    uMapTileSizeInv: [0, 0],
-    uHeightImpactOnY: 10, // The factor by which the height affects the Y coordinate in screen space
+    uMapHalfTileInv: [0, 0], // The inverse dimensions of a single tile (for isometric projection math)
+    uMapSizeInTileInv: [0, 0],
+    uSurfaceHeightImpactOnScreenY: 10, // The factor by which the height affects the Y coordinate in screen space
     uSurfaceTexelSize: [0, 0], // The size of a single texel in the surface texture
   };
   renderer: Phaser.Renderer.WebGL.WebGLRenderer;
@@ -67,10 +67,10 @@ export class LightingFilterController extends Phaser.Filters.Controller {
   }
 
   setMap(map: Phaser.Tilemaps.Tilemap) {
-    this.uniforms.uHalfTileInv[0] = 2 / map.tileWidth;
-    this.uniforms.uHalfTileInv[1] = 2 / map.tileHeight;
-    this.uniforms.uMapTileSizeInv[0] = 1 / map.width;
-    this.uniforms.uMapTileSizeInv[1] = 1 / map.height;
+    this.uniforms.uMapHalfTileInv[0] = 2 / map.tileWidth;
+    this.uniforms.uMapHalfTileInv[1] = 2 / map.tileHeight;
+    this.uniforms.uMapSizeInTileInv[0] = 1 / map.width;
+    this.uniforms.uMapSizeInTileInv[1] = 1 / map.height;
   }
 
   setTerrain(terrain: Terrain) {
@@ -89,8 +89,8 @@ export class LightingFilterController extends Phaser.Filters.Controller {
       true, // use provided width and height
       false, // do not flip Y
     );
-    this.uniforms.uMinHeight = minHeight;
-    this.uniforms.uMaxHeight = maxHeight;
+    this.uniforms.uSurfaceMinHeight = minHeight;
+    this.uniforms.uSurfaceMaxHeight = maxHeight;
     this.uniforms.uSurfaceTexelSize[0] = 1 / surfaceImageData.width;
     this.uniforms.uSurfaceTexelSize[1] = 1 / surfaceImageData.height;
   }
@@ -98,12 +98,29 @@ export class LightingFilterController extends Phaser.Filters.Controller {
   update(gameScene: GameScene, time: number) {
     const pointer = gameScene.input.activePointer;
     const camera = gameScene.cameras.main;
+    const bounds = gameScene.bounds;
 
-    this.uniforms.uPointer[0] = pointer.x;
-    this.uniforms.uPointer[1] = camera.height - pointer.y;
+    this.uniforms.uCameraPointer[0] = pointer.x;
+    this.uniforms.uCameraPointer[1] = camera.height - pointer.y;
     this.uniforms.uTime = time * 0.001;
-    this.uniforms.uZoomInv = 1 / camera.zoom;
-    this.uniforms.uCameraWorld[0] = camera.worldView.x;
-    this.uniforms.uCameraWorld[1] = camera.worldView.y;
+
+    const invZoom = 1 / camera.zoom;
+    // do not use camera.worldView, it is lagging...
+    let worldViewX = camera.scrollX + camera.centerX * (1 - invZoom);
+    let worldViewY = camera.scrollY + camera.centerY * (1 - invZoom);
+
+    // The maximum position is the map's far edge minus the current viewport width
+    const minWorldX = bounds.x;
+    const minWorldY = bounds.y;
+    const maxWorldX = bounds.x + bounds.width - camera.width * invZoom;
+    const maxWorldY = bounds.y + bounds.height - camera.height * invZoom;
+
+    // fix scroll overshoot (the camera does not scroll past the map bounds, but scrollX/Y do account for overshooting...)
+    worldViewX = Math.max(minWorldX, Math.min(worldViewX, maxWorldX));
+    worldViewY = Math.max(minWorldY, Math.min(worldViewY, maxWorldY));
+
+    this.uniforms.uCameraZoomInv = invZoom;
+    this.uniforms.uCameraWorld[0] = worldViewX;
+    this.uniforms.uCameraWorld[1] = worldViewY;
   }
 }

@@ -508,7 +508,7 @@ export class GameScene extends Phaser.Scene {
     this.controls.update(delta);
     this.updatePointer(time, delta);
     fpsBus.emitDebounced(this.sys.game.loop.actualFps);
-    this.lightingFilterController.update(this, time);
+    this.lightingFilterController.update(this, time); // must be called after everything as been updated, for uniforms to have the correct values
   }
 
   shutdown() {
