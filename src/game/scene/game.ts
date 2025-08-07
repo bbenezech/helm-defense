@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
   private _tmpVector3: Phaser.Math.Vector3 = new Phaser.Math.Vector3();
   private X_FACTOR!: number;
   private Y_FACTOR!: number;
-  Z_FACTOR!: number;
+  private Z_FACTOR!: number;
   private X_FACTOR_INV!: number;
   private Y_FACTOR_INV!: number;
   private Z_FACTOR_INV!: number;
@@ -57,8 +57,8 @@ export class GameScene extends Phaser.Scene {
   private mapType!: "isometric" | "orthogonal";
   private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
   private lightingFilterController!: LightingFilterController;
-  private terrainToWorldRatio!: number;
-  private tileToWorldRatio!: number;
+  private terrainInWorld!: number; // size of a terrain unit in world
+  private tileInWorld!: number; // side length of the tile unit cube in world
 
   map!: Phaser.Tilemaps.Tilemap;
   terrain!: Terrain;
@@ -113,9 +113,6 @@ export class GameScene extends Phaser.Scene {
     this.setTerrain();
     this.setupCamera();
     this.setupPerspective();
-
-    this.tileToWorldRatio = this.map.tileWidth * Math.SQRT1_2 * this.Z_FACTOR_INV;
-    this.terrainToWorldRatio = (1 / this.terrain.precision) * this.tileToWorldRatio;
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -214,10 +211,8 @@ export class GameScene extends Phaser.Scene {
     this.gravity = new Coordinates(this, GRAVITY_WORLD);
     this.cannon = new Cannon(this, 0);
     this.cannon.setWorld(this.tileToWorld(CANNON));
-    const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
-    const cubeSideLength = tileWidthWorld * Math.SQRT1_2;
     const cubeRotation = this.mapType === "isometric" ? Math.PI / 4 : 0;
-    this.cube = new Cube(this, cubeSideLength, cubeSideLength, cubeSideLength, cubeRotation);
+    this.cube = new Cube(this, this.tileInWorld, this.tileInWorld, this.tileInWorld, cubeRotation);
     this.cube.setWorld(this.tileToWorld(CUBE));
   }
 
@@ -256,6 +251,12 @@ export class GameScene extends Phaser.Scene {
     } else if (this.mapType === "orthogonal") {
       this.bounds = new Phaser.Geom.Rectangle(minOffsetX, minOffsetY, fullWidth, fullHeight);
     } else throw new Error(this.mapType satisfies never);
+
+    if (this.X_FACTOR_INV) {
+      // dup in setupPerspective
+      this.tileInWorld = this.map.tileWidth * Math.SQRT1_2 * this.X_FACTOR_INV;
+      this.terrainInWorld = (1 / this.terrain.precision) * this.tileInWorld;
+    }
   }
 
   setupPerspective() {
@@ -282,8 +283,8 @@ export class GameScene extends Phaser.Scene {
         // if x is our compression reference:
         // - x compression is o.c. 1
         // - y compression is 45.2548/90.51 => 0.5, and sin(30 degrees) is 0.5, we are good!
-        // - z compression is 80/(128/sqrt(2)) => 4/(5/sqrt(2)) => 0.8839 and not cos(30deg) => 0.866, which was close but incorrect!
-        this.Z_FACTOR = 4 / (5 / Math.sqrt(2));
+        // - z compression is 80/90.51 => 0.8839 and not cos(30deg) => 0.866, which was close but incorrect.
+        this.Z_FACTOR = 5 / (8 * Math.SQRT1_2); // // 0.8839
       }
     } else {
       // oblique projection
@@ -304,12 +305,21 @@ export class GameScene extends Phaser.Scene {
 
     // convert a world unit to screen pixels on all 3 axes
     this.worldToScreenRatio = new Phaser.Math.Vector3(this.X_FACTOR, this.Y_FACTOR, this.Z_FACTOR);
+
+    if (this.terrain && this.map) {
+      // dup in setTerrain
+      this.tileInWorld = this.map.tileWidth * Math.SQRT1_2 * this.X_FACTOR_INV;
+      this.terrainInWorld = (1 / this.terrain.precision) * this.tileInWorld;
+    }
+
+    console.log(
+      `Setting perspective to ${this.perspective} with X=${this.X_FACTOR}, Y=${this.Y_FACTOR}, Z=${this.Z_FACTOR}, tileInWorld=${this.tileInWorld}, terrainInWorld=${this.terrainInWorld}`,
+    );
   }
 
   changePerspective(perspective: (typeof PERSPECTIVES)[number]) {
     if (this.perspective === perspective) return;
     this.perspective = perspective;
-    console.log(`Changing perspective to ${perspective}`);
     this.setupPerspective();
 
     // if projection changes, we need to update their position
@@ -379,9 +389,9 @@ export class GameScene extends Phaser.Scene {
 
   tileToWorld(tile: Vector2, out = this._tmpVector3): Phaser.Math.Vector3 {
     const tileObject = this.getTileObject(tile);
-
     const worldZ = this.getTileObjectWorldZ(tileObject);
     const screen = this.tileToScreen(tile, tileObject.layer);
+
     return this.screenToWorld(screen, worldZ, out);
   }
 
@@ -418,15 +428,6 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
-  // getGroundElevationAt(world: Phaser.Math.Vector3): number | null {
-  //   const { x, y } = this.worldToTerrain(world);
-  //   const height = this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
-  //   if (height === undefined) return null;
-  //
-  //   this.terrainToWorldRatio ||= (1 / this.terrain.precision) * this.map.tileWidth * this.X_FACTOR * Math.SQRT1_2;
-  //   return height * this.terrainToWorldRatio;
-  // }
-
   getGroundElevationAt(world: Phaser.Math.Vector3): number | null {
     const { x, y } = this.worldToTerrain(world);
 
@@ -439,7 +440,7 @@ export class GameScene extends Phaser.Scene {
     const h4 = this.terrain.heightmap[y_floor + 1]?.[x_floor + 1];
 
     if (h1 === undefined || h2 === undefined || h3 === undefined || h4 === undefined) {
-      return this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
+      return this.terrain.heightmap[Math.round(y)]?.[Math.round(x)] ?? null;
     }
 
     const tx = x - x_floor;
@@ -449,7 +450,7 @@ export class GameScene extends Phaser.Scene {
     const height =
       tx + ty < 1 ? h1 + tx * (h2 - h1) + ty * (h3 - h1) : h4 + (1 - tx) * (h3 - h4) + (1 - ty) * (h2 - h4);
 
-    return height * this.terrainToWorldRatio;
+    return height * this.terrainInWorld;
   }
 
   getGroundNormalAt(world: Phaser.Math.Vector3, out = this._tmpVector3): Phaser.Math.Vector3 | null {
@@ -472,8 +473,7 @@ export class GameScene extends Phaser.Scene {
     if (levelP === undefined || typeof levelP.value !== "number")
       throw new Error(`Tile layer has no valid level property: ${JSON.stringify(tileObject.layer, undefined, 2)}`);
     const layerLevel = levelP.value;
-    const tileWidthWorld = this.map.tileWidth * this.X_FACTOR_INV;
-    return (layerLevel + centerLevel) * TILE_ELEVATION_RATIO * tileWidthWorld;
+    return (layerLevel + centerLevel) * TILE_ELEVATION_RATIO * this.tileInWorld;
   }
 
   setupCamera() {

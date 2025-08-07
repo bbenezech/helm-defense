@@ -72,9 +72,9 @@ export class Cube extends Phaser.GameObjects.Container {
     );
     this.bottomPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.bottomPolygon.isFilled = true;
-    this.bottomPolygon.isStroked = true;
+    this.bottomPolygon.isStroked = false;
     this.bottomPolygon.strokeColor = BOTTOM_COLOR.stroke;
-    this.bottomPolygon.lineWidth = 1;
+    this.bottomPolygon.lineWidth = 0;
     this.bottomPolygon.closePath = true;
     this.add(this.bottomPolygon); // Add to container
 
@@ -87,9 +87,9 @@ export class Cube extends Phaser.GameObjects.Container {
     );
     this.topPolygon.setOrigin(0, 0); // Keep origin at top-left for polygon points
     this.topPolygon.isFilled = true;
-    this.topPolygon.isStroked = true;
+    this.topPolygon.isStroked = false;
     this.topPolygon.strokeColor = TOP_COLOR.stroke;
-    this.topPolygon.lineWidth = 1;
+    this.topPolygon.lineWidth = 0;
     this.topPolygon.closePath = true;
     this.add(this.topPolygon); // Add to container
 
@@ -118,8 +118,7 @@ export class Cube extends Phaser.GameObjects.Container {
       new Phaser.Math.Vector3(-hsX, -hsY, topZ),
     ];
 
-    // 2. Apply rotation around Z-axis (using a temporary matrix or quaternion)
-    // For simplicity, let's use direct rotation calculation here
+    // 2. Apply rotation around Z-axis
     const cosR = Math.cos(this.worldRotationZ);
     const sinR = Math.sin(this.worldRotationZ);
 
