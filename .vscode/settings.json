@@ -4,5 +4,5 @@
   "typescript.experimental.useTsgo": false,
   "typescript.tsdk": "node_modules/typescript/lib",
   "[glsl]": { "editor.defaultFormatter": "raczzalan.webgl-glsl-editor" },
-  "webgl-glsl-editor.diagnostics": true
+  "glsllint.glslifyUseCurrentFileAsBasedir": true
 }

@@ -29,7 +29,7 @@ type Vector2 = { x: number; y: number };
 
 const GRASS = `Grass_23-512x512`;
 const CUBE = { x: 61.5, y: 75.5 };
-const CANNON = { x: 0.5, y: 1.5 };
+const CANNON = { x: 6.5, y: 3.5 };
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-town/Tilemap/tilemap.png" --margin 0 --spacing 1
 // npx tile-extruder --tileWidth 16 --tileHeight 16 --input "assets/kenney_tiny-dungeon/Tilemap/tilemap.png" --margin 0 --spacing 1
 // tileset goes from 0 margin/1 spacing to 1 margin/3 spacing => update the map.json file
@@ -52,12 +52,13 @@ export class GameScene extends Phaser.Scene {
   private zooms!: number[];
   private coverZoom!: number;
   private axonometric: boolean;
-  private perspective: (typeof PERSPECTIVES)[number];
   private updatePointer!: (this: GameScene, time: number, delta: number) => void;
   private destroyPointer!: (this: GameScene) => void;
   private mapType!: "isometric" | "orthogonal";
   private reversedLayers!: Phaser.Tilemaps.TilemapLayer[];
   private lightingFilterController!: LightingFilterController;
+  private terrainToWorldRatio!: number;
+  private tileToWorldRatio!: number;
 
   map!: Phaser.Tilemaps.Tilemap;
   terrain!: Terrain;
@@ -70,6 +71,7 @@ export class GameScene extends Phaser.Scene {
   cannonBlast!: Sound;
   gravity!: Coordinates;
   bounds!: Phaser.Geom.Rectangle;
+  perspective: (typeof PERSPECTIVES)[number];
 
   constructor() {
     super({ key: "GameScene" });
@@ -111,6 +113,9 @@ export class GameScene extends Phaser.Scene {
     this.setTerrain();
     this.setupCamera();
     this.setupPerspective();
+
+    this.tileToWorldRatio = this.map.tileWidth * Math.SQRT1_2 * this.Z_FACTOR_INV;
+    this.terrainToWorldRatio = (1 / this.terrain.precision) * this.tileToWorldRatio;
 
     const keyboard = this.input.keyboard!;
     const cursors = keyboard.createCursorKeys();
@@ -220,16 +225,14 @@ export class GameScene extends Phaser.Scene {
     const tileableHeightmap = this.cache.json.get("tileableHeightmap") as number[][];
     if (tileableHeightmap === undefined) throw new Error("Missing tileableHeightmap");
 
-    this.terrain = tileDataToTerrain(tileableHeightmapToTileData(tileableHeightmap), 8);
+    this.terrain = tileDataToTerrain(tileableHeightmapToTileData(tileableHeightmap), 16);
     this.map = this.make.tilemap({ key: "map" });
 
     const tileset = this.map.addTilesetImage(GRASS, GRASS)!;
     const layerContainer = this.add.container(0, 0);
     for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
 
-    this.lightingFilterController = new LightingFilterController(this, layerContainer);
-    this.lightingFilterController.setMap(this.map);
-    this.lightingFilterController.setTerrain(this.terrain);
+    this.lightingFilterController = new LightingFilterController(this, layerContainer, this.map, this.terrain);
     this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
     this.halfTileWidthInv = 2 / this.map.tileWidth;
     this.halfTileHeightInv = 2 / this.map.tileHeight;
@@ -266,6 +269,22 @@ export class GameScene extends Phaser.Scene {
       this.X_FACTOR = 1;
       this.Y_FACTOR = sinCam;
       this.Z_FACTOR = cosCam;
+      if (this.perspective === "pixelArtIsometric") {
+        // Set a Z compression that matches our tileset convention.
+        // a projected 1-1-1 tile unit cube is:
+        // - x: 128px, can be any power of 2 > 4
+        // - y: 64px=128px/2, pixel art isometric 2:1 ratio
+        // - z: 80px=64px+16px on y, so that cube top visually matches the bottom of a cube on the Y+16px layer above
+        // when rotating the cube 45 degrees to face the camera (dividing x and y by sqrt(2)), it looks:
+        // - 90.51px wide
+        // - 45.2548px deep
+        // - 80px high (not affected by Z-rotation)
+        // if x is our compression reference:
+        // - x compression is o.c. 1
+        // - y compression is 45.2548/90.51 => 0.5, and sin(30 degrees) is 0.5, we are good!
+        // - z compression is 80/(128/sqrt(2)) => 4/(5/sqrt(2)) => 0.8839 and not cos(30deg) => 0.866, which was close but incorrect!
+        this.Z_FACTOR = 4 / (5 / Math.sqrt(2));
+      }
     } else {
       // oblique projection
       this.X_FACTOR = 1;
@@ -317,7 +336,7 @@ export class GameScene extends Phaser.Scene {
     const x = layer ? screen.x - layer.x : screen.x;
     const y = layer ? screen.y - layer.y : screen.y;
     if (this.mapType === "isometric") {
-      out.x = (x * this.halfTileWidthInv + y * this.halfTileHeightInv) * 0.5;
+      out.x = (x * this.halfTileWidthInv + y * this.halfTileHeightInv) * 0.5 - 1;
       out.y = (y * this.halfTileHeightInv - x * this.halfTileWidthInv) * 0.5;
     } else if (this.mapType === "orthogonal") {
       out.x = x * 0.5 * this.halfTileWidthInv;
@@ -386,7 +405,7 @@ export class GameScene extends Phaser.Scene {
   getTileFromScreen(screen: Phaser.Math.Vector2) {
     for (const layer of this.reversedLayers) {
       const { x, y } = this.screenToTile(screen, layer);
-      const tile = this.map.getTileAt(Math.floor(x) - 1, Math.floor(y), false, layer); // -1 to account for Phaser bug
+      const tile = this.map.getTileAt(Math.floor(x), Math.floor(y), false, layer);
       if (tile && tile.index !== -1) return tile;
     }
     return null;
@@ -399,12 +418,38 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(randomNormal(SURFACE_HARDNESS.grass, 0.1), 0, 1);
   }
 
+  // getGroundElevationAt(world: Phaser.Math.Vector3): number | null {
+  //   const { x, y } = this.worldToTerrain(world);
+  //   const height = this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
+  //   if (height === undefined) return null;
+  //
+  //   this.terrainToWorldRatio ||= (1 / this.terrain.precision) * this.map.tileWidth * this.X_FACTOR * Math.SQRT1_2;
+  //   return height * this.terrainToWorldRatio;
+  // }
+
   getGroundElevationAt(world: Phaser.Math.Vector3): number | null {
     const { x, y } = this.worldToTerrain(world);
-    const height = this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
-    if (height === undefined) return null;
 
-    return (height / this.terrain.precision) * (this.map.tileWidth * this.X_FACTOR_INV);
+    const x_floor = Math.floor(x);
+    const y_floor = Math.floor(y);
+
+    const h1 = this.terrain.heightmap[y_floor]?.[x_floor];
+    const h2 = this.terrain.heightmap[y_floor]?.[x_floor + 1];
+    const h3 = this.terrain.heightmap[y_floor + 1]?.[x_floor];
+    const h4 = this.terrain.heightmap[y_floor + 1]?.[x_floor + 1];
+
+    if (h1 === undefined || h2 === undefined || h3 === undefined || h4 === undefined) {
+      return this.terrain.heightmap[Math.round(y)]?.[Math.round(x)];
+    }
+
+    const tx = x - x_floor;
+    const ty = y - y_floor;
+
+    // The grid cell is composed of two triangles, we need to determine which one the point is in, Upper-left triangle or Lower-right triangle
+    const height =
+      tx + ty < 1 ? h1 + tx * (h2 - h1) + ty * (h3 - h1) : h4 + (1 - tx) * (h3 - h4) + (1 - ty) * (h2 - h4);
+
+    return height * this.terrainToWorldRatio;
   }
 
   getGroundNormalAt(world: Phaser.Math.Vector3, out = this._tmpVector3): Phaser.Math.Vector3 | null {

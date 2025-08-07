@@ -1,11 +1,12 @@
+import { PERSPECTIVE_INDEX } from "../constants.js";
 import { packTerrain, type Terrain } from "../lib/terrain.js";
 import type { GameScene } from "./game.js";
-import shader from "./lightningShader.frag?raw";
+import shaderString from "./lightningShader.frag?raw";
 
 const name = "LightningFilter";
 class LightingFilter extends Phaser.Renderer.WebGL.RenderNodes.BaseFilterShader {
   constructor(manager: Phaser.Renderer.WebGL.RenderNodes.RenderNodeManager) {
-    super(name, manager, name, shader);
+    super(name, manager, name, shaderString);
   }
 
   uResolution = [0, 0];
@@ -32,14 +33,13 @@ class LightingFilter extends Phaser.Renderer.WebGL.RenderNodes.BaseFilterShader 
     textures: Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper[],
     drawingContext: Phaser.Renderer.WebGL.DrawingContext,
   ) {
-    if (!controller.surfaceTexture) throw new Error("No surface texture set on controller");
     textures[1] = controller.surfaceTexture;
     super.setupTextures(controller, textures, drawingContext);
   }
 }
 
 export class LightingFilterController extends Phaser.Filters.Controller {
-  surfaceTexture?: Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper;
+  surfaceTexture: Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper;
   uniforms = {
     iChannel0: 1,
     uCameraPointer: [0, 0],
@@ -50,12 +50,18 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     uCameraWorld: [0, 0], // The camera's top-left corner in world coordinates
     uMapHalfTileInv: [0, 0], // The inverse dimensions of a single tile (for isometric projection math)
     uMapSizeInTileInv: [0, 0],
-    uSurfaceHeightImpactOnScreenY: 10, // The factor by which the height affects the Y coordinate in screen space
+    uSurfaceHeightImpactOnScreenY: 0, // The factor by which the height affects the Y coordinate in screen space
     uSurfaceTexelSize: [0, 0], // The size of a single texel in the surface texture
+    uCameraAngle: 0,
   };
   renderer: Phaser.Renderer.WebGL.WebGLRenderer;
 
-  constructor(scene: Phaser.Scene, container: Phaser.GameObjects.Container) {
+  constructor(
+    scene: Phaser.Scene,
+    container: Phaser.GameObjects.Container,
+    map: Phaser.Tilemaps.Tilemap,
+    terrain: Terrain,
+  ) {
     super(container.filterCamera, name);
     const filters = container.enableFilters().filters;
     if (!filters) throw new Error("No filters?");
@@ -64,17 +70,13 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     if (!("renderNodes" in renderer)) throw new Error("Not webgl?");
     this.renderer = renderer;
     if (!renderer.renderNodes.hasNode(name)) renderer.renderNodes.addNodeConstructor(name, LightingFilter);
-  }
 
-  setMap(map: Phaser.Tilemaps.Tilemap) {
     this.uniforms.uMapHalfTileInv[0] = 2 / map.tileWidth;
     this.uniforms.uMapHalfTileInv[1] = 2 / map.tileHeight;
     this.uniforms.uMapSizeInTileInv[0] = 1 / map.width;
     this.uniforms.uMapSizeInTileInv[1] = 1 / map.height;
-  }
 
-  setTerrain(terrain: Terrain) {
-    const { imageData: surfaceImageData, maxHeight, minHeight } = packTerrain(terrain);
+    const { imageData: surfaceImageData, maxHeight, minHeight, precision } = packTerrain(terrain);
     this.surfaceTexture = this.renderer.createTexture2D(
       0,
       this.renderer.gl.LINEAR,
@@ -83,16 +85,17 @@ export class LightingFilterController extends Phaser.Filters.Controller {
       this.renderer.gl.CLAMP_TO_EDGE,
       this.renderer.gl.RGBA,
       new ImageData(surfaceImageData.data, surfaceImageData.width, surfaceImageData.height),
-      surfaceImageData.width,
-      surfaceImageData.height,
+      undefined,
+      undefined,
       false, // do not premultiply alpha
-      true, // use provided width and height
+      undefined,
       false, // do not flip Y
     );
     this.uniforms.uSurfaceMinHeight = minHeight;
     this.uniforms.uSurfaceMaxHeight = maxHeight;
     this.uniforms.uSurfaceTexelSize[0] = 1 / surfaceImageData.width;
     this.uniforms.uSurfaceTexelSize[1] = 1 / surfaceImageData.height;
+    this.uniforms.uSurfaceHeightImpactOnScreenY = ((5 / 4) * map.tileHeight) / precision; // the height of a cube in our perspective is tile height + layer Y offset, wich is 1/4 of the tile height
   }
 
   update(gameScene: GameScene, time: number) {
@@ -122,5 +125,6 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     this.uniforms.uCameraZoomInv = invZoom;
     this.uniforms.uCameraWorld[0] = worldViewX;
     this.uniforms.uCameraWorld[1] = worldViewY;
+    this.uniforms.uCameraAngle = PERSPECTIVE_INDEX[gameScene.perspective];
   }
 }
