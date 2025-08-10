@@ -95,7 +95,7 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     this.uniforms.uSurfaceMaxHeight = maxHeight;
     this.uniforms.uSurfaceTexelSize[0] = 1 / surfaceImageData.width;
     this.uniforms.uSurfaceTexelSize[1] = 1 / surfaceImageData.height;
-    this.uniforms.uSurfaceHeightImpactOnScreenY = ((5 / 4) * map.tileHeight) / precision; // the height of a cube in our perspective is tile height + layer Y offset, wich is 1/4 of the tile height
+    this.uniforms.uSurfaceHeightImpactOnScreenY = ((5 / 4) * map.tileHeight) / precision; // the visual height of a cube in our perspective is tile height + layer Y offset, wich is 1/4 of the tile height
   }
 
   update(gameScene: GameScene, time: number) {
