@@ -7,14 +7,14 @@ import {
   PARTICLE_SPRITE,
   BULLET,
   GRAVITY_SI,
-} from "../constants.js";
-import { GameScene } from "../scene/game.js";
-import { sphereToGroundCollision, type Solid } from "../collision/sphere-to-ground.js"; // Import the collision function
-import timeScaleStore from "../../store/time-scale.js";
-import { randomNormal } from "../lib/random.js";
-import { Coordinates } from "../lib/coordinates.js";
-import { createCraterMark } from "../lib/createCraterMark.js";
-import { azimuthRadFromVelocityVector } from "../lib/trigo.js";
+} from "../constants.ts";
+import { GameScene } from "../scene/game.ts";
+import { sphereToGroundCollision, type Solid } from "../collision/sphere-to-ground.ts"; // Import the collision function
+import timeScaleStore from "../../store/time-scale.ts";
+import { randomNormal } from "../lib/random.ts";
+import { Coordinates } from "../lib/coordinates.ts";
+import { azimuthRadFromVelocityVector } from "../lib/trigo.ts";
+import { createCraterMark } from "../lib/createCraterMark.ts";
 
 const C_d = 0.5; // Drag coefficient (dimensionless), typical value for spheres
 const rho = 1.225; // Air Density (rho): Standard sea-level density ≈ 1.225 kg/m³

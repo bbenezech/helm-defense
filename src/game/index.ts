@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { GameScene } from "./scene/game.js";
 import packageJson from "../../package.json" with { type: "json" };
+import { GameScene } from "./scene/game.ts";
 
 const title = document.title;
 const url = import.meta.env.PROD ? "https://bbenezech.github.io/helm-defense" : window.location.href;

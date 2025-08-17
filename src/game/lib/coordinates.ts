@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GameScene } from "../scene/game.js";
+import { GameScene } from "../scene/game.ts";
 
 export type Coordinates = {
   readonly screen: Phaser.Math.Vector2;

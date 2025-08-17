@@ -1,9 +1,9 @@
 import React from "react";
-import scoreStore from "../store/score.js";
-import fpsBus from "../store/fps.js";
-import timeScaleStore from "../store/time-scale.js";
-import { useBusValue, useStoreValue } from "./useStore.js";
-import { Game } from "./game.jsx";
+import scoreStore from "../store/score.ts";
+import fpsBus from "../store/fps.ts";
+import timeScaleStore from "../store/time-scale.ts";
+import { useBusValue, useStoreValue } from "./useStore.ts";
+import { Game } from "./game.tsx";
 
 export function App() {
   const fsp = useBusValue(fpsBus);

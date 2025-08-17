@@ -1,5 +1,5 @@
-import { Coordinates } from "../lib/coordinates.js";
-import type { GameScene } from "../scene/game.js";
+import { Coordinates } from "../lib/coordinates.ts";
+import type { GameScene } from "../scene/game.ts";
 
 // Colors for the two squares
 const TOP_COLOR = {

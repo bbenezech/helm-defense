@@ -5,8 +5,8 @@ import {
   normalmapToImageData,
   type Heightmap,
   type Normalmap,
-} from "../../src/game/lib/heightmap.js";
-import { log } from "../../src/game/lib/log.js";
+} from "../../src/game/lib/heightmap.ts";
+import { log } from "../../src/game/lib/log.ts";
 type ImageData = { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number; channels: 1 | 2 | 3 | 4 };
 
 export async function saveImageDataToImage(

@@ -1,6 +1,6 @@
-import type { Heightmap, Normalmap, ImageData } from "./heightmap.js";
-import { log } from "./log.js";
-import { barycentricWeights, type Vector3 } from "./vector.js";
+import type { Heightmap, Normalmap, ImageData } from "./heightmap.ts";
+import { log } from "./log.ts";
+import { barycentricWeights, type Vector3 } from "./vector.ts";
 
 const TILE_ELEVATION_Z = 0.9801; // Z component of the normalized slope vector (level 0 to level 1 elevation on a tile width).
 

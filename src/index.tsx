@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { App } from "./components/app.js";
 import "./style.css";
+import { App } from "./components/app.tsx";
 
 window.app = <App />;
 ReactDOM.createRoot(document.querySelector("#root") as HTMLElement).render(window.app);

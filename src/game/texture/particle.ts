@@ -1,4 +1,4 @@
-import type { GameScene } from "../scene/game.js";
+import type { GameScene } from "../scene/game.ts";
 
 export function createParticleTexture(gameScene: GameScene, key: string) {
   const graphics = gameScene.make.graphics();

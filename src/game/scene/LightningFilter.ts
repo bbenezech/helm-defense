@@ -1,6 +1,6 @@
-import { PERSPECTIVE_INDEX } from "../constants.js";
-import { packTerrain, type Terrain } from "../lib/terrain.js";
-import type { GameScene } from "./game.js";
+import { PERSPECTIVE_INDEX } from "../constants.ts";
+import { packTerrain, type Terrain } from "../lib/terrain.ts";
+import type { GameScene } from "./game.ts";
 import shaderString from "./lightningShader.frag?raw";
 
 const name = "LightningFilter";

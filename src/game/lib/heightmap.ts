@@ -1,7 +1,7 @@
 import { createNoise2D } from "simplex-noise";
 import alea from "alea";
-import { cross, dot, multiplyMatrix3x3Vec3, normalize, scale, subtract, type Vector3 } from "./vector.js";
-import { log } from "./log.js";
+import { cross, dot, multiplyMatrix3x3Vec3, normalize, scale, subtract, type Vector3 } from "./vector.ts";
+import { log } from "./log.ts";
 
 export type Heightmap = number[][];
 export type Normalmap = Vector3[][];

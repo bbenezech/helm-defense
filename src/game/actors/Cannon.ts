@@ -1,4 +1,4 @@
-import { Bullet } from "./Bullet.js";
+import { Bullet } from "./Bullet.ts";
 import {
   WORLD_UNIT_PER_METER,
   PARTICLE_SPRITE,
@@ -9,12 +9,12 @@ import {
   INVISIBLE_UPDATE_INTERVAL_MS,
   VISIBLE_UPDATE_INTERVAL_MS,
   BULLET,
-} from "../constants.js";
-import { GameScene } from "../scene/game.js";
-import { normalizedVelocity } from "../lib/trigo.js";
-import timeScaleStore from "../../store/time-scale.js";
-import { Coordinates } from "../lib/coordinates.js";
-import { randomNormal } from "../lib/random.js";
+} from "../constants.ts";
+import { GameScene } from "../scene/game.ts";
+import { normalizedVelocity } from "../lib/trigo.ts";
+import timeScaleStore from "../../store/time-scale.ts";
+import { Coordinates } from "../lib/coordinates.ts";
+import { randomNormal } from "../lib/random.ts";
 
 const PRE_WHEELS_RECOIL_DURATION_MS = 100;
 const RECOIL_DURATION_MS = 500;

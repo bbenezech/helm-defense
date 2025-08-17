@@ -1,5 +1,5 @@
-import { log } from "./log.js";
-import { normalizeXYZ, type Vector3 } from "./vector.js";
+import { log } from "./log.ts";
+import { normalizeXYZ, type Vector3 } from "./vector.ts";
 
 function wrapIndex(index: number, max: number): number {
   return ((index % max) + max) % max;

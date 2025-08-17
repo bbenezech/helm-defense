@@ -7,9 +7,7 @@ export interface ElectronAPI {
 }
 
 declare global {
-  interface Window {
-    electron?: ElectronAPI;
-    game?: Phaser.Game;
-    app?: React.JSX.Element;
-  }
+  var electron: ElectronAPI | undefined;
+  var game: Phaser.Game | undefined;
+  var app: React.JSX.Element | undefined;
 }

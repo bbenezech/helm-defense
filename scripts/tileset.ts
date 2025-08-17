@@ -1,25 +1,25 @@
-#!/usr/bin/env -S yarn tsx
+#!/usr/bin/env node
 
 import "dotenv/config";
 import yargs from "yargs";
 import path from "node:path";
 import fs from "node:fs";
 import { hideBin } from "yargs/helpers";
-import { ORDERED_SLOPES } from "./lib/blender.js";
+import { ORDERED_SLOPES } from "./lib/blender.ts";
 import { execSync } from "node:child_process";
 import { imageSize } from "image-size";
-import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.js";
-import { tileableHeightmapToTileData, tileDataToTerrain } from "../src/game/lib/terrain.js";
+import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.ts";
+import { tileableHeightmapToTileData, tileDataToTerrain } from "../src/game/lib/terrain.ts";
 import {
   addTileNormalmapToGlobalNormalmap,
   generateTilableHeightmap,
   heightmapToNormalmap,
   extractHeightmapFromTextureImageData,
-} from "../src/game/lib/heightmap.js";
-import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.js";
-import { log } from "../src/game/lib/log.js";
-import { getTileset } from "../src/game/lib/tileset.js";
-import { imageToImageData, savePrettyHeightmap, saveNormalmap } from "./lib/file.js";
+} from "../src/game/lib/heightmap.ts";
+import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.ts";
+import { log } from "../src/game/lib/log.ts";
+import { getTileset } from "../src/game/lib/tileset.ts";
+import { savePrettyHeightmap, saveNormalmap, imageToImageData } from "./lib/file.ts";
 
 const __dirname = import.meta.dirname;
 const SCRIPT_NAME = "tiles-no-shading-rotation-fast";

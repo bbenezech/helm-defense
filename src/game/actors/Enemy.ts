@@ -1,6 +1,6 @@
-import type { Solid } from "../collision/sphere-to-ground.js";
-import { ENEMY_SPRITE } from "../constants.js";
-import type { GameScene } from "../scene/game.js";
+import type { Solid } from "../collision/sphere-to-ground.ts";
+import { ENEMY_SPRITE } from "../constants.ts";
+import type { GameScene } from "../scene/game.ts";
 
 const ENNEMY_MASS_KG = 100;
 

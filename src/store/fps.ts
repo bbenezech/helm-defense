@@ -1,4 +1,4 @@
-import { bus } from "./index.js";
+import { bus } from "./index.ts";
 
 const fpsBus = bus<number>();
 

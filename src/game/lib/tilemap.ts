@@ -1,5 +1,5 @@
-import { type NESW, type TileData } from "./terrain.js";
-import type { Tileset } from "./tileset.js";
+import { type NESW, type TileData } from "./terrain.ts";
+import type { Tileset } from "./tileset.ts";
 
 export type TilemapLayer = number[][];
 export type Tilemap = ReturnType<typeof getTilemap>;

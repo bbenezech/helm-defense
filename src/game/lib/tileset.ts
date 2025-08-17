@@ -1,4 +1,4 @@
-import { TERRAIN_TILE_INDEX, type TerrainTileName } from "./terrain.js";
+import { TERRAIN_TILE_INDEX, type TerrainTileName } from "./terrain.ts";
 
 export function getTileset({
   imageFilename,

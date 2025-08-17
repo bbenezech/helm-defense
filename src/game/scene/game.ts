@@ -1,5 +1,5 @@
-import { Cannon } from "../actors/Cannon.js";
-import { Cube } from "../actors/Cube.js";
+import { Cannon } from "../actors/Cannon.ts";
+import { Cube } from "../actors/Cube.ts";
 import {
   BULLET_SPRITE,
   CANNON_SPRITE,
@@ -11,19 +11,19 @@ import {
   PERSPECTIVE_INDEX,
   PERSPECTIVES,
   GRAVITY_WORLD,
-} from "../constants.js";
-import { createCannonTexture } from "../texture/cannon.js";
-import { createCircleTexture } from "../texture/circle.js";
-import { createParticleTexture } from "../texture/particle.js";
-import { randomNormal } from "../lib/random.js";
-import { SURFACE_HARDNESS } from "../world/surface.js";
-import { Sound } from "../lib/sound.js";
-import fpsBus from "../../store/fps.js";
-import timeScaleStore from "../../store/time-scale.js";
-import { createPointer } from "../lib/pointer.js";
-import { Coordinates } from "../lib/coordinates.js";
-import { tileDataToTerrain, TILE_ELEVATION_RATIO, tileableHeightmapToTileData, type Terrain } from "../lib/terrain.js";
-import { LightingFilterController } from "./LightningFilter.js";
+} from "../constants.ts";
+import { createCannonTexture } from "../texture/cannon.ts";
+import { createCircleTexture } from "../texture/circle.ts";
+import { createParticleTexture } from "../texture/particle.ts";
+import { randomNormal } from "../lib/random.ts";
+import { SURFACE_HARDNESS } from "../world/surface.ts";
+import { Sound } from "../lib/sound.ts";
+import fpsBus from "../../store/fps.ts";
+import timeScaleStore from "../../store/time-scale.ts";
+import { createPointer } from "../lib/pointer.ts";
+import { Coordinates } from "../lib/coordinates.ts";
+import { LightingFilterController } from "./LightningFilter.ts";
+import { type Terrain, tileDataToTerrain, tileableHeightmapToTileData, TILE_ELEVATION_RATIO } from "../lib/terrain.ts";
 
 type Vector2 = { x: number; y: number };
 
@@ -188,19 +188,19 @@ export class GameScene extends Phaser.Scene {
           break;
         }
         case Phaser.Input.Keyboard.KeyCodes.F: {
-          if (window.electron) {
-            window.electron.toggleFullScreen();
+          if (globalThis.electron) {
+            globalThis.electron.toggleFullScreen();
           } else {
             window.document.body.requestFullscreen({ navigationUI: "hide" });
           }
           break;
         }
         case Phaser.Input.Keyboard.KeyCodes.ESC: {
-          if (window.electron) {
-            if (await window.electron.isFullScreen()) {
-              window.electron.toggleFullScreen();
+          if (globalThis.electron) {
+            if (await globalThis.electron.isFullScreen()) {
+              globalThis.electron.toggleFullScreen();
             } else {
-              window.electron.quitApp();
+              globalThis.electron.quitApp();
             }
           }
           break;
@@ -228,7 +228,7 @@ export class GameScene extends Phaser.Scene {
     for (const layer of this.map.layers) layerContainer.add(this.map.createLayer(layer.name, tileset));
 
     this.lightingFilterController = new LightingFilterController(this, layerContainer, this.map, this.terrain);
-    this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).reverse();
+    this.reversedLayers = this.map.layers.map((l) => l.tilemapLayer).toReversed();
     this.halfTileWidthInv = 2 / this.map.tileWidth;
     this.halfTileHeightInv = 2 / this.map.tileHeight;
 
@@ -495,7 +495,7 @@ export class GameScene extends Phaser.Scene {
       const index = this.zooms.findIndex((z) => z > previousZoom);
       requestedZoomIndex = index === -1 ? this.zooms.length - 1 : index;
     } else {
-      const indexInReversed = [...this.zooms].reverse().findIndex((z) => z < previousZoom);
+      const indexInReversed = this.zooms.toReversed().findIndex((z) => z < previousZoom);
       requestedZoomIndex = indexInReversed === -1 ? 0 : this.zooms.length - 1 - indexInReversed;
     }
 
@@ -533,7 +533,7 @@ export class GameScene extends Phaser.Scene {
       this.zoom =
         this.zoom === undefined
           ? this.zooms[0]
-          : ([...this.zooms].reverse().find((z) => z <= this.zoom) ?? this.zooms[0]);
+          : (this.zooms.toReversed().find((z) => z <= this.zoom) ?? this.zooms[0]);
     }
     this.cameras.main.setZoom(this.zoom);
   }
