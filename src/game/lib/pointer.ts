@@ -272,8 +272,9 @@ function onWheel(this: GameScene, pointer: Phaser.Input.Pointer) {
       break;
     }
     case "pan": {
-      pointer.camera.scrollX += pointer.deltaX;
-      pointer.camera.scrollY += pointer.deltaY;
+      const camera = pointer.camera;
+      camera.scrollX += pointer.deltaX / camera.zoom;
+      camera.scrollY += pointer.deltaY / camera.zoom;
       break;
     }
     default: {
@@ -331,7 +332,8 @@ function update(input: Phaser.Input.InputPlugin) {
       }
 
       if (scrollXRatio !== 0)
-        scrollXDiff += (scrollXRatio >= 0 ? 1 : -1) * scrollXRatio * scrollXRatio * delta * SCROLL_SPEED;
+        scrollXDiff +=
+          (scrollXRatio >= 0 ? 1 : -1) * scrollXRatio * scrollXRatio * delta * (SCROLL_SPEED / camera.zoom);
 
       if (y < SCROLL_BOUNDARY) {
         scrollYRatio = -(SCROLL_BOUNDARY - y) / SCROLL_BOUNDARY;
@@ -340,7 +342,8 @@ function update(input: Phaser.Input.InputPlugin) {
       }
 
       if (scrollYRatio !== 0)
-        scrollYDiff += (scrollYRatio >= 0 ? 1 : -1) * scrollYRatio * scrollYRatio * delta * SCROLL_SPEED;
+        scrollYDiff +=
+          (scrollYRatio >= 0 ? 1 : -1) * scrollYRatio * scrollYRatio * delta * (SCROLL_SPEED / camera.zoom);
 
       if (scrollXDiff !== 0 || scrollYDiff !== 0) {
         camera.setScroll(camera.scrollX + scrollXDiff, camera.scrollY + scrollYDiff);
