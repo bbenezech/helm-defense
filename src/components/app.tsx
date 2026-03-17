@@ -1,6 +1,7 @@
 import React from "react";
 import scoreStore from "../store/score.ts";
 import fpsBus from "../store/fps.ts";
+import rendererModeStore from "../store/renderer-mode.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useBusValue, useStoreValue } from "./useStore.ts";
 import { Game } from "./game.tsx";
@@ -8,6 +9,7 @@ import { Game } from "./game.tsx";
 export function App() {
   const fsp = useBusValue(fpsBus);
   const score = useStoreValue(scoreStore);
+  const rendererMode = useStoreValue(rendererModeStore);
   const timeScale = useStoreValue(timeScaleStore);
 
   return (
@@ -23,6 +25,13 @@ export function App() {
               onDoubleClick={() => timeScaleStore.reset()}
             >
               TimeScale {Math.round(timeScale * 100)}%
+            </div>
+            <div
+              className="interactive"
+              onClick={() => rendererModeStore.toggle()}
+              onDoubleClick={() => rendererModeStore.reset()}
+            >
+              Renderer {rendererMode.toUpperCase()}
             </div>
             <div>FPS {fsp ? Math.round(fsp) : " - "}</div>
           </div>

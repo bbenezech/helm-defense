@@ -17,6 +17,22 @@ body {
   overflow: hidden;
 }
 
+#game-container {
+  width: 100%;
+  height: 100%;
+}
+
+.three-app-error {
+  align-items: center;
+  color: #ffe38b;
+  display: flex;
+  font-family: monospace;
+  height: 100%;
+  justify-content: center;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .hud {
   position: absolute;
   font-size: 1rem;
