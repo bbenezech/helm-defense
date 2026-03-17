@@ -136,3 +136,6 @@ build
 release
 .DS_Store
 assets/
+scripts/__pycache__/
+public/*/tilesets/
+tmp/

@@ -1,4 +1,3 @@
-import { PERSPECTIVE_INDEX } from "../constants.ts";
 import { packTerrain, type Terrain } from "../lib/terrain.ts";
 import type { GameScene } from "./game.ts";
 import shaderString from "./lightningShader.frag?raw";
@@ -52,7 +51,7 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     uMapSizeInTileInv: [0, 0],
     uSurfaceHeightImpactOnScreenY: 0, // The factor by which the height affects the Y coordinate in screen space
     uSurfaceTexelSize: [0, 0], // The size of a single texel in the surface texture
-    uCameraAngle: 0,
+    uProjectionYZ: [0, 0], // The runtime world-to-screen Y/Z factors used to derive the shader view direction
   };
   renderer: Phaser.Renderer.WebGL.WebGLRenderer;
 
@@ -125,6 +124,7 @@ export class LightingFilterController extends Phaser.Filters.Controller {
     this.uniforms.uCameraZoomInv = invZoom;
     this.uniforms.uCameraWorld[0] = worldViewX;
     this.uniforms.uCameraWorld[1] = worldViewY;
-    this.uniforms.uCameraAngle = PERSPECTIVE_INDEX[gameScene.perspective];
+    this.uniforms.uProjectionYZ[0] = gameScene.worldToScreenRatio.y;
+    this.uniforms.uProjectionYZ[1] = gameScene.worldToScreenRatio.z;
   }
 }

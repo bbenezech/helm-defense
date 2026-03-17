@@ -1,13 +1,11 @@
 precision highp float;
 #define COS45 0.70710678118
 #define SIN45 0.70710678118
-#define RAD_IN_DEGRE 0.017453292519943295 // PI / 180
-#define PI 3.14159265358979323846 // Pi constant
 uniform sampler2D uMainSampler;                 // The rendered game scene
 uniform sampler2D iChannel0;                    // The packed surface data (Normals in RGB, Height in Alpha)
 uniform vec2 uSurfaceTexelSize;                 // The size of a single texel in the surface texture
 uniform vec2 uResolution;                       // Screen resolution
-uniform float uCameraAngle;
+uniform vec2 uProjectionYZ;                     // Runtime world-to-screen Y/Z factors
 uniform vec2 uMainTexelSize;                    // The size of a single texel in the main texture (1/uResolution)
 uniform vec2 uCameraWorld;                      // Camera's top-left corner in world coordinates
 uniform float uCameraZoomInv;                   // Camera zoom level inverse
@@ -184,8 +182,7 @@ vec3 expose(vec3 color, float exposure) {
 
 void main() {
   vec4 originalColor = texture2D(uMainSampler, outTexCoord);
-  float cameraElevation = uCameraAngle * RAD_IN_DEGRE;
-  vec3 viewDirection = normalize(vec3(0.0, sin(cameraElevation), cos(cameraElevation))); // Surface to camera
+  vec3 viewDirection = normalize(vec3(0.0, uProjectionYZ.x, uProjectionYZ.y)); // Surface to camera
   float alpha = step(0.01, max(originalColor.r, max(originalColor.g, originalColor.b)));
 
   vec2 worldFloor = uCameraWorld + (vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y) * uCameraZoomInv);

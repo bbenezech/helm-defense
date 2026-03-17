@@ -1,29 +1,75 @@
 import { TERRAIN_TILE_COUNT, type TerrainTileName } from "../../src/game/lib/terrain.ts";
+import { terrainSceneSpec } from "./terrain-scene-spec.ts";
 
-export const ORDERED_SLOPES = [
-  "SLOPE_FLAT",
-  "SLOPE_W",
-  "SLOPE_S",
-  "SLOPE_E",
-  "SLOPE_N",
-  "SLOPE_NW",
-  "SLOPE_SW",
-  "SLOPE_SE",
-  "SLOPE_NE",
-  "SLOPE_NWS",
-  "SLOPE_WSE",
-  "SLOPE_SEN",
-  "SLOPE_ENW",
-  "SLOPE_STEEP_S",
-  "SLOPE_STEEP_W",
-  "SLOPE_STEEP_N",
-  "SLOPE_STEEP_E",
-  "SLOPE_NS",
-  "SLOPE_EW",
-] satisfies TerrainTileName[];
+export const BLENDER_RENDER_CONTRACT = {
+  resolution: terrainSceneSpec.render.resolution,
+  camera: terrainSceneSpec.render.camera,
+  frameStart: terrainSceneSpec.render.frame.start,
+  frameEnd: terrainSceneSpec.render.frame.end,
+  fps: terrainSceneSpec.render.frame.fps,
+  cyclesSamples: 10,
+  outputDirectoryName: "out",
+} as const;
+
+export type BlenderRenderEngine = "BLENDER_EEVEE_NEXT" | "CYCLES";
+export type BlenderShadingProfile = "flat" | "shaded";
+export type BlenderTextureRotationProfile = "none" | "quarterTurn" | "cameraAlignedLegacy";
+export const BLENDER_SAMPLING_PROFILES = ["legacyMatched", "strictPixel", "nativeExact"] as const;
+export type BlenderSamplingProfile = (typeof BLENDER_SAMPLING_PROFILES)[number];
+export const DEFAULT_BLENDER_SAMPLING_PROFILE: BlenderSamplingProfile = "nativeExact";
+
+export type BlenderRenderVariant = {
+  engine: BlenderRenderEngine;
+  shading: BlenderShadingProfile;
+  textureRotation: BlenderTextureRotationProfile;
+};
+
+export const BLENDER_RENDER_VARIANTS = {
+  tiles: {
+    engine: "BLENDER_EEVEE_NEXT",
+    shading: "flat",
+    textureRotation: "none",
+  },
+  "tiles-shading": {
+    engine: "BLENDER_EEVEE_NEXT",
+    shading: "shaded",
+    textureRotation: "none",
+  },
+  "tiles-shading-rotation": {
+    engine: "BLENDER_EEVEE_NEXT",
+    shading: "shaded",
+    textureRotation: "cameraAlignedLegacy",
+  },
+  "tiles-shading-rotation-fast": {
+    engine: "CYCLES",
+    shading: "shaded",
+    textureRotation: "cameraAlignedLegacy",
+  },
+  "tiles-no-shading-rotation": {
+    engine: "BLENDER_EEVEE_NEXT",
+    shading: "flat",
+    textureRotation: "cameraAlignedLegacy",
+  },
+  "tiles-no-shading-rotation-fast": {
+    engine: "CYCLES",
+    shading: "flat",
+    textureRotation: "cameraAlignedLegacy",
+  },
+} as const satisfies Record<string, BlenderRenderVariant>;
+
+export const ACTIVE_BLENDER_RENDER_VARIANT_NAME = "tiles-no-shading-rotation-fast";
+export const ACTIVE_BLENDER_RENDER_VARIANT = BLENDER_RENDER_VARIANTS[ACTIVE_BLENDER_RENDER_VARIANT_NAME];
+
+export const ORDERED_SLOPES = terrainSceneSpec.order satisfies TerrainTileName[];
 
 if (new Set(ORDERED_SLOPES).size !== TERRAIN_TILE_COUNT)
   throw new Error(`Error: SLOPE_COUNT mismatch! Expected ${TERRAIN_TILE_COUNT}, got ${new Set(ORDERED_SLOPES).size}.`);
+
+const EXPECTED_FRAME_COUNT = BLENDER_RENDER_CONTRACT.frameEnd - BLENDER_RENDER_CONTRACT.frameStart + 1;
+if (EXPECTED_FRAME_COUNT !== ORDERED_SLOPES.length)
+  throw new Error(`Error: frame count mismatch! Expected ${ORDERED_SLOPES.length}, got ${EXPECTED_FRAME_COUNT}.`);
+if (terrainSceneSpec.poses.length !== ORDERED_SLOPES.length)
+  throw new Error(`Error: pose count mismatch! Expected ${ORDERED_SLOPES.length}, got ${terrainSceneSpec.poses.length}.`);
 
 // CURRENT SCRIPT SLOPE INDEX
 // SLOPE_FLAT:1 SLOPE_W:2 SLOPE_S:3 SLOPE_E:4 SLOPE_N:5 SLOPE_NW:6 SLOPE_SW:7 SLOPE_SE:8 SLOPE_NE:9 SLOPE_NWS:10 SLOPE_WSE:11 SLOPE_SEN:12 SLOPE_ENW:13 SLOPE_STEEP_S:14 SLOPE_STEEP_W:15 SLOPE_STEEP_N:16 SLOPE_STEEP_E:17 SLOPE_NS:18 SLOPE_EW:19

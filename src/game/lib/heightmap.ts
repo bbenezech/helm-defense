@@ -22,10 +22,12 @@ export function generateTilableHeightmap({
   tileWidth,
   tileHeight,
   maxValue,
+  seed = "1",
 }: {
   tileWidth: number;
   tileHeight: number;
   maxValue: number;
+  seed?: string;
 }): Heightmap {
   const startsAt = Date.now();
   const step = 1;
@@ -33,7 +35,7 @@ export function generateTilableHeightmap({
   const width = tileWidth + 1;
 
   const heightmap: Heightmap = Array.from({ length: height }, () => Array.from({ length: width }));
-  const noise2D = createNoise2D(alea("1"));
+  const noise2D = createNoise2D(alea(seed));
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

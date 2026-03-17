@@ -15,7 +15,9 @@
     "electron:dev": "concurrently -r 'vite --mode electron' 'NODE_ENV=development electron electron/main.js'",
     "electron:mac": "npm run build && electron-builder --mac --dir",
     "ci": "yarn clean && rm -rf ./node_modules && yarn && yarn tsc && yarn eslint --fix && yarn prettier . --write --list-different",
+    "tile": "node scripts/tileset.ts",
     "tsc": "tsc --build",
+    "validate:terrain-coverage": "node scripts/validate-terrain-coverage.ts",
     "tsc:clean": "rm -f ./tsconfig.*.tsbuildinfo; rm -f ./src/tsconfig.tsbuildinfo; rm -f  ./scripts/tsconfig.tsbuildinfo; rm -f ./electron/tsconfig.tsbuildinfo",
     "clean": "rm -f ./scripts/texture.png && rm -rf ./scripts/all && rm -rf ./dist && rm -rf ./release && rm -rf ./release && rm -rf ./node_modules/.cache && rm -rf ./node_modules/tmp && rm -rf ./tmp && yarn tsc:clean"
   },
