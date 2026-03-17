@@ -26,6 +26,7 @@ export default tseslint.config(
     rules: {
       // whitelist
       "unicorn/prefer-import-meta-properties": "error",
+      "prefer-const": ["error", { destructuring: "all" }],
 
       // blacklist
       "unicorn/no-nested-ternary": "off", // not compatible with prettier
