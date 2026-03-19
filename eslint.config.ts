@@ -2,6 +2,28 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import eslintPluginUnicorn from "eslint-plugin-unicorn";
+import noBarrelReexportRule from "./eslint/rules/no-barrel-reexport.ts";
+import noOptionalApiRule from "./eslint/rules/no-optional-api.ts";
+import noTypesFileRule from "./eslint/rules/no-types-file.ts";
+import noValueDefaultOrRule from "./eslint/rules/no-value-default-or.ts";
+
+const projectRoot = import.meta.dirname;
+const scopedFiles = [
+  "three/**/*.ts",
+  "tests/three/**/*.ts",
+  "src/components/**/*.ts",
+  "src/components/**/*.tsx",
+  "src/store/**/*.ts",
+];
+
+const helmDefensePlugin = {
+  rules: {
+    "no-barrel-reexport": noBarrelReexportRule,
+    "no-optional-api": noOptionalApiRule,
+    "no-types-file": noTypesFileRule,
+    "no-value-default-or": noValueDefaultOrRule,
+  },
+};
 
 export default tseslint.config(
   {
@@ -52,6 +74,51 @@ export default tseslint.config(
     files: ["**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off", // allow escape hatch, we use dubiously typed libraries
+    },
+  },
+  {
+    files: scopedFiles,
+    plugins: { "helm-defense": helmDefensePlugin },
+    linterOptions: { noInlineConfig: true },
+    languageOptions: {
+      parserOptions: { projectService: { allowDefaultProject: ["tests/*/*.ts"] }, tsconfigRootDir: projectRoot },
+    },
+    rules: {
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true, "ts-check": false },
+      ],
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "helm-defense/no-barrel-reexport": "error",
+      "helm-defense/no-optional-api": "error",
+      "helm-defense/no-types-file": "error",
+      "helm-defense/no-value-default-or": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSAsExpression",
+          message: "Type assertions with `as` are forbidden in scoped AGENTS-enforced files.",
+        },
+        {
+          selector: "TSTypeAssertion",
+          message: "Angle-bracket type assertions are forbidden in scoped AGENTS-enforced files.",
+        },
+        { selector: "ChainExpression", message: "Optional chaining is forbidden in scoped AGENTS-enforced files." },
+        {
+          selector: "LogicalExpression[operator='??']",
+          message: "Nullish coalescing is forbidden in scoped AGENTS-enforced files.",
+        },
+        {
+          selector: "AssignmentExpression[operator='??=']",
+          message: "Nullish assignment is forbidden in scoped AGENTS-enforced files.",
+        },
+        {
+          selector: "AssignmentExpression[operator='||=']",
+          message: "Logical-or assignment is forbidden in scoped AGENTS-enforced files.",
+        },
+      ],
     },
   },
 );

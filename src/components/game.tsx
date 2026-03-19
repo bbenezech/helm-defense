@@ -1,5 +1,5 @@
 import React from "react";
-import { startThreeApp, type ThreeTerrainApp } from "../../three/index.ts";
+import { startThreeApp, type ThreeTerrainApp } from "../../three/app.ts";
 import { start } from "../game/index.ts";
 import rendererModeStore from "../store/renderer-mode.ts";
 import timeScaleStore from "../store/time-scale.ts";
@@ -29,14 +29,17 @@ type RunningApp = { kind: "phaser"; instance: Phaser.Game } | { kind: "three"; i
 export const Game = () => {
   const rendererMode = useStoreValue(rendererModeStore);
   const timeScale = useStoreValue(timeScaleStore);
-  const appRef = React.useRef<RunningApp | undefined>(undefined);
+  const appReference = React.useRef<RunningApp | undefined>(undefined);
 
   React.useLayoutEffect(() => {
-    const host = document.querySelector(`#${GAME_DOM_ID}`) as HTMLDivElement;
+    const host = document.querySelector<HTMLDivElement>(`#${GAME_DOM_ID}`);
+    if (host === null) {
+      throw new TypeError(`Expected #${GAME_DOM_ID} to exist before starting the game host.`);
+    }
     let disposed = false;
 
     const onFocus = () => {
-      const runningApp = appRef.current;
+      const runningApp = appReference.current;
       if (!runningApp) return;
       if (runningApp.kind === "phaser") {
         handleFocus(runningApp.instance);
@@ -47,7 +50,7 @@ export const Game = () => {
     };
 
     const onBlur = () => {
-      const runningApp = appRef.current;
+      const runningApp = appReference.current;
       if (!runningApp) return;
       if (runningApp.kind === "phaser") {
         handleBlur(runningApp.instance);
@@ -61,7 +64,7 @@ export const Game = () => {
       host.replaceChildren();
       if (rendererMode === "phaser") {
         const game = (globalThis.game = start(GAME_DOM_ID));
-        appRef.current = { kind: "phaser", instance: game };
+        appReference.current = { kind: "phaser", instance: game };
       } else {
         try {
           const app = await startThreeApp(host);
@@ -70,9 +73,9 @@ export const Game = () => {
             return;
           }
 
-          app.setPaused(timeScale === 0);
+          app.setPaused(timeScaleStore.get() === 0);
           app.resize(host.clientWidth, host.clientHeight);
-          appRef.current = { kind: "three", instance: app };
+          appReference.current = { kind: "three", instance: app };
         } catch (error) {
           console.error("Failed to start Three terrain app", error);
           host.textContent = error instanceof Error ? error.message : "Failed to start Three terrain app.";
@@ -81,8 +84,8 @@ export const Game = () => {
     };
 
     const onResize = () => {
-      const runningApp = appRef.current;
-      if (runningApp?.kind !== "three") return;
+      const runningApp = appReference.current;
+      if (runningApp === undefined || runningApp.kind !== "three") return;
       runningApp.instance.resize(host.clientWidth, host.clientHeight);
     };
 
@@ -96,21 +99,23 @@ export const Game = () => {
       globalThis.removeEventListener("focus", onFocus);
       globalThis.removeEventListener("blur", onBlur);
       globalThis.removeEventListener("resize", onResize);
-      const runningApp = appRef.current;
-      if (runningApp?.kind === "phaser") {
+      const runningApp = appReference.current;
+      if (runningApp !== undefined && runningApp.kind === "phaser") {
         runningApp.instance.destroy(true);
         delete globalThis.game;
-      } else {
-        runningApp?.instance.destroy();
+      } else if (runningApp !== undefined) {
+        runningApp.instance.destroy();
       }
-      appRef.current = undefined;
+      appReference.current = undefined;
       delete globalThis.game;
     };
   }, [rendererMode]);
 
   React.useEffect(() => {
-    const runningApp = appRef.current;
-    if (runningApp?.kind === "three") runningApp.instance.setPaused(timeScale === 0);
+    const runningApp = appReference.current;
+    if (runningApp !== undefined && runningApp.kind === "three") {
+      runningApp.instance.setPaused(timeScale === 0);
+    }
   }, [timeScale]);
   return <div id={GAME_DOM_ID}></div>;
 };

@@ -3,7 +3,6 @@ import {
   clampCameraCenter,
   createInitialCameraState,
   getMapBounds,
-  pickTile,
   screenToTile,
   tileToScreen,
 } from "../../three/projection.ts";
@@ -17,15 +16,6 @@ describe("iso projection", () => {
 
     expect(tile.x).toBeCloseTo(1);
     expect(tile.y).toBeCloseTo(2);
-  });
-
-  it("picks top-most elevated tiles", () => {
-    const screen = tileToScreen(sampleMap, { x: 1, y: 1 }, { x: 0, y: -16 });
-    const picked = pickTile(sampleMap, screen);
-
-    expect(picked?.tileX).toBe(1);
-    expect(picked?.tileY).toBe(1);
-    expect(picked?.level).toBe(1);
   });
 
   it("keeps the camera within map bounds", () => {

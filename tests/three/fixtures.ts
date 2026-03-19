@@ -1,3 +1,5 @@
+import type { TerrainMap, TerrainTileset } from "../../three/assets.ts";
+
 export const sampleTileset = {
   type: "tileset",
   name: "Test",
@@ -20,7 +22,7 @@ export const sampleTileset = {
   version: "1.10",
   tiledversion: "1.11.2",
   properties: [{ name: "elevationYOffsetPx", type: "int", value: 16 }],
-} as const;
+} satisfies TerrainTileset;
 
 export const sampleMap = {
   type: "map",
@@ -63,4 +65,4 @@ export const sampleMap = {
     },
   ],
   tilesets: [{ firstgid: 1, ...sampleTileset }],
-} as const;
+} satisfies TerrainMap;

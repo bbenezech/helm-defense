@@ -1,0 +1,3 @@
+{
+  "biomes": [{ "id": "grass", "atlas": "tileset.png" }]
+}

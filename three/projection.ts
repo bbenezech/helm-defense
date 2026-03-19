@@ -1,4 +1,26 @@
-import type { PickedTile, Point2, Rect, TerrainMap, TerrainMapLayer } from "./types.ts";
+import type { TerrainMap, TerrainMapLayer } from "./assets.ts";
+
+export type Point2 = {
+  x: number;
+  y: number;
+};
+
+export type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type PickedTile = {
+  gid: number;
+  tileId: number;
+  tileX: number;
+  tileY: number;
+  level: number;
+  layerIndex: number;
+  offset: Point2;
+};
 
 export type CameraState = {
   center: Point2;
@@ -14,8 +36,8 @@ export type Viewport = {
 
 export function getLayerOffset(layer: TerrainMapLayer): Point2 {
   return {
-    x: layer.x + (layer.offsetx ?? 0),
-    y: layer.y + (layer.offsety ?? 0),
+    x: layer.x + layer.offsetx,
+    y: layer.y + layer.offsety,
   };
 }
 
@@ -54,7 +76,7 @@ export function screenToTile(map: TerrainMap, screen: Point2, layerOffset: Point
 }
 
 export function getMapBounds(map: TerrainMap): Rect {
-  const layerOffsets = map.layers.map(getLayerOffset);
+  const layerOffsets = map.layers.map((layer) => getLayerOffset(layer));
   const minOffsetY = Math.min(...layerOffsets.map((layer) => layer.y));
   const maxOffsetY = Math.max(...layerOffsets.map((layer) => layer.y));
   const minOffsetX = Math.min(...layerOffsets.map((layer) => layer.x));
@@ -111,9 +133,18 @@ export function clampCameraCenter(center: Point2, bounds: Rect, viewport: Viewpo
 
 export function resizeCameraState(state: CameraState, bounds: Rect, viewport: Viewport): CameraState {
   const nextState = createInitialCameraState(bounds, viewport);
-  const zoom = nextState.zooms.includes(state.zoom)
-    ? state.zoom
-    : (nextState.zooms.toReversed().find((candidate) => candidate <= state.zoom) ?? nextState.zooms[0]);
+  let zoom = nextState.zooms[0];
+
+  if (nextState.zooms.includes(state.zoom)) {
+    zoom = state.zoom;
+  } else {
+    for (const candidate of nextState.zooms.toReversed()) {
+      if (candidate <= state.zoom) {
+        zoom = candidate;
+        break;
+      }
+    }
+  }
 
   return {
     center: clampCameraCenter(state.center, bounds, viewport, zoom),
@@ -138,10 +169,26 @@ export function getContinuousZoom(currentZoom: number, deltaY: number, zooms: nu
 
 export function getDiscreteZoom(currentZoom: number, zooms: number[], direction: 1 | -1): number {
   if (direction > 0) {
-    return zooms.find((zoom) => zoom > currentZoom) ?? currentZoom;
+    for (const zoom of zooms) {
+      if (zoom > currentZoom) return zoom;
+    }
+
+    return currentZoom;
   }
 
-  return zooms.toReversed().find((zoom) => zoom < currentZoom) ?? currentZoom;
+  for (const zoom of zooms.toReversed()) {
+    if (zoom < currentZoom) return zoom;
+  }
+
+  return currentZoom;
+}
+
+function getLevel(layer: TerrainMapLayer): number {
+  for (const property of layer.properties) {
+    if (property.name === "level" && typeof property.value === "number") return property.value;
+  }
+
+  return 0;
 }
 
 export function pickTile(map: TerrainMap, screen: Point2): PickedTile | null {
@@ -158,16 +205,12 @@ export function pickTile(map: TerrainMap, screen: Point2): PickedTile | null {
     const gid = layer.data[tileY * layer.width + tileX];
     if (gid === 0 || gid === undefined) continue;
 
-    const level = Number(
-      layer.properties.find((property) => property.name === "level" && typeof property.value === "number")?.value ?? 0,
-    );
-
     return {
       gid,
       tileId: gid - tileset.firstgid,
       tileX,
       tileY,
-      level,
+      level: getLevel(layer),
       layerIndex: map.layers.length - reverseIndex - 1,
       offset,
     };

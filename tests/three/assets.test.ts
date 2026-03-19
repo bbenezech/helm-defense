@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAtlasRegion, parseTerrainMap, parseTerrainTileset } from "../../three/assets.ts";
+import { getAtlasRegion, parseBiomeManifest, parseTerrainMap, parseTerrainTileset } from "../../three/assets.ts";
 import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 describe("terrain assets", () => {
@@ -15,5 +15,10 @@ describe("terrain assets", () => {
   it("validates the terrain contract shape", () => {
     expect(parseTerrainMap(sampleMap).layers).toHaveLength(2);
     expect(() => parseTerrainTileset({ ...sampleTileset, tiles: "nope" })).toThrow(/Missing tileset tiles/u);
+  });
+
+  it("validates biome manifests", () => {
+    expect(parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png" }] }).biomes).toHaveLength(1);
+    expect(() => parseBiomeManifest({ biomes: [] })).toThrow(/at least one biome/u);
   });
 });

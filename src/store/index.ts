@@ -4,10 +4,15 @@ type EventCallback<T> = (payload: T) => void;
 
 type SetStateAction<T> = T | ((previousState: T) => T);
 type Unsubscribe = () => void;
+type DebounceOptions = {
+  leading: boolean;
+  trailing: boolean;
+  maxWait: number;
+};
 
 type Options = {
-  debounceDuration?: number;
-  debounceOptions?: { leading?: boolean; trailing?: boolean; maxWait?: number };
+  debounceDuration: number;
+  debounceOptions: DebounceOptions;
 };
 const optionsDefault: Options = {
   debounceDuration: 100,
@@ -19,6 +24,18 @@ export type Bus<T> = {
   emit: (payload: T) => void;
   emitDebounced: (payload: T) => void;
 };
+
+function isSetStateUpdater<T>(action: SetStateAction<T>): action is (previousState: T) => T {
+  return typeof action === "function";
+}
+
+function resolveSetStateAction<T>(action: SetStateAction<T>, previousState: T): T {
+  if (isSetStateUpdater(action)) {
+    return action(previousState);
+  }
+
+  return action;
+}
 
 // dumb event bus
 export function bus<T>(options = optionsDefault): Bus<T> {
@@ -49,11 +66,11 @@ export function memoryStore<T>(initialState: T, options = optionsDefault): Store
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => state;
   const set = (action: SetStateAction<T>) => {
-    state = typeof action === "function" ? (action as (previousState: T) => T)(state) : action;
+    state = resolveSetStateAction(action, state);
     emit(state);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    state = typeof action === "function" ? (action as (previousState: T) => T)(state) : action;
+    state = resolveSetStateAction(action, state);
     emitDebounced(state);
   };
   return { subscribe, set, setDebounced, get };
@@ -67,12 +84,12 @@ export function sessionStore<T>(key: string, defaultValue: T, options = optionsD
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => readSession<T>(key, defaultValue);
   const set = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
+    const value = resolveSetStateAction(action, get());
     writeSession(key, value, defaultValue);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
+    const value = resolveSetStateAction(action, get());
     writeSession(key, value, defaultValue);
     emitDebounced(value);
   };
@@ -104,12 +121,12 @@ export function localStore<T>(key: string, defaultValue: T, options = optionsDef
   const { subscribe, emit, emitDebounced } = bus<T>(options);
   const get = () => readLocal<T>(key, defaultValue);
   const set = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
+    const value = resolveSetStateAction(action, get());
     writeLocal(key, value, defaultValue);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
-    const value = typeof action === "function" ? (action as (previousState: T) => T)(get()) : action;
+    const value = resolveSetStateAction(action, get());
     writeLocal(key, value, defaultValue);
     emitDebounced(value);
   };

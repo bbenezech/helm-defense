@@ -1,17 +1,112 @@
-import { getMapBounds, getLayerOffset } from "./projection.ts";
-import type {
-  PickedTile,
-  SurfaceTextureData,
-  TerrainAssetBundle,
-  TerrainMap,
-  TerrainMapLayer,
-  TerrainTileset,
-  TerrainTilesetProperty,
-  TileAtlasRegion,
-} from "./types.ts";
+import * as THREE from "three/src/Three.WebGPU.js";
+import { createPackedTerrainCodec, type PackedTerrainCodec, type PackedTerrainStack } from "./codec.ts";
+import { getMapBounds, type Point2, type Rect } from "./projection.ts";
+
+export type TerrainTilesetProperty =
+  | { name: "NESW"; type: string; value: string }
+  | { name: "CENTER"; type: string; value: number }
+  | { name: string; type: string; value: number | string };
+
+export type TerrainTilesetTile = {
+  id: number;
+  probability: number;
+  properties: TerrainTilesetProperty[];
+};
+
+export type TerrainTileset = {
+  type: "tileset";
+  name: string;
+  image: string;
+  tilewidth: number;
+  tileheight: number;
+  tilecount: number;
+  rows: number;
+  columns: number;
+  spacing: number;
+  margin: number;
+  imagewidth: number;
+  imageheight: number;
+  tiles: TerrainTilesetTile[];
+  version: string;
+  tiledversion: string;
+  properties: TerrainTilesetProperty[];
+};
+
+export type TerrainMapLayerProperty = {
+  name: string;
+  type: string;
+  value: number | string;
+};
+
+export type TerrainMapLayer = {
+  id: number;
+  name: string;
+  opacity: number;
+  type: "tilelayer";
+  visible: boolean;
+  x: number;
+  y: number;
+  offsetx: number;
+  offsety: number;
+  height: number;
+  width: number;
+  data: number[];
+  properties: TerrainMapLayerProperty[];
+};
+
+export type TerrainMap = {
+  type: "map";
+  orientation: "isometric" | "orthogonal";
+  renderorder: string;
+  width: number;
+  height: number;
+  tilewidth: number;
+  tileheight: number;
+  layers: TerrainMapLayer[];
+  tilesets: Array<{ firstgid: number } & TerrainTileset>;
+};
+
+export type TileAtlasRegion = {
+  offset: Point2;
+  scale: Point2;
+};
+
+export type BiomeManifestEntry = {
+  id: string;
+  atlas: string;
+};
+
+export type BiomeManifest = {
+  biomes: BiomeManifestEntry[];
+};
+
+export type ColorAtlasArray = {
+  texture: THREE.DataArrayTexture;
+  data: Uint8Array<ArrayBuffer>;
+  width: number;
+  height: number;
+  depth: number;
+};
+
+export type PackedTerrainTexture = {
+  texture: THREE.DataArrayTexture;
+  stack: PackedTerrainStack;
+};
+
+export type TerrainAssetBundle = {
+  map: TerrainMap;
+  tileset: TerrainTileset;
+  bounds: Rect;
+  elevationYOffsetPx: number;
+  biomeManifest: BiomeManifest;
+  colorAtlas: ColorAtlasArray;
+  packedTerrain: PackedTerrainTexture;
+  codec: PackedTerrainCodec;
+};
 
 const DEFAULT_TILESET_NAME = "Grass_23-512x512";
 const DEFAULT_MAP_NAME = "random.map.json";
+const DEFAULT_BIOME_MANIFEST_NAME = "biomes.json";
 
 function assertObject(value: unknown, message: string): asserts value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(message);
@@ -30,6 +125,32 @@ function assertString(value: unknown, message: string): string {
 function assertArray(value: unknown, message: string): unknown[] {
   if (!Array.isArray(value)) throw new Error(message);
   return value;
+}
+
+function assertTilesetType(value: unknown): TerrainTileset["type"] {
+  const tilesetType = assertString(value, "Missing tileset type");
+  if (tilesetType !== "tileset") throw new Error(`Invalid tileset type "${tilesetType}"`);
+  return tilesetType;
+}
+
+function assertMapType(value: unknown): TerrainMap["type"] {
+  const mapType = assertString(value, "Missing map type");
+  if (mapType !== "map") throw new Error(`Invalid map type "${mapType}"`);
+  return mapType;
+}
+
+function assertMapOrientation(value: unknown): TerrainMap["orientation"] {
+  const orientation = assertString(value, "Missing map orientation");
+  if (orientation !== "isometric" && orientation !== "orthogonal") {
+    throw new Error(`Invalid map orientation "${orientation}"`);
+  }
+  return orientation;
+}
+
+function assertLayerType(value: unknown, index: number): TerrainMapLayer["type"] {
+  const layerType = assertString(value, `Missing map layer type at index ${index}`);
+  if (layerType !== "tilelayer") throw new Error(`Invalid map layer type "${layerType}" at index ${index}`);
+  return layerType;
 }
 
 function parseTilesetProperty(value: unknown, index: number): TerrainTilesetProperty {
@@ -51,8 +172,8 @@ function parseTilesetTile(value: unknown, index: number) {
   return {
     id: assertNumber(value["id"], `Missing tileset tile id at index ${index}`),
     probability: assertNumber(value["probability"], `Missing tileset tile probability at index ${index}`),
-    properties: assertArray(value["properties"], `Missing tileset tile properties at index ${index}`).map(
-      parseTilesetProperty,
+    properties: assertArray(value["properties"], `Missing tileset tile properties at index ${index}`).map((property, propertyIndex) =>
+      parseTilesetProperty(property, propertyIndex),
     ),
   };
 }
@@ -61,7 +182,7 @@ export function parseTerrainTileset(value: unknown): TerrainTileset {
   assertObject(value, "Invalid terrain tileset");
 
   return {
-    type: assertString(value["type"], "Missing tileset type") as TerrainTileset["type"],
+    type: assertTilesetType(value["type"]),
     name: assertString(value["name"], "Missing tileset name"),
     image: assertString(value["image"], "Missing tileset image"),
     tilewidth: assertNumber(value["tilewidth"], "Missing tileset tilewidth"),
@@ -73,10 +194,12 @@ export function parseTerrainTileset(value: unknown): TerrainTileset {
     margin: assertNumber(value["margin"], "Missing tileset margin"),
     imagewidth: assertNumber(value["imagewidth"], "Missing tileset imagewidth"),
     imageheight: assertNumber(value["imageheight"], "Missing tileset imageheight"),
-    tiles: assertArray(value["tiles"], "Missing tileset tiles").map(parseTilesetTile),
+    tiles: assertArray(value["tiles"], "Missing tileset tiles").map((tile, index) => parseTilesetTile(tile, index)),
     version: assertString(value["version"], "Missing tileset version"),
     tiledversion: assertString(value["tiledversion"], "Missing tileset tiledversion"),
-    properties: assertArray(value["properties"], "Missing tileset properties").map(parseTilesetProperty),
+    properties: assertArray(value["properties"], "Missing tileset properties").map((property, index) =>
+      parseTilesetProperty(property, index),
+    ),
   };
 }
 
@@ -99,7 +222,7 @@ function parseMapLayer(value: unknown, index: number): TerrainMapLayer {
     id: assertNumber(value["id"], `Missing map layer id at index ${index}`),
     name: assertString(value["name"], `Missing map layer name at index ${index}`),
     opacity: assertNumber(value["opacity"], `Missing map layer opacity at index ${index}`),
-    type: assertString(value["type"], `Missing map layer type at index ${index}`) as TerrainMapLayer["type"],
+    type: assertLayerType(value["type"], index),
     visible: value["visible"] === true,
     x: assertNumber(value["x"], `Missing map layer x at index ${index}`),
     y: assertNumber(value["y"], `Missing map layer y at index ${index}`),
@@ -110,7 +233,9 @@ function parseMapLayer(value: unknown, index: number): TerrainMapLayer {
     data: assertArray(value["data"], `Missing map layer data at index ${index}`).map((gid, gidIndex) =>
       assertNumber(gid, `Invalid gid at index ${gidIndex} in layer ${index}`),
     ),
-    properties: assertArray(value["properties"], `Missing map layer properties at index ${index}`).map(parseLayerProperty),
+    properties: assertArray(value["properties"], `Missing map layer properties at index ${index}`).map((property, propertyIndex) =>
+      parseLayerProperty(property, propertyIndex),
+    ),
   };
 }
 
@@ -122,14 +247,14 @@ export function parseTerrainMap(value: unknown): TerrainMap {
   assertObject(tilesetWithFirstGid, "Invalid map tileset entry");
 
   return {
-    type: assertString(value["type"], "Missing map type") as TerrainMap["type"],
-    orientation: assertString(value["orientation"], "Missing map orientation") as TerrainMap["orientation"],
+    type: assertMapType(value["type"]),
+    orientation: assertMapOrientation(value["orientation"]),
     renderorder: assertString(value["renderorder"], "Missing map renderorder"),
     width: assertNumber(value["width"], "Missing map width"),
     height: assertNumber(value["height"], "Missing map height"),
     tilewidth: assertNumber(value["tilewidth"], "Missing map tilewidth"),
     tileheight: assertNumber(value["tileheight"], "Missing map tileheight"),
-    layers: assertArray(value["layers"], "Missing map layers").map(parseMapLayer),
+    layers: assertArray(value["layers"], "Missing map layers").map((layer, index) => parseMapLayer(layer, index)),
     tilesets: [
       {
         firstgid: assertNumber(tilesetWithFirstGid["firstgid"], "Missing map tileset firstgid"),
@@ -137,6 +262,22 @@ export function parseTerrainMap(value: unknown): TerrainMap {
       },
     ],
   };
+}
+
+export function parseBiomeManifest(value: unknown): BiomeManifest {
+  assertObject(value, "Invalid biome manifest");
+  const biomes = assertArray(value["biomes"], "Missing biome manifest entries").map((entry, index) => {
+    assertObject(entry, `Invalid biome entry at index ${index}`);
+
+    return {
+      id: assertString(entry["id"], `Missing biome id at index ${index}`),
+      atlas: assertString(entry["atlas"], `Missing biome atlas at index ${index}`),
+    };
+  });
+
+  if (biomes.length === 0) throw new Error("Biome manifest must contain at least one biome.");
+
+  return { biomes };
 }
 
 function getAssetUrl(pathname: string): string {
@@ -153,22 +294,6 @@ async function fetchJson(url: string): Promise<unknown> {
 function getTilesetNumberProperty(tileset: TerrainTileset, name: string): number {
   const property = tileset.properties.find((entry) => entry.name === name && typeof entry.value === "number");
   if (!property || typeof property.value !== "number") throw new Error(`Missing tileset property "${name}"`);
-  return property.value;
-}
-
-function getTileNumberProperty(tileset: TerrainTileset, tileId: number, name: string): number {
-  const tile = tileset.tiles.find((entry) => entry.id === tileId);
-  if (!tile) throw new Error(`Unknown tile id "${tileId}"`);
-  const property = tile.properties.find((entry) => entry.name === name && typeof entry.value === "number");
-  if (!property || typeof property.value !== "number") throw new Error(`Missing tile property "${name}" on tile "${tileId}"`);
-  return property.value;
-}
-
-function getTileStringProperty(tileset: TerrainTileset, tileId: number, name: string): string {
-  const tile = tileset.tiles.find((entry) => entry.id === tileId);
-  if (!tile) throw new Error(`Unknown tile id "${tileId}"`);
-  const property = tile.properties.find((entry) => entry.name === name && typeof entry.value === "string");
-  if (!property || typeof property.value !== "string") throw new Error(`Missing tile property "${name}" on tile "${tileId}"`);
   return property.value;
 }
 
@@ -191,116 +316,108 @@ export function getAtlasRegion(tileset: TerrainTileset, tileId: number): TileAtl
   };
 }
 
-function normalizeVector(x: number, y: number, z: number): [number, number, number] {
-  const length = Math.hypot(x, y, z) || 1;
-  return [x / length, y / length, z / length];
-}
+async function loadImagePixels(url: string): Promise<{ data: Uint8Array<ArrayBuffer>; width: number; height: number }> {
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+  await image.decode();
 
-function getApproximateNormal(nesw: string): [number, number, number] {
-  const north = Number.parseInt(nesw[0] ?? "0", 10) || 0;
-  const east = Number.parseInt(nesw[1] ?? "0", 10) || 0;
-  const south = Number.parseInt(nesw[2] ?? "0", 10) || 0;
-  const west = Number.parseInt(nesw[3] ?? "0", 10) || 0;
-
-  return normalizeVector((west - east) * 0.7, (north - south) * 0.7, 2);
-}
-
-function getTopTile(map: TerrainMap, tileX: number, tileY: number): PickedTile | null {
-  const tileset = map.tilesets[0];
-  for (const [index, layer] of map.layers.toReversed().entries()) {
-    const gid = layer.data[tileY * layer.width + tileX];
-    if (gid === 0 || gid === undefined) continue;
-
-    const level = Number(
-      layer.properties.find((property) => property.name === "level" && typeof property.value === "number")?.value ?? 0,
-    );
-
-    return {
-      gid,
-      tileId: gid - tileset.firstgid,
-      tileX,
-      tileY,
-      level,
-      layerIndex: map.layers.length - index - 1,
-      offset: getLayerOffset(layer),
-    };
-  }
-
-  return null;
-}
-
-function createSurfaceTextureData(map: TerrainMap, tileset: TerrainTileset): SurfaceTextureData {
-  const heights: number[] = [];
-  const surfaceEntries: Array<{
-    normal: [number, number, number];
-    height: number;
-  } | null> = [];
-
-  for (let tileY = 0; tileY < map.height; tileY++) {
-    for (let tileX = 0; tileX < map.width; tileX++) {
-      const topTile = getTopTile(map, tileX, tileY);
-      if (topTile === null) {
-        surfaceEntries.push(null);
-        continue;
-      }
-
-      const center = getTileNumberProperty(tileset, topTile.tileId, "CENTER");
-      const nesw = getTileStringProperty(tileset, topTile.tileId, "NESW");
-      const height = topTile.level + center;
-      heights.push(height);
-      surfaceEntries.push({
-        normal: getApproximateNormal(nesw),
-        height,
-      });
-    }
-  }
-
-  const minHeight = heights.length === 0 ? 0 : Math.min(...heights);
-  const maxHeight = heights.length === 0 ? 1 : Math.max(...heights);
-  const heightRange = maxHeight - minHeight || 1;
-  const data = new Uint8Array(map.width * map.height * 4);
-
-  for (const [index, entry] of surfaceEntries.entries()) {
-    const bufferIndex = index * 4;
-    if (entry === null) {
-      data[bufferIndex] = 128;
-      data[bufferIndex + 1] = 128;
-      data[bufferIndex + 2] = 255;
-      data[bufferIndex + 3] = 0;
-      continue;
-    }
-
-    data[bufferIndex] = Math.round((entry.normal[0] * 0.5 + 0.5) * 255);
-    data[bufferIndex + 1] = Math.round((entry.normal[1] * 0.5 + 0.5) * 255);
-    data[bufferIndex + 2] = Math.round((entry.normal[2] * 0.5 + 0.5) * 255);
-    data[bufferIndex + 3] = Math.round(((entry.height - minHeight) / heightRange) * 255);
-  }
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error(`Failed to create canvas context for ${url}`);
+  context.drawImage(image, 0, 0);
+  const imageData = context.getImageData(0, 0, image.width, image.height);
 
   return {
-    data,
-    width: map.width,
-    height: map.height,
-    minHeight,
-    maxHeight,
+    data: new Uint8Array(imageData.data),
+    width: image.width,
+    height: image.height,
   };
+}
+
+async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<ColorAtlasArray> {
+  const images = await Promise.all(
+    manifest.biomes.map(async (biome) => {
+      return loadImagePixels(getAssetUrl(`${tilesetName}/${biome.atlas}`));
+    }),
+  );
+
+  const firstImage = images[0];
+  if (firstImage === undefined) throw new Error("Biome manifest did not produce any atlas images.");
+  const width = firstImage.width;
+  const height = firstImage.height;
+  const depth = images.length;
+
+  for (const [index, image] of images.entries()) {
+    if (image.width !== width || image.height !== height) {
+      throw new Error(
+        `Biome atlas mismatch at index ${index}: expected ${width}x${height}, received ${image.width}x${image.height}.`,
+      );
+    }
+  }
+
+  const data = new Uint8Array(width * height * depth * 4);
+  const layerStride = width * height * 4;
+  for (const [index, image] of images.entries()) data.set(image.data, index * layerStride);
+
+  const texture = new THREE.DataArrayTexture(data, width, height, depth);
+  texture.format = THREE.RGBAFormat;
+  texture.type = THREE.UnsignedByteType;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+
+  return {
+    texture,
+    data,
+    width,
+    height,
+    depth,
+  };
+}
+
+function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTexture {
+  const texture = new THREE.DataArrayTexture(stack.data, stack.width, stack.height, stack.slices);
+  texture.format = THREE.RedIntegerFormat;
+  texture.type = THREE.UnsignedIntType;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+
+  return { texture, stack };
 }
 
 export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME): Promise<TerrainAssetBundle> {
   const tilesetUrl = getAssetUrl(`${tilesetName}/tileset.json`);
   const mapUrl = getAssetUrl(`${tilesetName}/${DEFAULT_MAP_NAME}`);
-  const [tilesetJson, mapJson] = await Promise.all([fetchJson(tilesetUrl), fetchJson(mapUrl)]);
+  const biomeManifestUrl = getAssetUrl(`${tilesetName}/${DEFAULT_BIOME_MANIFEST_NAME}`);
+  const [tilesetJson, mapJson, biomeManifestJson] = await Promise.all([
+    fetchJson(tilesetUrl),
+    fetchJson(mapUrl),
+    fetchJson(biomeManifestUrl),
+  ]);
   const tileset = parseTerrainTileset(tilesetJson);
   const map = parseTerrainMap(mapJson);
-  const atlasRegions = new Map<number, TileAtlasRegion>();
-  for (const tile of tileset.tiles) atlasRegions.set(tile.id, getAtlasRegion(tileset, tile.id));
+  const biomeManifest = parseBiomeManifest(biomeManifestJson);
+  const elevationYOffsetPx = getTilesetNumberProperty(tileset, "elevationYOffsetPx");
+  const colorAtlas = await loadColorAtlasArray(tilesetName, biomeManifest);
+  const codec = createPackedTerrainCodec(map, tileset, elevationYOffsetPx, 0);
+  const packedTerrain = createPackedTerrainTexture(codec.stack);
 
   return {
     map,
     tileset,
-    atlasUrl: getAssetUrl(`${tilesetName}/${tileset.image}`),
     bounds: getMapBounds(map),
-    elevationYOffsetPx: getTilesetNumberProperty(tileset, "elevationYOffsetPx"),
-    atlasRegions,
-    surface: createSurfaceTextureData(map, tileset),
+    elevationYOffsetPx,
+    biomeManifest,
+    colorAtlas,
+    packedTerrain,
+    codec,
   };
 }

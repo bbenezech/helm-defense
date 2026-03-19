@@ -1,5 +1,6 @@
-import type { RendererMode } from "../../three/index.ts";
 import { localStore } from "./index.ts";
+
+export type RendererMode = "phaser" | "three";
 
 function getDefaultRendererMode(): RendererMode {
   const search = new URLSearchParams(globalThis.location.search);
