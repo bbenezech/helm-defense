@@ -469,7 +469,7 @@ function hasCoverageFailure(result: FixtureResult) {
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
-    .usage("Usage: yarn validate:terrain-coverage [tileset-directory] [options]")
+    .usage("Usage: bun run validate:terrain-coverage [tileset-directory] [options]")
     .command("$0 [tileset-directory]", "Validate exact native terrain coverage against the ownership rasterizer", (y) =>
       y.positional("tileset-directory", {
         type: "string",

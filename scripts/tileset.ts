@@ -230,7 +230,7 @@ async function generateAssets(
 }
 
 const argv = await yargs(hideBin(process.argv))
-  .usage("Usage: yarn tile <file1> [file2...] [options]")
+  .usage("Usage: bun run tile <file1> [file2...] [options]")
   .command("$0 <textures...>", "Generates an isometric tileset for one or more texture files", (y) => {
     y.positional("textures", {
       describe: "One or more textures to process (glob patterns like *.png are supported)",

@@ -2,6 +2,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import eslintPluginUnicorn from "eslint-plugin-unicorn";
+import enforceSymbolOwnerRule from "./eslint/rules/enforce-symbol-owner.ts";
 import noBarrelReexportRule from "./eslint/rules/no-barrel-reexport.ts";
 import noOptionalApiRule from "./eslint/rules/no-optional-api.ts";
 import noTypesFileRule from "./eslint/rules/no-types-file.ts";
@@ -15,9 +16,18 @@ const scopedFiles = [
   "src/components/**/*.tsx",
   "src/store/**/*.ts",
 ];
+const symbolOwnerConfig = {
+  owners: {
+    "three/assets.ts": ["TerrainAssetBundle"],
+    "three/app.ts": ["ThreeTerrainApp"],
+    "three/projection.ts": ["Point2", "Rect", "PickedTile", "CameraState", "Viewport"],
+    "src/store/renderer-mode.ts": ["RendererMode"],
+  },
+};
 
 const helmDefensePlugin = {
   rules: {
+    "enforce-symbol-owner": enforceSymbolOwnerRule,
     "no-barrel-reexport": noBarrelReexportRule,
     "no-optional-api": noOptionalApiRule,
     "no-types-file": noTypesFileRule,
@@ -91,6 +101,7 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "helm-defense/enforce-symbol-owner": ["error", symbolOwnerConfig],
       "helm-defense/no-barrel-reexport": "error",
       "helm-defense/no-optional-api": "error",
       "helm-defense/no-types-file": "error",

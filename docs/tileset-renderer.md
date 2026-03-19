@@ -58,15 +58,15 @@ samplingProfile = nativeExact
 Use `--sampling-profile` to switch between the render styles. If you omit it, `nativeExact` is used:
 
 ```bash
-yarn tile public/Grass_23-512x512/texture.png
-yarn tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
-yarn tile public/Grass_23-512x512/texture.png --sampling-profile legacyMatched
-yarn tile public/Grass_23-512x512/texture.png --sampling-profile strictPixel
+bun run tile public/Grass_23-512x512/texture.png
+bun run tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
+bun run tile public/Grass_23-512x512/texture.png --sampling-profile legacyMatched
+bun run tile public/Grass_23-512x512/texture.png --sampling-profile strictPixel
 ```
 
 ## Native Coverage Proof
 
-`yarn validate:terrain-coverage` validates the terrain tileset without Phaser or Tiled in the loop. It composes maps directly from project-native layer fixtures using the same fixed placement contract the assets target:
+`bun run validate:terrain-coverage` validates the terrain tileset without Phaser or Tiled in the loop. It composes maps directly from project-native layer fixtures using the same fixed placement contract the assets target:
 
 - tile image size `128 x 96`
 - logical map diamond height `64`
@@ -88,8 +88,8 @@ For each fixture pixel it enforces exact-one coverage:
 The proof always checks the shared demo fixture plus deterministic seeded stress fixtures generated from the heightmap pipeline, and it writes `oracle.png`, `actual.png`, `diff.png`, and `summary.json` into the report directory for every fixture. The oracle also self-checks its own flat-neighbor tiling before the real atlas is compared, so seam bugs in the ownership masks fail fast.
 
 ```bash
-yarn tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
-yarn validate:terrain-coverage public/Grass_23-512x512/tilesets/texture
+bun run tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
+bun run validate:terrain-coverage public/Grass_23-512x512/tilesets/texture
 ```
 
 `legacyMatched` and `strictPixel` are still valid visual outputs, but only `nativeExact` is intended to satisfy the exact native no-hole/no-overlap proof.

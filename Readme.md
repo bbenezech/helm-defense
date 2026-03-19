@@ -11,18 +11,16 @@ electron phaser game react top-down edge-scrolling full-screen
 ## Setup
 
 ```
-brew install nvm imagemagick
-nvm use
-npm install yarn -g
-yarn
+brew install bun imagemagick
+bun install
 cp .env.example .env
-./scripts/tile.ts ./assets/textures/compass.png
+bun run tile ./assets/textures/compass.png
 ```
 
 ## Run server
 
 ```
-yarn start
+bun run start
 ```
 
 ## Tech Roadmap

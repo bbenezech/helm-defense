@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "author": "Ben",
   "description": "A Phaser game with Electron and Vite",
+  "packageManager": "bun@1.3.6",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -14,15 +15,16 @@
     "preview": "vite preview --port 8080",
     "serve": "vite serve",
     "electron:dev": "concurrently -r 'vite --mode electron' 'NODE_ENV=development electron electron/main.js'",
-    "electron:mac": "npm run build && electron-builder --mac --dir",
-    "ci": "yarn clean && rm -rf ./node_modules && yarn && yarn tsgo && yarn test && yarn eslint --fix && yarn prettier . --write --list-different",
-    "tile": "node scripts/tileset.ts",
+    "electron:mac": "bun run build && electron-builder --mac --dir",
+    "check": "tsgo --build",
+    "ci": "bun run clean && rm -rf ./node_modules && bun install && bun run check && bun run test && eslint . --fix && prettier . --write --list-different",
+    "tile": "bun scripts/tileset.ts",
     "tsgo": "tsgo --build",
-    "validate:terrain-coverage": "node scripts/validate-terrain-coverage.ts",
+    "validate:terrain-coverage": "bun scripts/validate-terrain-coverage.ts",
     "tsgo:clean": "tsgo --build --clean",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -f ./scripts/texture.png && rm -rf ./scripts/all && rm -rf ./dist && rm -rf ./release && rm -rf ./release && rm -rf ./node_modules/.cache && rm -rf ./node_modules/tmp && rm -rf ./tmp && yarn tsgo:clean"
+    "clean": "rm -f ./scripts/texture.png && rm -rf ./scripts/all && rm -rf ./dist && rm -rf ./release && rm -rf ./release && rm -rf ./node_modules/.cache && rm -rf ./node_modules/tmp && rm -rf ./tmp && bun run tsgo:clean"
   },
   "dependencies": {
     "@emnapi/core": "^1.4.3",
