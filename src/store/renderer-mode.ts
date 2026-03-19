@@ -2,16 +2,26 @@ import { localStore } from "./index.ts";
 
 export type RendererMode = "phaser" | "three";
 
-function getDefaultRendererMode(): RendererMode {
+function getRequestedRendererMode(): RendererMode | null {
   const search = new URLSearchParams(globalThis.location.search);
   const requestedRenderer = search.get("renderer");
-  return requestedRenderer === "phaser" || requestedRenderer === "three" ? requestedRenderer : "three";
+  if (requestedRenderer === "phaser" || requestedRenderer === "three") return requestedRenderer;
+  return null;
 }
 
-const store = localStore<RendererMode>("renderer-mode", getDefaultRendererMode());
+const store = localStore<RendererMode>("renderer-mode", "three");
+
+function getRendererMode(): RendererMode {
+  const requestedRenderer = getRequestedRendererMode();
+  if (requestedRenderer !== null) return requestedRenderer;
+  return store.get();
+}
 
 export default {
-  ...store,
+  subscribe: store.subscribe,
+  get: getRendererMode,
+  set: store.set,
+  setDebounced: store.setDebounced,
   toggle: () => store.set((current) => (current === "three" ? "phaser" : "three")),
   reset: () => store.set("three"),
 };

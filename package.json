@@ -8,6 +8,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "vite --mode web",
+    "demo": "vite --mode web --open \"/?renderer=three\"",
     "build": "vite build",
     "build:gh": "vite build --mode gh-pages",
     "preview": "vite preview --port 8080",
