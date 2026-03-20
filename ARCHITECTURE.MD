@@ -25,7 +25,7 @@
 - `bun run tile ...` generates the checked-in terrain asset bundle under `public/<tileset>/`.
 - The bundle includes `tileset.png` for biome color, `tileset.checker.png` for the Three checker diagnostic, `biomes.json` that points each biome at both atlases, `random.map.json` for tile placement, and `random.tileableHeightmap.json` as the canonical terrain surface source.
 - Color tiles are still rendered from Blender frame output and clipped with ownership masks before montage.
-- The checker diagnostic atlas is generated analytically from the shared terrain scene spec and ownership masks, then quantized onto the same surface-texel lattice used by the packed terrain surface. That keeps the Three checker diagnostic phase-locked to the lighting lookup instead of to beauty-render UVs or continuous top-surface `u/v` alone.
+- The checker diagnostic atlas is generated analytically from the shared terrain scene spec and ownership masks. It rasterizes the visible mesh UVs with the same `cameraAlignedLegacy` quarter-turn mapping rule as the beauty tiles, then applies ownership-mask alpha so Three can compare a checkerized beauty-space texture against the global terrain surface without transparent gaps.
 - The Three renderer derives its packed global surface texture at runtime from `random.tileableHeightmap.json` with the shared `tileableHeightmapToTileData -> tileDataToTerrain -> packTerrain` pipeline, which keeps Three lighting aligned with the Phaser terrain normals instead of a per-tile metadata atlas.
 
 ## Quality Gate

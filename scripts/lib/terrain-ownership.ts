@@ -17,6 +17,9 @@ type LocalUvFrame = {
   uValues: Float32Array<ArrayBuffer>;
   vValues: Float32Array<ArrayBuffer>;
 };
+type CheckerRasterFrame = ImageData;
+type NeighborOffset = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
+type CheckerTextureRotation = "none" | "quarterTurn" | "cameraAlignedLegacy";
 
 const PIXEL_SAMPLE_BIAS = 1e-6;
 const DEPTH_EPSILON = 1e-9;
@@ -24,6 +27,17 @@ const TOP_SURFACE_BASE_Y = 32;
 const HALF_TILE_WIDTH = 64;
 const HALF_TILE_HEIGHT = 32;
 const HEIGHT_STEP = 16;
+const CHECKER_ALPHA = 255;
+const CHECKER_FILL_NEIGHBORS: NeighborOffset[] = [
+  { x: -1, y: -1 },
+  { x: 0, y: -1 },
+  { x: 1, y: -1 },
+  { x: -1, y: 0 },
+  { x: 1, y: 0 },
+  { x: -1, y: 1 },
+  { x: 0, y: 1 },
+  { x: 1, y: 1 },
+];
 
 function toRadians(degrees: number) {
   return (degrees * Math.PI) / 180;
@@ -152,6 +166,56 @@ function rasterizeTriangle(
   }
 }
 
+function rasterizeUvTriangle(
+  coverage: Uint8Array<ArrayBuffer>,
+  depthBuffer: Float64Array<ArrayBuffer>,
+  uValues: Float32Array<ArrayBuffer>,
+  vValues: Float32Array<ArrayBuffer>,
+  frameWidth: number,
+  frameHeight: number,
+  triangle: [ProjectedVertex, ProjectedVertex, ProjectedVertex],
+  triangleUvs: [LocalPoint, LocalPoint, LocalPoint],
+) {
+  let [v0, v1, v2] = triangle;
+  let [uv0, uv1, uv2] = triangleUvs;
+  let area = edgeFunction(v0, v1, v2);
+  if (Math.abs(area) <= DEPTH_EPSILON) return;
+  if (area < 0) {
+    [v1, v2] = [v2, v1];
+    [uv1, uv2] = [uv2, uv1];
+    area = -area;
+  }
+
+  const minX = Math.max(0, Math.floor(Math.min(v0.x, v1.x, v2.x)));
+  const maxX = Math.min(frameWidth - 1, Math.ceil(Math.max(v0.x, v1.x, v2.x)) - 1);
+  const minY = Math.max(0, Math.floor(Math.min(v0.y, v1.y, v2.y)));
+  const maxY = Math.min(frameHeight - 1, Math.ceil(Math.max(v0.y, v1.y, v2.y)) - 1);
+  if (minX > maxX || minY > maxY) return;
+
+  for (let pixelY = minY; pixelY <= maxY; pixelY++) {
+    const sampleY = pixelY + 0.5 - PIXEL_SAMPLE_BIAS;
+    for (let pixelX = minX; pixelX <= maxX; pixelX++) {
+      const sample = { x: pixelX + 0.5 - PIXEL_SAMPLE_BIAS, y: sampleY };
+      const weight0 = edgeFunction(v1, v2, sample);
+      const weight1 = edgeFunction(v2, v0, sample);
+      const weight2 = edgeFunction(v0, v1, sample);
+      if (weight0 < 0 || weight1 < 0 || weight2 < 0) continue;
+
+      const barycentric0 = weight0 / area;
+      const barycentric1 = weight1 / area;
+      const barycentric2 = weight2 / area;
+      const depth = barycentric0 * v0.depth + barycentric1 * v1.depth + barycentric2 * v2.depth;
+      const index = pixelY * frameWidth + pixelX;
+      if (depth <= depthBuffer[index] + DEPTH_EPSILON) continue;
+
+      depthBuffer[index] = depth;
+      coverage[index] = 1;
+      uValues[index] = barycentric0 * uv0.u + barycentric1 * uv1.u + barycentric2 * uv2.u;
+      vValues[index] = barycentric0 * uv0.v + barycentric1 * uv1.v + barycentric2 * uv2.v;
+    }
+  }
+}
+
 function rasterizeSceneSilhouetteFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): BinaryFrame {
   const width = sceneSpec.render.resolution.width;
   const height = sceneSpec.render.resolution.height;
@@ -173,6 +237,55 @@ function rasterizeSceneSilhouetteFrame(sceneSpec: TerrainSceneSpec, poseIndex: n
   }
 
   return { width, height, coverage };
+}
+
+function rasterizeVisibleUvFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): LocalUvFrame {
+  const width = sceneSpec.render.resolution.width;
+  const height = sceneSpec.render.resolution.height;
+  const projectedVertices = projectVerticesForPose(sceneSpec, poseIndex);
+  const coverage = new Uint8Array(width * height);
+  const depthBuffer = new Float64Array(width * height).fill(Number.NEGATIVE_INFINITY);
+  const uValues = new Float32Array(width * height);
+  const vValues = new Float32Array(width * height);
+
+  for (const polygon of sceneSpec.mesh.polygons) {
+    if (polygon.indices.length < 3) continue;
+    for (let triangleIndex = 1; triangleIndex < polygon.indices.length - 1; triangleIndex++) {
+      const vertex0 = projectedVertices[polygon.indices[0]];
+      const vertex1 = projectedVertices[polygon.indices[triangleIndex]];
+      const vertex2 = projectedVertices[polygon.indices[triangleIndex + 1]];
+      const uv0 = polygon.uvs[0];
+      const uv1 = polygon.uvs[triangleIndex];
+      const uv2 = polygon.uvs[triangleIndex + 1];
+      if (
+        vertex0 === undefined ||
+        vertex1 === undefined ||
+        vertex2 === undefined ||
+        uv0 === undefined ||
+        uv1 === undefined ||
+        uv2 === undefined
+      ) {
+        throw new Error(`Scene spec polygon references a missing vertex or UV.`);
+      }
+
+      rasterizeUvTriangle(
+        coverage,
+        depthBuffer,
+        uValues,
+        vValues,
+        width,
+        height,
+        [vertex0, vertex1, vertex2],
+        [
+          { u: uv0[0], v: uv0[1] },
+          { u: uv1[0], v: uv1[1] },
+          { u: uv2[0], v: uv2[1] },
+        ],
+      );
+    }
+  }
+
+  return { width, height, coverage, uValues, vValues };
 }
 
 const toScreen = (x: number, y: number, height: number): Vec2 => ({
@@ -321,76 +434,147 @@ export function rasterizeOwnershipFrames(sceneSpec: TerrainSceneSpec = terrainSc
   return sceneSpec.poses.map((_, poseIndex) => rasterizeOwnershipFrame(sceneSpec, poseIndex));
 }
 
-function getSurfaceTexelIndex(localCoordinate: number, precision: number): number {
-  const adjustedCoordinate = localCoordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : localCoordinate;
-  return Math.floor(adjustedCoordinate * precision);
+function getCheckerCellIndex(coordinate: number, cellsPerAxis: number): number {
+  const clampedCoordinate =
+    coordinate < 0 ? 0 : coordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : coordinate;
+  return Math.floor(clampedCoordinate * cellsPerAxis);
+}
+
+function writeCheckerPixel(data: Uint8ClampedArray<ArrayBuffer>, pixelIndex: number, checkerValue: number) {
+  const dataOffset = pixelIndex * 4;
+  data[dataOffset] = checkerValue;
+  data[dataOffset + 1] = checkerValue;
+  data[dataOffset + 2] = checkerValue;
+  data[dataOffset + 3] = CHECKER_ALPHA;
+}
+
+function floodFillCheckerCoverage(
+  ownershipFrame: BinaryFrame,
+  assignedCoverage: Uint8Array<ArrayBuffer>,
+  checkerValues: Uint8Array<ArrayBuffer>,
+  data: Uint8ClampedArray<ArrayBuffer>,
+) {
+  const queue: number[] = [];
+  for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+    if (assignedCoverage[pixelIndex] === 1) queue.push(pixelIndex);
+  }
+
+  if (queue.length === 0) {
+    throw new Error("Checker rasterization requires at least one visible UV seed pixel.");
+  }
+
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex++) {
+    const pixelIndex = queue[queueIndex];
+    if (pixelIndex === undefined) throw new Error(`Missing checker fill queue entry ${queueIndex}.`);
+    const checkerValue = checkerValues[pixelIndex];
+    const pixelX = pixelIndex % ownershipFrame.width;
+    const pixelY = Math.floor(pixelIndex / ownershipFrame.width);
+
+    for (const offset of CHECKER_FILL_NEIGHBORS) {
+      const neighborX = pixelX + offset.x;
+      const neighborY = pixelY + offset.y;
+      if (neighborX < 0 || neighborY < 0 || neighborX >= ownershipFrame.width || neighborY >= ownershipFrame.height) continue;
+
+      const neighborIndex = neighborY * ownershipFrame.width + neighborX;
+      if (ownershipFrame.coverage[neighborIndex] !== 1 || assignedCoverage[neighborIndex] === 1) continue;
+
+      assignedCoverage[neighborIndex] = 1;
+      checkerValues[neighborIndex] = checkerValue;
+      writeCheckerPixel(data, neighborIndex, checkerValue);
+      queue.push(neighborIndex);
+    }
+  }
+
+  for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+    if (ownershipFrame.coverage[pixelIndex] === 1 && assignedCoverage[pixelIndex] !== 1) {
+      throw new Error(`Checker flood fill left ownership pixel ${pixelIndex} unassigned.`);
+    }
+  }
+}
+
+function getQuarterTurn(rotationZRad: number): 0 | 1 | 2 | 3 {
+  const quarterTurn = Math.round((rotationZRad % (2 * Math.PI)) / (Math.PI / 2));
+  const normalizedQuarterTurn = ((quarterTurn % 4) + 4) % 4;
+  switch (normalizedQuarterTurn) {
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    case 2:
+      return 2;
+    case 3:
+      return 3;
+    default:
+      throw new Error(`Unexpected quarter turn ${normalizedQuarterTurn}.`);
+  }
+}
+
+function applyCheckerTextureRotation(
+  textureRotation: CheckerTextureRotation,
+  poseRotationZRad: number,
+  uv: LocalPoint,
+): LocalPoint {
+  const quarterTurn = textureRotation === "cameraAlignedLegacy" ? getQuarterTurn(poseRotationZRad) : textureRotation === "quarterTurn" ? 1 : 0;
+
+  switch (quarterTurn) {
+    case 0:
+      return uv;
+    case 1:
+      return { u: uv.v, v: 1 - uv.u };
+    case 2:
+      return { u: 1 - uv.u, v: 1 - uv.v };
+    case 3:
+      return { u: 1 - uv.v, v: uv.u };
+    default:
+      throw new Error(`Unexpected quarter turn ${quarterTurn satisfies never}.`);
+  }
 }
 
 export function rasterizeCheckerFrames(
   {
-    precision,
     cellsPerAxis,
     lightValue,
     darkValue,
-    sideValue,
-    topAlphaValue,
-    sideAlphaValue,
+    textureRotation,
   }: {
-    precision: number;
     cellsPerAxis: number;
     lightValue: number;
     darkValue: number;
-    sideValue: number;
-    topAlphaValue: number;
-    sideAlphaValue: number;
+    textureRotation: CheckerTextureRotation;
   },
   sceneSpec: TerrainSceneSpec = terrainSceneSpec,
-): ImageData[] {
-  if (!Number.isInteger(precision)) throw new Error(`Checker precision must be an integer, received ${precision}.`);
-  if (precision <= 0) throw new Error(`Checker precision must be greater than zero, received ${precision}.`);
+): CheckerRasterFrame[] {
   if (cellsPerAxis <= 0) throw new Error(`Checker cells per axis must be greater than zero, received ${cellsPerAxis}.`);
-  if (precision % cellsPerAxis !== 0) {
-    throw new Error(`Checker precision ${precision} must be divisible by ${cellsPerAxis} cells per axis.`);
-  }
-  const checkerCellSize = precision / cellsPerAxis;
 
-  return sceneSpec.poses.map((_, poseIndex) => {
-    const tileName = sceneSpec.order[poseIndex];
-    if (tileName === undefined) throw new Error(`Missing terrain tile order entry ${poseIndex}`);
+  return sceneSpec.poses.map((pose, poseIndex) => {
+    const ownershipFrame = rasterizeOwnershipFrame(sceneSpec, poseIndex);
+    const visibleUvFrame = rasterizeVisibleUvFrame(sceneSpec, poseIndex);
+    const data = new Uint8ClampedArray(ownershipFrame.coverage.length * 4);
+    const assignedCoverage = new Uint8Array(ownershipFrame.coverage.length);
+    const checkerValues = new Uint8Array(ownershipFrame.coverage.length);
 
-    const sceneFrame = rasterizeSceneSilhouetteFrame(sceneSpec, poseIndex);
-    const topSurface = rasterizeTopSurfaceLocalUvFrame(tileName, sceneSpec, true);
-    const topSurfaceFullExpanded = dilateBinaryFrame(rasterizeTopSurfaceFrame(tileName, sceneSpec, false));
-    const data = new Uint8ClampedArray(sceneFrame.coverage.length * 4);
+    for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+      if (ownershipFrame.coverage[pixelIndex] !== 1) continue;
+      if (visibleUvFrame.coverage[pixelIndex] !== 1) continue;
 
-    for (let pixelIndex = 0; pixelIndex < sceneFrame.coverage.length; pixelIndex++) {
-      const dataOffset = pixelIndex * 4;
-      if (topSurface.coverage[pixelIndex] === 1) {
-        const surfaceTexelU = getSurfaceTexelIndex(topSurface.uValues[pixelIndex], precision);
-        const surfaceTexelV = getSurfaceTexelIndex(topSurface.vValues[pixelIndex], precision);
-        const checkerU = Math.floor(surfaceTexelU / checkerCellSize);
-        const checkerV = Math.floor(surfaceTexelV / checkerCellSize);
-        const checkerValue = (checkerU + checkerV) % 2 === 0 ? lightValue : darkValue;
-        data[dataOffset] = checkerValue;
-        data[dataOffset + 1] = checkerValue;
-        data[dataOffset + 2] = checkerValue;
-        data[dataOffset + 3] = topAlphaValue;
-        continue;
-      }
-
-      const sidePixel =
-        sceneFrame.coverage[pixelIndex] === 1 && topSurfaceFullExpanded.coverage[pixelIndex] === 0 ? 1 : 0;
-      if (sidePixel === 1) {
-        data[dataOffset] = sideValue;
-        data[dataOffset + 1] = sideValue;
-        data[dataOffset + 2] = sideValue;
-        data[dataOffset + 3] = sideAlphaValue;
-      }
+      const rotatedUv = applyCheckerTextureRotation(
+        textureRotation,
+        pose.rotationZRad,
+        { u: visibleUvFrame.uValues[pixelIndex], v: visibleUvFrame.vValues[pixelIndex] },
+      );
+      const checkerU = getCheckerCellIndex(rotatedUv.u, cellsPerAxis);
+      const checkerV = getCheckerCellIndex(rotatedUv.v, cellsPerAxis);
+      const checkerValue = (checkerU + checkerV) % 2 === 0 ? lightValue : darkValue;
+      assignedCoverage[pixelIndex] = 1;
+      checkerValues[pixelIndex] = checkerValue;
+      writeCheckerPixel(data, pixelIndex, checkerValue);
     }
 
+    floodFillCheckerCoverage(ownershipFrame, assignedCoverage, checkerValues, data);
+
     return {
-      width: sceneFrame.width,
-      height: sceneFrame.height,
+      width: ownershipFrame.width,
+      height: ownershipFrame.height,
       channels: 4,
       data,
     };

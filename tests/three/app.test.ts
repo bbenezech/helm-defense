@@ -6,6 +6,7 @@ import {
   decodeSurfaceHeight,
   decodeSurfaceNormal,
   getMapUvForScreenPoint,
+  getTerrainDebugAlpha,
   getSurfaceCheckerCellSize,
   getSurfaceCheckerParity,
   getSurfaceHeightImpactOnScreenY,
@@ -62,6 +63,11 @@ describe("three terrain math", () => {
     expect(isSurfaceCheckerMismatch(0.9, 4, 0, 16)).toBe(true);
     expect(isSurfaceCheckerMismatch(0.2, 4, 0, 16)).toBe(false);
     expect(isSurfaceCheckerMismatch(0.2, 0, 0, 16)).toBe(true);
+  });
+
+  it("uses checker alpha instead of beauty alpha in checker debug mode", () => {
+    expect(getTerrainDebugAlpha("terrain", 0.75, 0.25)).toBe(0.75);
+    expect(getTerrainDebugAlpha("checker-compare", 0.75, 0.25)).toBe(0.25);
   });
 
   it("decodes global surface normals and applies ambient diffuse shading", () => {

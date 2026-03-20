@@ -38,9 +38,6 @@ const CHECKER_ATLAS_FILENAME = "tileset.checker.png";
 const CHECKER_ATLAS_CELLS_PER_AXIS = 4;
 const CHECKER_ATLAS_LIGHT = 224;
 const CHECKER_ATLAS_DARK = 80;
-const CHECKER_ATLAS_SIDE = 152;
-const CHECKER_ATLAS_TOP_ALPHA = 255;
-const CHECKER_ATLAS_SIDE_ALPHA = 128;
 
 function createTileset(
   inputDirectory: string,
@@ -299,15 +296,11 @@ function createGeneratedAtlasImageData(
 }
 
 async function writeCheckerAtlas(outputDirectory: string, tileset: ReturnType<typeof getTileset>) {
-  const precision = tileset.tilewidth / 8;
   const frames = rasterizeCheckerFrames({
-    precision,
     cellsPerAxis: CHECKER_ATLAS_CELLS_PER_AXIS,
     lightValue: CHECKER_ATLAS_LIGHT,
     darkValue: CHECKER_ATLAS_DARK,
-    sideValue: CHECKER_ATLAS_SIDE,
-    topAlphaValue: CHECKER_ATLAS_TOP_ALPHA,
-    sideAlphaValue: CHECKER_ATLAS_SIDE_ALPHA,
+    textureRotation: ACTIVE_BLENDER_RENDER_VARIANT.textureRotation,
   });
   const atlasImageData = createGeneratedAtlasImageData(frames, tileset);
   await saveImageDataToImage(atlasImageData, path.join(outputDirectory, CHECKER_ATLAS_FILENAME));

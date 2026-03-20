@@ -107,6 +107,17 @@ export function isSurfaceCheckerMismatch(
   return getCheckerAtlasParity(checkerChannel) !== getSurfaceCheckerParity(surfaceTexelX, surfaceTexelY, precision);
 }
 
+export function getTerrainDebugAlpha(view: ThreeDebugView, atlasAlpha: number, checkerAlpha: number): number {
+  switch (view) {
+    case "terrain":
+      return atlasAlpha;
+    case "checker-compare":
+      return checkerAlpha;
+    default:
+      throw new Error(view satisfies never);
+  }
+}
+
 export function getMapUvForScreenPoint(screen: Point2, map: TerrainMap): Point2 {
   const halfTileWidthInv = 2 / map.tilewidth;
   const halfTileHeightInv = 2 / map.tileheight;
@@ -364,10 +375,12 @@ class TerrainRuntime implements ThreeTerrainApp {
 
               if (!found || painterRank > bestRank) {
                 var resolvedRgb = decodeTerrainColor(atlasTexel) * shade;
+                var resolvedAlpha = atlasTexel.a;
 
                 if (debugView >= 0.5) {
                   let checkerAtlasTexel = textureLoad(checkerAtlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
                   resolvedRgb = decodeTerrainColor(checkerAtlasTexel) * shade;
+                  resolvedAlpha = checkerAtlasTexel.a;
 
                   if (debugSurfaceGrid >= 0.5 && checkerAtlasTexel.a > 0.75 && isSurfaceCheckerMismatch(checkerAtlasTexel, surfaceTexelCoord)) {
                     resolvedRgb = mix(resolvedRgb, vec3<f32>(0.0, 1.0, 1.0), ${SURFACE_CHECKER_OVERLAY_ALPHA.toFixed(8)});
@@ -376,7 +389,7 @@ class TerrainRuntime implements ThreeTerrainApp {
 
                 found = true;
                 bestRank = painterRank;
-                bestColor = vec4<f32>(resolvedRgb, atlasTexel.a);
+                bestColor = vec4<f32>(resolvedRgb, resolvedAlpha);
               }
             }
           }
