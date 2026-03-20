@@ -2,6 +2,7 @@ import React from "react";
 import { startThreeApp, type ThreeTerrainApp } from "../../three/app.ts";
 import { start } from "../game/index.ts";
 import rendererModeStore from "../store/renderer-mode.ts";
+import threeLightingStore from "../store/three-lighting.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useStoreValue } from "./useStore.ts";
 
@@ -29,6 +30,7 @@ type RunningApp = { kind: "phaser"; instance: Phaser.Game } | { kind: "three"; i
 export const Game = () => {
   const rendererMode = useStoreValue(rendererModeStore);
   const timeScale = useStoreValue(timeScaleStore);
+  const threeLighting = useStoreValue(threeLightingStore);
   const appReference = React.useRef<RunningApp | undefined>(undefined);
 
   React.useLayoutEffect(() => {
@@ -74,6 +76,7 @@ export const Game = () => {
           }
 
           app.setPaused(timeScaleStore.get() === 0);
+          app.setLighting(threeLightingStore.get());
           app.resize(host.clientWidth, host.clientHeight);
           appReference.current = { kind: "three", instance: app };
         } catch (error) {
@@ -117,5 +120,13 @@ export const Game = () => {
       runningApp.instance.setPaused(timeScale === 0);
     }
   }, [timeScale]);
+
+  React.useEffect(() => {
+    const runningApp = appReference.current;
+    if (runningApp !== undefined && runningApp.kind === "three") {
+      runningApp.instance.setLighting(threeLighting);
+    }
+  }, [threeLighting]);
+
   return <div id={GAME_DOM_ID}></div>;
 };

@@ -74,19 +74,23 @@ export type TileAtlasRegion = {
 export type BiomeManifestEntry = {
   id: string;
   atlas: string;
+  metadataAtlas: string;
 };
 
 export type BiomeManifest = {
   biomes: BiomeManifestEntry[];
 };
 
-export type ColorAtlasArray = {
+type TerrainAtlasArray = {
   texture: THREE.DataArrayTexture;
   data: Uint8Array<ArrayBuffer>;
   width: number;
   height: number;
   depth: number;
 };
+
+export type ColorAtlasArray = TerrainAtlasArray;
+export type MetadataAtlasArray = TerrainAtlasArray;
 
 export type PackedTerrainTexture = {
   texture: THREE.DataArrayTexture;
@@ -100,6 +104,7 @@ export type TerrainAssetBundle = {
   elevationYOffsetPx: number;
   biomeManifest: BiomeManifest;
   colorAtlas: ColorAtlasArray;
+  metadataAtlas: MetadataAtlasArray;
   packedTerrain: PackedTerrainTexture;
   codec: PackedTerrainCodec;
 };
@@ -272,6 +277,7 @@ export function parseBiomeManifest(value: unknown): BiomeManifest {
     return {
       id: assertString(entry["id"], `Missing biome id at index ${index}`),
       atlas: assertString(entry["atlas"], `Missing biome atlas at index ${index}`),
+      metadataAtlas: assertString(entry["metadataAtlas"], `Missing biome metadata atlas at index ${index}`),
     };
   });
 
@@ -337,32 +343,61 @@ async function loadImagePixels(url: string): Promise<{ data: Uint8Array<ArrayBuf
   };
 }
 
-async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<ColorAtlasArray> {
-  const images = await Promise.all(
-    manifest.biomes.map(async (biome) => {
-      return loadImagePixels(getAssetUrl(`${tilesetName}/${biome.atlas}`));
-    }),
-  );
+type AtlasLayout = {
+  width: number;
+  height: number;
+  depth: number;
+};
 
+export function assertMatchingAtlasArrayLayout(
+  expected: AtlasLayout,
+  actual: AtlasLayout,
+  expectedName: string,
+  actualName: string,
+): void {
+  if (expected.width !== actual.width || expected.height !== actual.height || expected.depth !== actual.depth) {
+    throw new Error(
+      `${actualName} layout mismatch: expected ${expected.width}x${expected.height}x${expected.depth} from ${expectedName}, received ${actual.width}x${actual.height}x${actual.depth}.`,
+    );
+  }
+}
+
+type LoadedAtlasImage = {
+  data: Uint8Array<ArrayBuffer>;
+  width: number;
+  height: number;
+  pathname: string;
+};
+
+function getAtlasLayout(images: LoadedAtlasImage[], label: string): AtlasLayout {
   const firstImage = images[0];
-  if (firstImage === undefined) throw new Error("Biome manifest did not produce any atlas images.");
-  const width = firstImage.width;
-  const height = firstImage.height;
-  const depth = images.length;
+  if (firstImage === undefined) throw new Error(`${label} did not produce any atlas images.`);
+
+  const layout = {
+    width: firstImage.width,
+    height: firstImage.height,
+    depth: images.length,
+  };
 
   for (const [index, image] of images.entries()) {
-    if (image.width !== width || image.height !== height) {
+    if (image.width !== layout.width || image.height !== layout.height) {
       throw new Error(
-        `Biome atlas mismatch at index ${index}: expected ${width}x${height}, received ${image.width}x${image.height}.`,
+        `${label} mismatch at index ${index} (${image.pathname}): expected ${layout.width}x${layout.height}, received ${image.width}x${image.height}.`,
       );
     }
   }
 
-  const data = new Uint8Array(width * height * depth * 4);
-  const layerStride = width * height * 4;
+  return layout;
+}
+
+function createAtlasArray(images: LoadedAtlasImage[], label: string): TerrainAtlasArray {
+  const layout = getAtlasLayout(images, label);
+  const data = new Uint8Array(layout.width * layout.height * layout.depth * 4);
+  const layerStride = layout.width * layout.height * 4;
+
   for (const [index, image] of images.entries()) data.set(image.data, index * layerStride);
 
-  const texture = new THREE.DataArrayTexture(data, width, height, depth);
+  const texture = new THREE.DataArrayTexture(data, layout.width, layout.height, layout.depth);
   texture.format = THREE.RGBAFormat;
   texture.type = THREE.UnsignedByteType;
   texture.colorSpace = THREE.NoColorSpace;
@@ -374,10 +409,35 @@ async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest)
   return {
     texture,
     data,
-    width,
-    height,
-    depth,
+    width: layout.width,
+    height: layout.height,
+    depth: layout.depth,
   };
+}
+
+async function loadAtlasArray(
+  tilesetName: string,
+  manifest: BiomeManifest,
+  selector: (biome: BiomeManifestEntry) => string,
+  label: string,
+): Promise<TerrainAtlasArray> {
+  const images = await Promise.all(
+    manifest.biomes.map(async (biome) => {
+      const pathname = selector(biome);
+      const image = await loadImagePixels(getAssetUrl(`${tilesetName}/${pathname}`));
+      return { ...image, pathname };
+    }),
+  );
+
+  return createAtlasArray(images, label);
+}
+
+async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<ColorAtlasArray> {
+  return loadAtlasArray(tilesetName, manifest, (biome) => biome.atlas, "Biome color atlas");
+}
+
+async function loadMetadataAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<MetadataAtlasArray> {
+  return loadAtlasArray(tilesetName, manifest, (biome) => biome.metadataAtlas, "Biome metadata atlas");
 }
 
 export function encodePackedTerrainTextureData(stack: PackedTerrainStack): Uint8Array<ArrayBuffer> {
@@ -423,7 +483,11 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
   const map = parseTerrainMap(mapJson);
   const biomeManifest = parseBiomeManifest(biomeManifestJson);
   const elevationYOffsetPx = getTilesetNumberProperty(tileset, "elevationYOffsetPx");
-  const colorAtlas = await loadColorAtlasArray(tilesetName, biomeManifest);
+  const [colorAtlas, metadataAtlas] = await Promise.all([
+    loadColorAtlasArray(tilesetName, biomeManifest),
+    loadMetadataAtlasArray(tilesetName, biomeManifest),
+  ]);
+  assertMatchingAtlasArrayLayout(colorAtlas, metadataAtlas, "color atlas", "metadata atlas");
   const codec = createPackedTerrainCodec(map, tileset, elevationYOffsetPx, 0);
   const packedTerrain = createPackedTerrainTexture(codec.stack);
 
@@ -434,6 +498,7 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
     elevationYOffsetPx,
     biomeManifest,
     colorAtlas,
+    metadataAtlas,
     packedTerrain,
     codec,
   };

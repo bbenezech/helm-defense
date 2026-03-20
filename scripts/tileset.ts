@@ -30,9 +30,13 @@ import { log } from "../src/game/lib/log.ts";
 import { getTileset } from "../src/game/lib/tileset.ts";
 import { saveImageDataToImage, savePrettyHeightmap, saveNormalmap, imageToImageData } from "./lib/file.ts";
 import { rasterizeOwnershipFrames } from "./lib/terrain-ownership.ts";
+import { rasterizeMetadataFrames, type RgbaFrame } from "./lib/terrain-metadata.ts";
 
 const __dirname = import.meta.dirname;
 const BLENDER_SCRIPT_NAME = "render_tileset.py";
+const METADATA_ATLAS_FILENAME = "tileset.metadata.png";
+const BIOME_MANIFEST_FILENAME = "biomes.json";
+type GeneratedTileset = ReturnType<typeof getTileset>;
 
 function createTileset(inputDirectory: string, outputDirectory: string, name: string) {
   const tileMargin = 0; // margin around each tile
@@ -42,10 +46,9 @@ function createTileset(inputDirectory: string, outputDirectory: string, name: st
   if (tilecount < 1) throw new Error(`No .png files found in input directory: ${inputDirectory}`);
   if (tilecount !== ORDERED_SLOPES.length)
     throw new Error(`tilecount must be ${ORDERED_SLOPES.length}, got ${tilecount}`);
-  const firstTilePath = path.join(
-    inputDirectory,
-    fs.readdirSync(inputDirectory).find((file) => file.endsWith(".png"))!,
-  );
+  const firstTileName = fs.readdirSync(inputDirectory).find((file) => file.endsWith(".png"));
+  if (firstTileName === undefined) throw new Error(`No .png files found in input directory: ${inputDirectory}`);
+  const firstTilePath = path.join(inputDirectory, firstTileName);
   const tileImage = imageSize(fs.readFileSync(firstTilePath));
   if (tileImage.width % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileImage.width}`);
 
@@ -139,6 +142,105 @@ async function clipFramesToOwnershipMasks(inputDirectory: string) {
   log("nativeExact", startsAt, `Applied ownership masks to ${pngFiles.length} rendered frames`);
 }
 
+function getBiomeId(name: string): string {
+  const biomeIdCandidate = name.split(/[^A-Za-z]+/u)[0];
+  if (biomeIdCandidate === undefined) {
+    throw new Error(`Could not derive a biome id from "${name}".`);
+  }
+  const biomeId = biomeIdCandidate.toLowerCase();
+  if (biomeId.length === 0) {
+    throw new Error(`Could not derive a biome id from "${name}".`);
+  }
+  return biomeId;
+}
+
+function createFrameAtlasImage(
+  frames: RgbaFrame[],
+  tileset: GeneratedTileset,
+): { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number; channels: 4 } {
+  if (frames.length !== tileset.tilecount) {
+    throw new Error(`Metadata frame count mismatch: expected ${tileset.tilecount}, received ${frames.length}.`);
+  }
+
+  const data = new Uint8ClampedArray(tileset.imagewidth * tileset.imageheight * 4);
+
+  for (const [frameIndex, frame] of frames.entries()) {
+    if (frame.width !== tileset.tilewidth || frame.height !== tileset.tileheight) {
+      throw new Error(
+        `Metadata frame ${frameIndex} size mismatch: expected ${tileset.tilewidth}x${tileset.tileheight}, received ${frame.width}x${frame.height}.`,
+      );
+    }
+
+    const column = frameIndex % tileset.columns;
+    const row = Math.floor(frameIndex / tileset.columns);
+    const atlasX = tileset.margin + column * (tileset.tilewidth + tileset.spacing);
+    const atlasY = tileset.margin + row * (tileset.tileheight + tileset.spacing);
+
+    for (let pixelY = 0; pixelY < frame.height; pixelY++) {
+      const sourceOffset = pixelY * frame.width * 4;
+      const targetOffset = ((atlasY + pixelY) * tileset.imagewidth + atlasX) * 4;
+      data.set(frame.data.subarray(sourceOffset, sourceOffset + frame.width * 4), targetOffset);
+    }
+  }
+
+  return {
+    data,
+    width: tileset.imagewidth,
+    height: tileset.imageheight,
+    channels: 4,
+  };
+}
+
+async function writeMetadataAtlas(outputDirectory: string, tileset: GeneratedTileset) {
+  const metadataFrames = rasterizeMetadataFrames();
+  const ownershipFrames = rasterizeOwnershipFrames();
+  if (metadataFrames.length !== ownershipFrames.length) {
+    throw new Error(
+      `Metadata frame ownership mismatch: expected ${metadataFrames.length} ownership frames, received ${ownershipFrames.length}.`,
+    );
+  }
+
+  for (const [frameIndex, metadataFrame] of metadataFrames.entries()) {
+    const ownershipFrame = ownershipFrames[frameIndex];
+    if (ownershipFrame === undefined) throw new Error(`Missing ownership frame ${frameIndex}.`);
+    if (metadataFrame.width !== ownershipFrame.width || metadataFrame.height !== ownershipFrame.height) {
+      throw new Error(
+        `Metadata ownership size mismatch for frame ${frameIndex}: expected ${ownershipFrame.width}x${ownershipFrame.height}, received ${metadataFrame.width}x${metadataFrame.height}.`,
+      );
+    }
+
+    for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+      if (ownershipFrame.coverage[pixelIndex] === 1) continue;
+      const rgbaIndex = pixelIndex * 4;
+      metadataFrame.data[rgbaIndex] = 0;
+      metadataFrame.data[rgbaIndex + 1] = 0;
+      metadataFrame.data[rgbaIndex + 2] = 0;
+      metadataFrame.data[rgbaIndex + 3] = 0;
+    }
+  }
+
+  await saveImageDataToImage(createFrameAtlasImage(metadataFrames, tileset), path.join(outputDirectory, METADATA_ATLAS_FILENAME));
+}
+
+function writeBiomeManifest(outputDirectory: string, tilesetName: string) {
+  fs.writeFileSync(
+    path.join(outputDirectory, BIOME_MANIFEST_FILENAME),
+    JSON.stringify(
+      {
+        biomes: [
+          {
+            id: getBiomeId(tilesetName),
+            atlas: "tileset.png",
+            metadataAtlas: METADATA_ATLAS_FILENAME,
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function generateAssets(
   texture: string,
   blenderBin: string,
@@ -198,6 +300,8 @@ async function generateAssets(
   if (samplingProfile === "nativeExact") await clipFramesToOwnershipMasks(inputDirectory);
 
   const tileset = createTileset(inputDirectory, outputDirectory, name);
+  await writeMetadataAtlas(outputDirectory, tileset);
+  writeBiomeManifest(outputDirectory, name);
   fs.rmSync(inputDirectory, { recursive: true, force: true });
 
   const exampleTilemap = getTilemap(EXAMPLE_TILE_GID_LAYERS, tileset);
@@ -249,7 +353,11 @@ const argv = await yargs(hideBin(process.argv))
   .parse();
 
 const { textures } = argv;
-const samplingProfile = argv["sampling-profile"] as BlenderSamplingProfile;
+const samplingProfileCandidate = argv["sampling-profile"];
+if (!BLENDER_SAMPLING_PROFILES.includes(samplingProfileCandidate)) {
+  throw new Error(`Invalid sampling profile "${samplingProfileCandidate}".`);
+}
+const samplingProfile: BlenderSamplingProfile = samplingProfileCandidate;
 const blenderBin = process.env["BLENDER_BIN"];
 if (!blenderBin) throw new Error(`Blender binary not specified. Set BLENDER_BIN=/path/to/blender`);
 if (!fs.existsSync(blenderBin))

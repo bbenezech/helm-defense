@@ -20,6 +20,13 @@
 - Terrain coverage validation: `bun run validate:terrain-coverage ...`
 - Test suite: `bun run test`
 
+## Terrain Assets
+
+- `bun run tile ...` generates the checked-in terrain asset bundle under `public/<tileset>/`.
+- The bundle now includes `tileset.png` for biome color, `tileset.metadata.png` for world-space geometric normals, and `biomes.json` that points each biome at both atlases.
+- Color tiles are still rendered from Blender frame output and clipped with ownership masks before montage.
+- The metadata atlas is rasterized from the shared terrain scene specification with the same ownership coverage, so the Three renderer can sample per-pixel normals from the winning terrain texel without a separate runtime fallback.
+
 ## Quality Gate
 
 - The repo-level compiler gate is `bun check`, which resolves to `tsgo --build`.
