@@ -380,10 +380,27 @@ async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest)
   };
 }
 
+export function encodePackedTerrainTextureData(stack: PackedTerrainStack): Uint8Array<ArrayBuffer> {
+  const data = new Uint8Array(stack.data.length * 4);
+
+  for (let index = 0; index < stack.data.length; index++) {
+    const word = stack.data[index];
+    if (word === undefined) throw new Error(`Missing packed terrain word at index ${index}.`);
+    const dataOffset = index * 4;
+    data[dataOffset] = word & 0xff;
+    data[dataOffset + 1] = (word >> 8) & 0xff;
+    data[dataOffset + 2] = (word >> 16) & 0xff;
+    data[dataOffset + 3] = (word >>> 24) & 0xff;
+  }
+
+  return data;
+}
+
 function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTexture {
-  const texture = new THREE.DataArrayTexture(stack.data, stack.width, stack.height, stack.slices);
-  texture.format = THREE.RedIntegerFormat;
-  texture.type = THREE.UnsignedIntType;
+  const textureData = encodePackedTerrainTextureData(stack);
+  const texture = new THREE.DataArrayTexture(textureData, stack.width, stack.height, stack.slices);
+  texture.format = THREE.RGBAFormat;
+  texture.type = THREE.UnsignedByteType;
   texture.colorSpace = THREE.NoColorSpace;
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;

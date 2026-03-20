@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAtlasRegion, parseBiomeManifest, parseTerrainMap, parseTerrainTileset } from "../../three/assets.ts";
+import { encodePackedTerrainTextureData, getAtlasRegion, parseBiomeManifest, parseTerrainMap, parseTerrainTileset } from "../../three/assets.ts";
 import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 describe("terrain assets", () => {
@@ -20,5 +20,17 @@ describe("terrain assets", () => {
   it("validates biome manifests", () => {
     expect(parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png" }] }).biomes).toHaveLength(1);
     expect(() => parseBiomeManifest({ biomes: [] })).toThrow(/at least one biome/u);
+  });
+
+  it("packs terrain words into RGBA bytes for WebGPU sampling", () => {
+    const data = encodePackedTerrainTextureData({
+      data: new Uint32Array([0x12_34_56_78, 0x9a_bc_de_f0]),
+      width: 2,
+      height: 1,
+      slices: 8,
+      origin: { x: 0, y: 0 },
+    });
+
+    expect([...data.slice(0, 8)]).toEqual([0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a]);
   });
 });

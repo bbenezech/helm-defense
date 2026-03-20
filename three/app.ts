@@ -1,12 +1,4 @@
 import * as THREE from "three/src/Three.WebGPU.js";
-import {
-  texture,
-  uniform,
-  vec2,
-  vec4,
-  viewportUV,
-  wgslFn,
-} from "three/src/Three.TSL.js";
 import fpsBus from "../src/store/fps.ts";
 import { loadTerrainAssetBundle, type TerrainAssetBundle } from "./assets.ts";
 import type { ResolveHit } from "./codec.ts";
@@ -33,6 +25,7 @@ const SHAPE_REF_MASK = 0b1_1111;
 const BIOME_INDEX_SHIFT = 5;
 const BIOME_INDEX_MASK = 0xff;
 const PAINTER_RANK_SHIFT = 13;
+const { textureLoad, uniform, vec2, vec4, viewportUV, wgslFn } = THREE.TSL;
 
 class UnsupportedWebGPUApp implements ThreeTerrainApp {
   private readonly element: HTMLDivElement;
@@ -124,15 +117,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     const tileHeight = this.bundle.tileset.tileheight;
 
     const resolveTerrain = wgslFn(`
-      fn srgbChannelToLinear(channel: f32) -> f32 {
-        if (channel <= 0.04045) {
-          return channel / 12.92;
-        }
-
-        return pow((channel + 0.055) / 1.055, 2.4);
-      }
-
-      fn resolveTerrain(screen: vec2<f32>, packedMap: texture_2d_array<u32>, atlas: texture_2d_array<f32>) -> vec4<f32> {
+      fn resolveTerrain(screen: vec2<f32>, packedMap: texture_2d_array<f32>, atlas: texture_2d_array<f32>) -> vec4<f32> {
         let pixelX = i32(floor(screen.x));
         let pixelY = i32(floor(screen.y));
         let stripeRight = i32(floor(f32(pixelX) / ${halfTileWidth.toFixed(1)}));
@@ -162,7 +147,12 @@ class TerrainRuntime implements ThreeTerrainApp {
                 continue;
               }
 
-              let word = textureLoad(packedMap, vec2<i32>(textureX, textureY), slice, 0u).x;
+              let packedTexel = textureLoad(packedMap, vec2<i32>(textureX, textureY), slice, 0u);
+              let word =
+                u32(packedTexel.r * 255.0 + 0.5) |
+                (u32(packedTexel.g * 255.0 + 0.5) << 8u) |
+                (u32(packedTexel.b * 255.0 + 0.5) << 16u) |
+                (u32(packedTexel.a * 255.0 + 0.5) << 24u);
               let shapeRef = word & ${SHAPE_REF_MASK}u;
 
               if (shapeRef == 0u) {
@@ -190,14 +180,31 @@ class TerrainRuntime implements ThreeTerrainApp {
               }
 
               if (!found || painterRank > bestRank) {
+                var linearRed = atlasTexel.r;
+                var linearGreen = atlasTexel.g;
+                var linearBlue = atlasTexel.b;
+
+                if (linearRed <= 0.04045) {
+                  linearRed = linearRed / 12.92;
+                } else {
+                  linearRed = pow((linearRed + 0.055) / 1.055, 2.4);
+                }
+
+                if (linearGreen <= 0.04045) {
+                  linearGreen = linearGreen / 12.92;
+                } else {
+                  linearGreen = pow((linearGreen + 0.055) / 1.055, 2.4);
+                }
+
+                if (linearBlue <= 0.04045) {
+                  linearBlue = linearBlue / 12.92;
+                } else {
+                  linearBlue = pow((linearBlue + 0.055) / 1.055, 2.4);
+                }
+
                 found = true;
                 bestRank = painterRank;
-                bestColor = vec4<f32>(
-                  srgbChannelToLinear(atlasTexel.r),
-                  srgbChannelToLinear(atlasTexel.g),
-                  srgbChannelToLinear(atlasTexel.b),
-                  atlasTexel.a
-                );
+                bestColor = vec4<f32>(linearRed, linearGreen, linearBlue, atlasTexel.a);
               }
             }
           }
@@ -212,8 +219,8 @@ class TerrainRuntime implements ThreeTerrainApp {
     );
     const terrainColor = vec4(resolveTerrain({
       screen,
-      packedMap: texture(this.bundle.packedTerrain.texture),
-      atlas: texture(this.bundle.colorAtlas.texture),
+      packedMap: textureLoad(this.bundle.packedTerrain.texture),
+      atlas: textureLoad(this.bundle.colorAtlas.texture),
     }));
 
     material.colorNode = terrainColor.rgb;
