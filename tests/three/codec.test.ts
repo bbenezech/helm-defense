@@ -141,4 +141,21 @@ describe("packed terrain codec", () => {
 
     expect(codec.resolveVisibleTile(atlas, screen.x, screen.y)).toBeNull();
   });
+
+  it("resolves the top row of a tall frame from the tile screen anchor", () => {
+    const tileset = parseTerrainTileset(sampleTileset);
+    const map = createTestMap([0], 2, 2);
+    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (_tileId, _x, y) =>
+      y === 0 ? [255, 255, 255, 255] : [255, 255, 255, 0],
+    );
+    const screen = tileToScreen(map, { x: 2, y: 2 }, { x: 0, y: 0 });
+    const frameTopOffset = sampleTileset.tileheight - map.tileheight;
+    const frameTopScreenY = screen.y - frameTopOffset;
+    const hit = codec.resolveVisibleTile(atlas, screen.x, frameTopScreenY);
+
+    expect(hit).not.toBeNull();
+    if (hit === null) throw new Error("Expected the top frame row to resolve.");
+    expect(hit.rgba).toEqual([255, 255, 255, 255]);
+  });
 });

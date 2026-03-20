@@ -29,16 +29,26 @@ import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.ts";
 import { log } from "../src/game/lib/log.ts";
 import { getTileset } from "../src/game/lib/tileset.ts";
 import { saveImageDataToImage, savePrettyHeightmap, saveNormalmap, imageToImageData } from "./lib/file.ts";
-import { rasterizeOwnershipFrames } from "./lib/terrain-ownership.ts";
-import { rasterizeMetadataFrames, type RgbaFrame } from "./lib/terrain-metadata.ts";
+import { rasterizeCheckerFrames, rasterizeOwnershipFrames } from "./lib/terrain-ownership.ts";
 
 const __dirname = import.meta.dirname;
 const BLENDER_SCRIPT_NAME = "render_tileset.py";
-const METADATA_ATLAS_FILENAME = "tileset.metadata.png";
 const BIOME_MANIFEST_FILENAME = "biomes.json";
-type GeneratedTileset = ReturnType<typeof getTileset>;
+const CHECKER_ATLAS_FILENAME = "tileset.checker.png";
+const CHECKER_ATLAS_CELLS_PER_AXIS = 4;
+const CHECKER_ATLAS_LIGHT = 224;
+const CHECKER_ATLAS_DARK = 80;
+const CHECKER_ATLAS_SIDE = 152;
+const CHECKER_ATLAS_TOP_ALPHA = 255;
+const CHECKER_ATLAS_SIDE_ALPHA = 128;
 
-function createTileset(inputDirectory: string, outputDirectory: string, name: string) {
+function createTileset(
+  inputDirectory: string,
+  outputDirectory: string,
+  name: string,
+  imageFilename: string,
+  writeTilesetDefinition: boolean,
+) {
   const tileMargin = 0; // margin around each tile
   const tilesetMargin = 0; // margin around the whole tileset image
 
@@ -52,7 +62,6 @@ function createTileset(inputDirectory: string, outputDirectory: string, name: st
   const tileImage = imageSize(fs.readFileSync(firstTilePath));
   if (tileImage.width % 8 !== 0) throw new Error(`tileimagewidth must be a multiple of 8, got ${tileImage.width}`);
 
-  const imageFilename = "tileset.png";
   const tileset = getTileset({
     name,
     imageFilename,
@@ -63,7 +72,9 @@ function createTileset(inputDirectory: string, outputDirectory: string, name: st
     tileMargin,
     tilesetMargin,
   });
-  fs.writeFileSync(path.join(outputDirectory, "tileset.json"), JSON.stringify(tileset, null, 2));
+  if (writeTilesetDefinition) {
+    fs.writeFileSync(path.join(outputDirectory, "tileset.json"), JSON.stringify(tileset, null, 2));
+  }
 
   const startsAt = Date.now();
   const imagePath = path.join(outputDirectory, imageFilename);
@@ -154,74 +165,6 @@ function getBiomeId(name: string): string {
   return biomeId;
 }
 
-function createFrameAtlasImage(
-  frames: RgbaFrame[],
-  tileset: GeneratedTileset,
-): { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number; channels: 4 } {
-  if (frames.length !== tileset.tilecount) {
-    throw new Error(`Metadata frame count mismatch: expected ${tileset.tilecount}, received ${frames.length}.`);
-  }
-
-  const data = new Uint8ClampedArray(tileset.imagewidth * tileset.imageheight * 4);
-
-  for (const [frameIndex, frame] of frames.entries()) {
-    if (frame.width !== tileset.tilewidth || frame.height !== tileset.tileheight) {
-      throw new Error(
-        `Metadata frame ${frameIndex} size mismatch: expected ${tileset.tilewidth}x${tileset.tileheight}, received ${frame.width}x${frame.height}.`,
-      );
-    }
-
-    const column = frameIndex % tileset.columns;
-    const row = Math.floor(frameIndex / tileset.columns);
-    const atlasX = tileset.margin + column * (tileset.tilewidth + tileset.spacing);
-    const atlasY = tileset.margin + row * (tileset.tileheight + tileset.spacing);
-
-    for (let pixelY = 0; pixelY < frame.height; pixelY++) {
-      const sourceOffset = pixelY * frame.width * 4;
-      const targetOffset = ((atlasY + pixelY) * tileset.imagewidth + atlasX) * 4;
-      data.set(frame.data.subarray(sourceOffset, sourceOffset + frame.width * 4), targetOffset);
-    }
-  }
-
-  return {
-    data,
-    width: tileset.imagewidth,
-    height: tileset.imageheight,
-    channels: 4,
-  };
-}
-
-async function writeMetadataAtlas(outputDirectory: string, tileset: GeneratedTileset) {
-  const metadataFrames = rasterizeMetadataFrames();
-  const ownershipFrames = rasterizeOwnershipFrames();
-  if (metadataFrames.length !== ownershipFrames.length) {
-    throw new Error(
-      `Metadata frame ownership mismatch: expected ${metadataFrames.length} ownership frames, received ${ownershipFrames.length}.`,
-    );
-  }
-
-  for (const [frameIndex, metadataFrame] of metadataFrames.entries()) {
-    const ownershipFrame = ownershipFrames[frameIndex];
-    if (ownershipFrame === undefined) throw new Error(`Missing ownership frame ${frameIndex}.`);
-    if (metadataFrame.width !== ownershipFrame.width || metadataFrame.height !== ownershipFrame.height) {
-      throw new Error(
-        `Metadata ownership size mismatch for frame ${frameIndex}: expected ${ownershipFrame.width}x${ownershipFrame.height}, received ${metadataFrame.width}x${metadataFrame.height}.`,
-      );
-    }
-
-    for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
-      if (ownershipFrame.coverage[pixelIndex] === 1) continue;
-      const rgbaIndex = pixelIndex * 4;
-      metadataFrame.data[rgbaIndex] = 0;
-      metadataFrame.data[rgbaIndex + 1] = 0;
-      metadataFrame.data[rgbaIndex + 2] = 0;
-      metadataFrame.data[rgbaIndex + 3] = 0;
-    }
-  }
-
-  await saveImageDataToImage(createFrameAtlasImage(metadataFrames, tileset), path.join(outputDirectory, METADATA_ATLAS_FILENAME));
-}
-
 function writeBiomeManifest(outputDirectory: string, tilesetName: string) {
   fs.writeFileSync(
     path.join(outputDirectory, BIOME_MANIFEST_FILENAME),
@@ -231,7 +174,7 @@ function writeBiomeManifest(outputDirectory: string, tilesetName: string) {
           {
             id: getBiomeId(tilesetName),
             atlas: "tileset.png",
-            metadataAtlas: METADATA_ATLAS_FILENAME,
+            checkerAtlas: CHECKER_ATLAS_FILENAME,
           },
         ],
       },
@@ -241,18 +184,13 @@ function writeBiomeManifest(outputDirectory: string, tilesetName: string) {
   );
 }
 
-async function generateAssets(
+function renderTilesetFrames(
   texture: string,
   blenderBin: string,
   blenderScript: string,
   samplingProfile: BlenderSamplingProfile,
+  inputDirectory: string,
 ) {
-  console.log(`\n--- Processing: ${path.basename(texture)} ---`);
-  const name = path.basename(texture, ".png");
-  const outputDirectory = path.resolve(`${path.dirname(texture)}/tilesets/${name}`);
-  const inputDirectory = path.join(__dirname, BLENDER_RENDER_CONTRACT.outputDirectoryName);
-
-  // texture.png is read by Blender from the same directory as the script
   const temporaryLocalBlenderTexture = path.join(__dirname, "texture.png");
   fs.copyFileSync(texture, temporaryLocalBlenderTexture);
 
@@ -288,21 +226,121 @@ async function generateAssets(
   } finally {
     if (fs.existsSync(temporaryLocalBlenderTexture)) fs.unlinkSync(temporaryLocalBlenderTexture);
   }
+}
+
+async function renderTilesetAtlas(
+  texture: string,
+  blenderBin: string,
+  blenderScript: string,
+  samplingProfile: BlenderSamplingProfile,
+  inputDirectory: string,
+  outputDirectory: string,
+  name: string,
+  imageFilename: string,
+  writeTilesetDefinition: boolean,
+) {
+  renderTilesetFrames(texture, blenderBin, blenderScript, samplingProfile, inputDirectory);
 
   if (!fs.existsSync(inputDirectory)) {
     console.error(`Error: Output directory "${inputDirectory}" does not exist.`);
     process.exit(1);
   }
 
-  if (!fs.existsSync(outputDirectory)) fs.mkdirSync(outputDirectory, { recursive: true });
-  fs.copyFileSync(texture, path.join(outputDirectory, "texture.png"));
   if (samplingProfile === "strictPixel") hardenStrictPixelFrameEdges(inputDirectory);
   if (samplingProfile === "nativeExact") await clipFramesToOwnershipMasks(inputDirectory);
 
-  const tileset = createTileset(inputDirectory, outputDirectory, name);
-  await writeMetadataAtlas(outputDirectory, tileset);
-  writeBiomeManifest(outputDirectory, name);
+  const tileset = createTileset(inputDirectory, outputDirectory, name, imageFilename, writeTilesetDefinition);
   fs.rmSync(inputDirectory, { recursive: true, force: true });
+  return tileset;
+}
+
+function createGeneratedAtlasImageData(
+  frames: ReturnType<typeof rasterizeCheckerFrames>,
+  tileset: ReturnType<typeof getTileset>,
+) {
+  if (frames.length !== tileset.tilecount) {
+    throw new Error(`Checker frame count mismatch: expected ${tileset.tilecount}, received ${frames.length}.`);
+  }
+
+  const channels: 4 = 4;
+  const data = new Uint8ClampedArray(tileset.imagewidth * tileset.imageheight * channels);
+
+  for (const [frameIndex, frame] of frames.entries()) {
+    if (frame.channels !== 4) throw new Error(`Checker frame ${frameIndex} must use RGBA channels.`);
+    if (frame.width !== tileset.tilewidth || frame.height !== tileset.tileheight) {
+      throw new Error(
+        `Checker frame ${frameIndex} size mismatch: expected ${tileset.tilewidth}x${tileset.tileheight}, received ${frame.width}x${frame.height}.`,
+      );
+    }
+
+    const column = frameIndex % tileset.columns;
+    const row = Math.floor(frameIndex / tileset.columns);
+    const atlasOffsetX = tileset.margin + column * (tileset.tilewidth + tileset.spacing);
+    const atlasOffsetY = tileset.margin + row * (tileset.tileheight + tileset.spacing);
+
+    for (let y = 0; y < frame.height; y++) {
+      for (let x = 0; x < frame.width; x++) {
+        const frameOffset = (y * frame.width + x) * channels;
+        const atlasOffset = ((atlasOffsetY + y) * tileset.imagewidth + atlasOffsetX + x) * channels;
+        data[atlasOffset] = frame.data[frameOffset];
+        data[atlasOffset + 1] = frame.data[frameOffset + 1];
+        data[atlasOffset + 2] = frame.data[frameOffset + 2];
+        data[atlasOffset + 3] = frame.data[frameOffset + 3];
+      }
+    }
+  }
+
+  return {
+    width: tileset.imagewidth,
+    height: tileset.imageheight,
+    channels,
+    data,
+  };
+}
+
+async function writeCheckerAtlas(outputDirectory: string, tileset: ReturnType<typeof getTileset>) {
+  const precision = tileset.tilewidth / 8;
+  const frames = rasterizeCheckerFrames({
+    precision,
+    cellsPerAxis: CHECKER_ATLAS_CELLS_PER_AXIS,
+    lightValue: CHECKER_ATLAS_LIGHT,
+    darkValue: CHECKER_ATLAS_DARK,
+    sideValue: CHECKER_ATLAS_SIDE,
+    topAlphaValue: CHECKER_ATLAS_TOP_ALPHA,
+    sideAlphaValue: CHECKER_ATLAS_SIDE_ALPHA,
+  });
+  const atlasImageData = createGeneratedAtlasImageData(frames, tileset);
+  await saveImageDataToImage(atlasImageData, path.join(outputDirectory, CHECKER_ATLAS_FILENAME));
+}
+
+async function generateAssets(
+  texture: string,
+  blenderBin: string,
+  blenderScript: string,
+  samplingProfile: BlenderSamplingProfile,
+) {
+  console.log(`\n--- Processing: ${path.basename(texture)} ---`);
+  const name = path.basename(texture, ".png");
+  const outputDirectory = path.resolve(`${path.dirname(texture)}/tilesets/${name}`);
+  const inputDirectory = path.join(__dirname, BLENDER_RENDER_CONTRACT.outputDirectoryName);
+
+  if (!fs.existsSync(outputDirectory)) fs.mkdirSync(outputDirectory, { recursive: true });
+  fs.copyFileSync(texture, path.join(outputDirectory, "texture.png"));
+  const textureBuffer = await imageToImageData(texture);
+
+  const tileset = await renderTilesetAtlas(
+    texture,
+    blenderBin,
+    blenderScript,
+    samplingProfile,
+    inputDirectory,
+    outputDirectory,
+    name,
+    "tileset.png",
+    true,
+  );
+  await writeCheckerAtlas(outputDirectory, tileset);
+  writeBiomeManifest(outputDirectory, name);
 
   const exampleTilemap = getTilemap(EXAMPLE_TILE_GID_LAYERS, tileset);
   fs.writeFileSync(path.join(outputDirectory, "example.map.json"), JSON.stringify(exampleTilemap));
@@ -320,7 +358,6 @@ async function generateAssets(
   await saveNormalmap(randomMapMetadata.normalmap, path.join(outputDirectory, `random.normalmap.png`));
   const softNormalmap = fastBoxBlurVectors(randomMapMetadata.normalmap, 10, 3, false);
   await saveNormalmap(softNormalmap, path.join(outputDirectory, `random.soft.normalmap.png`));
-  const textureBuffer = await imageToImageData(texture);
   const textureHeightmap = fastBoxBlur(extractHeightmapFromTextureImageData(textureBuffer), 10, 3, false);
   await savePrettyHeightmap(textureHeightmap, path.join(outputDirectory, `texture.heightmap.png`));
   const textureHeightmapToroidal = fastBoxBlur(extractHeightmapFromTextureImageData(textureBuffer), 10, 3, true);

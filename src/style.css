@@ -102,3 +102,26 @@ body {
   cursor: pointer;
   width: 100%;
 }
+
+.hud-button-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.hud-button {
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 0, 0.35);
+  color: yellow;
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: bold;
+  padding: 6px 8px;
+}
+
+.hud-button[data-active="true"] {
+  background: rgba(255, 255, 0, 0.18);
+  border-color: rgba(255, 255, 0, 0.8);
+}

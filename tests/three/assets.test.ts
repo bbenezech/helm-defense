@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { packTerrain, tileDataToTerrain, tileableHeightmapToTileData } from "../../src/game/lib/terrain.ts";
 import {
-  assertMatchingAtlasArrayLayout,
   encodePackedTerrainTextureData,
   getAtlasRegion,
   loadTerrainAssetBundle,
   parseBiomeManifest,
   parseTerrainMap,
   parseTerrainTileset,
+  parseTileableHeightmap,
 } from "../../three/assets.ts";
-import { sampleMap, sampleTileset } from "./fixtures.ts";
+import { sampleMap, sampleTileableHeightmap, sampleTileset } from "./fixtures.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -59,23 +60,18 @@ describe("terrain assets", () => {
 
   it("validates biome manifests", () => {
     expect(
-      parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png", metadataAtlas: "tileset.metadata.png" }] }).biomes,
+      parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png", checkerAtlas: "tileset.checker.png" }] }).biomes,
     ).toHaveLength(1);
     expect(() => parseBiomeManifest({ biomes: [] })).toThrow(/at least one biome/u);
+    expect(() => parseBiomeManifest({ biomes: [{ id: "grass" }] })).toThrow(/biome atlas/u);
     expect(() => parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png" }] })).toThrow(
-      /metadata atlas/u,
+      /checker atlas/u,
     );
   });
 
-  it("rejects mismatched metadata atlas layouts", () => {
-    expect(() =>
-      assertMatchingAtlasArrayLayout(
-        { width: 128, height: 96, depth: 1 },
-        { width: 128, height: 95, depth: 1 },
-        "color atlas",
-        "metadata atlas",
-      ),
-    ).toThrow(/layout mismatch/u);
+  it("validates tileable heightmaps", () => {
+    expect(parseTileableHeightmap(sampleTileableHeightmap)).toEqual(sampleTileableHeightmap);
+    expect(() => parseTileableHeightmap([[0, 1], [0]])).toThrow(/width mismatch/u);
   });
 
   it("packs terrain words into RGBA bytes for WebGPU sampling", () => {
@@ -90,14 +86,17 @@ describe("terrain assets", () => {
     expect([...data.slice(0, 8)]).toEqual([0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a]);
   });
 
-  it("loads metadata atlas payloads into the terrain bundle", async () => {
+  it("loads terrain surface payloads into the terrain bundle", async () => {
     const imageAssets = new Map<string, { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }>([
       ["/Grass_23-512x512/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 10, 20, 30, 255) }],
       [
-        "/Grass_23-512x512/tileset.metadata.png",
-        { width: 2, height: 2, data: createSolidImageData(2, 2, 128, 128, 255, 255) },
+        "/Grass_23-512x512/tileset.checker.png",
+        { width: 2, height: 2, data: createSolidImageData(2, 2, 220, 220, 220, 255) },
       ],
     ]);
+    const expectedSurface = packTerrain(
+      tileDataToTerrain(tileableHeightmapToTileData(sampleTileableHeightmap), sampleTileset.tilewidth / 8),
+    );
 
     class MockImage {
       decoding = "async";
@@ -164,11 +163,14 @@ describe("terrain assets", () => {
         const pathname = new URL(url).pathname;
         if (pathname.endsWith("/tileset.json")) return { ok: true, json: async () => sampleTileset };
         if (pathname.endsWith("/random.map.json")) return { ok: true, json: async () => sampleMap };
+        if (pathname.endsWith("/random.tileableHeightmap.json")) {
+          return { ok: true, json: async () => sampleTileableHeightmap };
+        }
         if (pathname.endsWith("/biomes.json")) {
           return {
             ok: true,
             json: async () => ({
-              biomes: [{ id: "grass", atlas: "tileset.png", metadataAtlas: "tileset.metadata.png" }],
+              biomes: [{ id: "grass", atlas: "tileset.png", checkerAtlas: "tileset.checker.png" }],
             }),
           };
         }
@@ -181,11 +183,17 @@ describe("terrain assets", () => {
 
     const firstBiome = bundle.biomeManifest.biomes[0];
     if (firstBiome === undefined) throw new Error("Expected a biome entry in the loaded terrain bundle.");
-    expect(firstBiome.metadataAtlas).toBe("tileset.metadata.png");
-    expect(bundle.metadataAtlas.width).toBe(2);
-    expect(bundle.metadataAtlas.height).toBe(2);
-    expect(bundle.metadataAtlas.depth).toBe(1);
-    expect(bundle.metadataAtlas.data[0]).toBe(128);
-    expect(bundle.metadataAtlas.data[2]).toBe(255);
+    expect(firstBiome.atlas).toBe("tileset.png");
+    expect(firstBiome.checkerAtlas).toBe("tileset.checker.png");
+    expect(bundle.checkerAtlas.width).toBe(2);
+    expect(bundle.checkerAtlas.height).toBe(2);
+    expect(bundle.checkerAtlas.depth).toBe(1);
+    expect([...bundle.checkerAtlas.data]).toEqual([...createSolidImageData(2, 2, 220, 220, 220, 255)]);
+    expect(bundle.surface.width).toBe(expectedSurface.imageData.width);
+    expect(bundle.surface.height).toBe(expectedSurface.imageData.height);
+    expect(bundle.surface.precision).toBe(expectedSurface.precision);
+    expect(bundle.surface.minHeight).toBe(expectedSurface.minHeight);
+    expect(bundle.surface.maxHeight).toBe(expectedSurface.maxHeight);
+    expect([...bundle.surface.data]).toEqual([...expectedSurface.imageData.data]);
   });
 });

@@ -2,6 +2,8 @@ import React from "react";
 import scoreStore from "../store/score.ts";
 import fpsBus from "../store/fps.ts";
 import rendererModeStore from "../store/renderer-mode.ts";
+import threeDebugSurfaceGridStore from "../store/three-debug-surface-grid.ts";
+import threeDebugViewStore from "../store/three-debug-view.ts";
 import threeLightingStore from "../store/three-lighting.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useBusValue, useStoreValue } from "./useStore.ts";
@@ -11,7 +13,9 @@ export function App() {
   const fsp = useBusValue(fpsBus);
   const score = useStoreValue(scoreStore);
   const rendererMode = useStoreValue(rendererModeStore);
+  const threeDebugSurfaceGrid = useStoreValue(threeDebugSurfaceGridStore);
   const timeScale = useStoreValue(timeScaleStore);
+  const threeDebugView = useStoreValue(threeDebugViewStore);
   const threeLighting = useStoreValue(threeLightingStore);
 
   return (
@@ -39,6 +43,50 @@ export function App() {
           </div>
           {rendererMode === "three" ? (
             <div className="hud-controls">
+              <div className="hud-slider">
+                <span>Debug View {threeDebugView === "terrain" ? "Terrain" : "Checker Compare"}</span>
+                <div className="hud-button-row">
+                  <button
+                    type="button"
+                    className="hud-button"
+                    data-active={threeDebugView === "terrain"}
+                    onClick={() => threeDebugViewStore.set("terrain")}
+                  >
+                    Terrain
+                  </button>
+                  <button
+                    type="button"
+                    className="hud-button"
+                    data-active={threeDebugView === "checker-compare"}
+                    onClick={() => threeDebugViewStore.set("checker-compare")}
+                  >
+                    Checker Compare
+                  </button>
+                </div>
+              </div>
+              {threeDebugView === "checker-compare" ? (
+                <div className="hud-slider">
+                  <span>Cyan Diff {threeDebugSurfaceGrid ? "On" : "Off"}</span>
+                  <div className="hud-button-row">
+                    <button
+                      type="button"
+                      className="hud-button"
+                      data-active={threeDebugSurfaceGrid}
+                      onClick={() => threeDebugSurfaceGridStore.set(true)}
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      className="hud-button"
+                      data-active={!threeDebugSurfaceGrid}
+                      onClick={() => threeDebugSurfaceGridStore.set(false)}
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <label className="hud-slider">
                 <span>Sun Azimuth {Math.round(threeLighting.sunAzimuthDeg)}°</span>
                 <input

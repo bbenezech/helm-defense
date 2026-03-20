@@ -1,6 +1,6 @@
 import * as THREE from "three/src/Three.WebGPU.js";
 import fpsBus from "../src/store/fps.ts";
-import { loadTerrainAssetBundle, type TerrainAssetBundle } from "./assets.ts";
+import { loadTerrainAssetBundle, type TerrainAssetBundle, type TerrainMap } from "./assets.ts";
 import type { ResolveHit } from "./codec.ts";
 import {
   clampCameraCenter,
@@ -10,20 +10,21 @@ import {
   resizeCameraState,
   screenPointToWorld,
   type CameraState,
+  type Point2,
   type Viewport,
 } from "./projection.ts";
 
-export type ThreeLightingSettings = {
-  sunAzimuthDeg: number;
-  sunElevationDeg: number;
-  ambient: number;
-};
+export type ThreeLightingSettings = { sunAzimuthDeg: number; sunElevationDeg: number; ambient: number };
+
+export type ThreeDebugView = "terrain" | "checker-compare";
 
 export type ThreeTerrainApp = {
   destroy: () => void;
   resize: (width: number, height: number) => void;
   setPaused: (paused: boolean) => void;
   setLighting: (settings: ThreeLightingSettings) => void;
+  setDebugView: (view: ThreeDebugView) => void;
+  setDebugSurfaceGridVisible: (visible: boolean) => void;
 };
 
 const CAMERA_Z = 1000;
@@ -33,11 +34,15 @@ const BIOME_INDEX_SHIFT = 5;
 const BIOME_INDEX_MASK = 0xff;
 const PAINTER_RANK_SHIFT = 13;
 const { textureLoad, uniform, vec2, vec4, viewportUV, wgslFn } = THREE.TSL;
+const SURFACE_GROUND_SEARCH_ITERATIONS = 16;
+const CHECKER_CELLS_PER_TILE = 4;
+const SURFACE_CHECKER_OVERLAY_ALPHA = 0.7;
 const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1.0, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
   (Math.atan2(DEFAULT_SUN_DIRECTION.z, Math.hypot(DEFAULT_SUN_DIRECTION.x, DEFAULT_SUN_DIRECTION.y)) * 180) / Math.PI;
 
+export const DEFAULT_THREE_DEBUG_VIEW: ThreeDebugView = "terrain";
 export const DEFAULT_THREE_LIGHTING_SETTINGS: ThreeLightingSettings = {
   sunAzimuthDeg: DEFAULT_SUN_AZIMUTH_DEG,
   sunElevationDeg: DEFAULT_SUN_ELEVATION_DEG,
@@ -57,15 +62,113 @@ export function getSunDirectionVector(settings: ThreeLightingSettings): THREE.Ve
   return sunDirection.normalize();
 }
 
-export function decodeMetadataNormal(red: number, green: number, blue: number): THREE.Vector3 {
+export function decodeSurfaceNormal(red: number, green: number, blue: number): THREE.Vector3 {
   const normal = new THREE.Vector3(red * 2 - 1, green * 2 - 1, blue * 2 - 1);
-  if (normal.lengthSq() === 0) throw new Error("Metadata normal texel must decode to a non-zero vector.");
+  if (normal.lengthSq() === 0) return new THREE.Vector3(0, 0, 1);
+  normal.normalize();
+  normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4);
   return normal.normalize();
+}
+
+export function decodeSurfaceHeight(alpha: number, minHeight: number, maxHeight: number): number {
+  return alpha * (maxHeight - minHeight) + minHeight;
+}
+
+function getCheckerCellSize(size: number): number {
+  if (size <= 0) throw new Error(`Checker size must be greater than zero, received ${size}.`);
+  return size / CHECKER_CELLS_PER_TILE;
+}
+
+export function getSurfaceCheckerCellSize(precision: number): number {
+  const cellSize = getCheckerCellSize(precision);
+  if (!Number.isInteger(cellSize)) {
+    throw new Error(`Surface checker cell size must be an integer, received ${cellSize} from precision ${precision}.`);
+  }
+  return cellSize;
+}
+
+export function getSurfaceCheckerParity(surfaceTexelX: number, surfaceTexelY: number, precision: number): 0 | 1 {
+  const cellSize = getSurfaceCheckerCellSize(precision);
+  const checkerX = Math.floor(surfaceTexelX / cellSize);
+  const checkerY = Math.floor(surfaceTexelY / cellSize);
+  return (checkerX + checkerY) % 2 === 0 ? 0 : 1;
+}
+
+export function getCheckerAtlasParity(checkerChannel: number): 0 | 1 {
+  return checkerChannel >= 0.5 ? 0 : 1;
+}
+
+export function isSurfaceCheckerMismatch(
+  checkerChannel: number,
+  surfaceTexelX: number,
+  surfaceTexelY: number,
+  precision: number,
+): boolean {
+  return getCheckerAtlasParity(checkerChannel) !== getSurfaceCheckerParity(surfaceTexelX, surfaceTexelY, precision);
+}
+
+export function getMapUvForScreenPoint(screen: Point2, map: TerrainMap): Point2 {
+  const halfTileWidthInv = 2 / map.tilewidth;
+  const halfTileHeightInv = 2 / map.tileheight;
+
+  return {
+    x: ((screen.x * halfTileWidthInv + screen.y * halfTileHeightInv) * 0.5 - 1) / map.width,
+    y: ((screen.y * halfTileHeightInv - screen.x * halfTileWidthInv) * 0.5) / map.height,
+  };
+}
+
+export function getSurfaceHeightImpactOnScreenY(mapTileHeight: number, precision: number): number {
+  if (mapTileHeight <= 0) {
+    throw new Error(`Terrain map tile height must be greater than zero, received ${mapTileHeight}.`);
+  }
+  if (precision <= 0) {
+    throw new Error(`Terrain surface precision must be greater than zero, received ${precision}.`);
+  }
+  return ((5 / 4) * mapTileHeight) / precision;
+}
+
+export function solveSurfaceGroundY(
+  screenY: number,
+  minHeight: number,
+  maxHeight: number,
+  surfaceHeightImpactOnScreenY: number,
+  sampleHeightAtGroundY: (groundY: number) => number,
+  iterations = SURFACE_GROUND_SEARCH_ITERATIONS,
+): number {
+  let minY = screenY;
+  let maxY = screenY + (maxHeight - minHeight) * surfaceHeightImpactOnScreenY;
+
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    const groundY = (minY + maxY) * 0.5;
+    const height = sampleHeightAtGroundY(groundY);
+    const occlusionPoint = groundY - height * surfaceHeightImpactOnScreenY;
+
+    if (occlusionPoint >= screenY) {
+      maxY = groundY;
+    } else {
+      minY = groundY;
+    }
+  }
+
+  return (minY + maxY) * 0.5;
 }
 
 export function getTerrainShade(normal: THREE.Vector3, sunDirection: THREE.Vector3, ambient: number): number {
   const diffuse = Math.max(normal.dot(sunDirection), 0);
   return ambient + (1 - ambient) * diffuse;
+}
+
+function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
+  switch (view) {
+    case "terrain":
+      return 0;
+    case "checker-compare":
+      return 1;
+    default: {
+      const exhaustiveView: never = view;
+      throw new Error(`Unexpected Three debug view "${exhaustiveView}".`);
+    }
+  }
 }
 
 class UnsupportedWebGPUApp implements ThreeTerrainApp {
@@ -89,6 +192,10 @@ class UnsupportedWebGPUApp implements ThreeTerrainApp {
   setPaused(_paused: boolean) {}
 
   setLighting(_settings: ThreeLightingSettings) {}
+
+  setDebugView(_view: ThreeDebugView) {}
+
+  setDebugSurfaceGridVisible(_visible: boolean) {}
 }
 
 class TerrainRuntime implements ThreeTerrainApp {
@@ -106,6 +213,8 @@ class TerrainRuntime implements ThreeTerrainApp {
   private readonly cameraViewSizeUniform = uniform(new THREE.Vector2());
   private readonly sunDirectionUniform = uniform(getSunDirectionVector(DEFAULT_THREE_LIGHTING_SETTINGS));
   private readonly ambientUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.ambient);
+  private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
+  private readonly debugSurfaceGridUniform = uniform(1);
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly cleanups: Array<() => void> = [];
   private paused = false;
@@ -148,6 +257,8 @@ class TerrainRuntime implements ThreeTerrainApp {
     const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false });
     const halfTileWidth = this.bundle.map.tilewidth * 0.5;
     const halfTileHeight = this.bundle.map.tileheight * 0.5;
+    const mapWidth = this.bundle.map.width;
+    const mapHeight = this.bundle.map.height;
     const frameTopOffset = this.bundle.tileset.tileheight - this.bundle.map.tileheight;
     const elevationStep = this.bundle.elevationYOffsetPx;
     const packedOriginX = this.bundle.packedTerrain.stack.origin.x;
@@ -157,21 +268,40 @@ class TerrainRuntime implements ThreeTerrainApp {
     const columns = this.bundle.tileset.columns;
     const spacing = this.bundle.tileset.spacing;
     const margin = this.bundle.tileset.margin;
-    const tileWidth = this.bundle.tileset.tilewidth;
-    const tileHeight = this.bundle.tileset.tileheight;
+    const atlasTileWidth = this.bundle.tileset.tilewidth;
+    const atlasTileHeight = this.bundle.tileset.tileheight;
+    const surfaceWidth = this.bundle.surface.width;
+    const surfaceHeight = this.bundle.surface.height;
+    const surfaceMinHeight = this.bundle.surface.minHeight;
+    const surfaceMaxHeight = this.bundle.surface.maxHeight;
+    const surfaceHeightImpactOnScreenY = getSurfaceHeightImpactOnScreenY(
+      this.bundle.map.tileheight,
+      this.bundle.surface.precision,
+    );
+    const surfaceCheckerCellSize = getSurfaceCheckerCellSize(this.bundle.surface.precision);
 
     const resolveTerrain = wgslFn(`
       fn resolveTerrain(
         screen: vec2<f32>,
         packedMap: texture_2d_array<f32>,
         atlas: texture_2d_array<f32>,
-        metadataAtlas: texture_2d_array<f32>,
+        checkerAtlas: texture_2d_array<f32>,
+        surface: texture_2d<f32>,
         sunDirection: vec3<f32>,
         ambient: f32,
+        debugView: f32,
+        debugSurfaceGrid: f32,
       ) -> vec4<f32> {
         let pixelX = i32(floor(screen.x));
         let pixelY = i32(floor(screen.y));
         let stripeRight = i32(floor(f32(pixelX) / ${halfTileWidth.toFixed(1)}));
+        let groundY = solveGroundScreenY(screen, surface);
+        let surfaceMapUV = worldToMapUV(vec2<f32>(screen.x, groundY));
+        let surfaceTexelCoord = getSurfaceTexelCoord(surfaceMapUV);
+        let surfaceTexel = averageSurfaceSamples(surface, surfaceMapUV);
+        let surfaceNormal = decodeSurfaceNormal(surfaceTexel);
+        let diffuse = max(dot(surfaceNormal, sunDirection), 0.0);
+        let shade = ambient + (1.0 - ambient) * diffuse;
         var bestColor = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         var bestRank = 0u;
         var found = false;
@@ -180,7 +310,9 @@ class TerrainRuntime implements ThreeTerrainApp {
           let d = stripeRight + stripeIndex - 1;
 
           for (var slice = 0; slice < 8; slice++) {
-            let baseS = i32(floor(f32(pixelY + ${frameTopOffset} + slice * ${elevationStep}) / ${halfTileHeight.toFixed(1)}));
+            let baseS = i32(
+              floor((f32(pixelY) - ${halfTileHeight.toFixed(1)} + f32(${frameTopOffset} + slice * ${elevationStep})) / ${halfTileHeight.toFixed(1)}),
+            );
 
             for (var delta = 0; delta < 3; delta++) {
               let s = baseS - delta;
@@ -198,7 +330,7 @@ class TerrainRuntime implements ThreeTerrainApp {
                 continue;
               }
 
-              let packedTexel = textureLoad(packedMap, vec2<i32>(textureX, textureY), slice, 0u);
+              let packedTexel = textureLoad(packedMap, vec2<i32>(textureX, textureY), slice, 0);
               let word =
                 u32(packedTexel.r * 255.0 + 0.5) |
                 (u32(packedTexel.g * 255.0 + 0.5) << 8u) |
@@ -214,53 +346,37 @@ class TerrainRuntime implements ThreeTerrainApp {
               let painterRank = word >> ${PAINTER_RANK_SHIFT}u;
               let tileId = i32(shapeRef) - 1;
               let localX = pixelX - d * ${halfTileWidth};
-              let localY = pixelY - (s * ${halfTileHeight} - ${frameTopOffset} - slice * ${elevationStep});
+              let localY = pixelY - (s * ${halfTileHeight} + ${halfTileHeight} - ${frameTopOffset} - slice * ${elevationStep});
 
-              if (localX < 0 || localY < 0 || localX >= ${tileWidth} || localY >= ${tileHeight}) {
+              if (localX < 0 || localY < 0 || localX >= ${atlasTileWidth} || localY >= ${atlasTileHeight}) {
                 continue;
               }
 
               let column = tileId % ${columns};
               let row = tileId / ${columns};
-              let atlasX = ${margin} + column * ${tileWidth + spacing} + localX;
-              let atlasY = ${margin} + row * ${tileHeight + spacing} + localY;
-              let atlasTexel = textureLoad(atlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0u);
-              let metadataTexel = textureLoad(metadataAtlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0u);
+              let atlasX = ${margin} + column * ${atlasTileWidth + spacing} + localX;
+              let atlasY = ${margin} + row * ${atlasTileHeight + spacing} + localY;
+              let atlasTexel = textureLoad(atlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
 
               if (atlasTexel.a <= 0.0) {
                 continue;
               }
 
               if (!found || painterRank > bestRank) {
-                var linearRed = atlasTexel.r;
-                var linearGreen = atlasTexel.g;
-                var linearBlue = atlasTexel.b;
+                var resolvedRgb = decodeTerrainColor(atlasTexel) * shade;
 
-                if (linearRed <= 0.04045) {
-                  linearRed = linearRed / 12.92;
-                } else {
-                  linearRed = pow((linearRed + 0.055) / 1.055, 2.4);
+                if (debugView >= 0.5) {
+                  let checkerAtlasTexel = textureLoad(checkerAtlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
+                  resolvedRgb = decodeTerrainColor(checkerAtlasTexel) * shade;
+
+                  if (debugSurfaceGrid >= 0.5 && checkerAtlasTexel.a > 0.75 && isSurfaceCheckerMismatch(checkerAtlasTexel, surfaceTexelCoord)) {
+                    resolvedRgb = mix(resolvedRgb, vec3<f32>(0.0, 1.0, 1.0), ${SURFACE_CHECKER_OVERLAY_ALPHA.toFixed(8)});
+                  }
                 }
-
-                if (linearGreen <= 0.04045) {
-                  linearGreen = linearGreen / 12.92;
-                } else {
-                  linearGreen = pow((linearGreen + 0.055) / 1.055, 2.4);
-                }
-
-                if (linearBlue <= 0.04045) {
-                  linearBlue = linearBlue / 12.92;
-                } else {
-                  linearBlue = pow((linearBlue + 0.055) / 1.055, 2.4);
-                }
-
-                let surfaceNormal = normalize(metadataTexel.rgb * 2.0 - vec3<f32>(1.0, 1.0, 1.0));
-                let diffuse = max(dot(surfaceNormal, sunDirection), 0.0);
-                let shade = ambient + (1.0 - ambient) * diffuse;
 
                 found = true;
                 bestRank = painterRank;
-                bestColor = vec4<f32>(vec3<f32>(linearRed, linearGreen, linearBlue) * shade, atlasTexel.a);
+                bestColor = vec4<f32>(resolvedRgb, atlasTexel.a);
               }
             }
           }
@@ -268,19 +384,161 @@ class TerrainRuntime implements ThreeTerrainApp {
 
         return bestColor;
       }
+
+      fn worldToMapUV(world: vec2<f32>) -> vec2<f32> {
+        let halfTileWidthInv = ${(2 / this.bundle.map.tilewidth).toFixed(8)};
+        let halfTileHeightInv = ${(2 / this.bundle.map.tileheight).toFixed(8)};
+        let tileX = (world.x * halfTileWidthInv + world.y * halfTileHeightInv) * 0.5 - 1.0;
+        let tileY = (world.y * halfTileHeightInv - world.x * halfTileWidthInv) * 0.5;
+        return vec2<f32>(tileX / ${mapWidth.toFixed(1)}, tileY / ${mapHeight.toFixed(1)});
+      }
+
+      fn getSurfaceTexelPosition(mapUV: vec2<f32>) -> vec2<f32> {
+        let clampedMapUV = clamp(mapUV, vec2<f32>(0.0, 0.0), vec2<f32>(0.999999, 0.999999));
+        return vec2<f32>(clampedMapUV.x * ${surfaceWidth.toFixed(1)}, clampedMapUV.y * ${surfaceHeight.toFixed(1)});
+      }
+
+      fn getSurfaceTexelCoord(mapUV: vec2<f32>) -> vec2<i32> {
+        let surfaceTexelPosition = getSurfaceTexelPosition(mapUV);
+        let texelX = i32(floor(surfaceTexelPosition.x));
+        let texelY = i32(floor(surfaceTexelPosition.y));
+        return vec2<i32>(texelX, texelY);
+      }
+
+      fn sampleSurface(surface: texture_2d<f32>, surfaceTexelCoord: vec2<i32>) -> vec4<f32> {
+        return textureLoad(surface, surfaceTexelCoord, 0);
+      }
+
+      fn sampleSurfaceLinear(surface: texture_2d<f32>, mapUV: vec2<f32>) -> vec4<f32> {
+        let clampedMapUV = clamp(mapUV, vec2<f32>(0.0, 0.0), vec2<f32>(0.999999, 0.999999));
+        let texelPosition =
+          clampedMapUV * vec2<f32>(${surfaceWidth.toFixed(1)}, ${surfaceHeight.toFixed(1)}) - vec2<f32>(0.5, 0.5);
+        let baseX = i32(floor(texelPosition.x));
+        let baseY = i32(floor(texelPosition.y));
+        let frac = fract(texelPosition);
+        let x0 = clamp(baseX, 0, ${surfaceWidth - 1});
+        let y0 = clamp(baseY, 0, ${surfaceHeight - 1});
+        let x1 = clamp(baseX + 1, 0, ${surfaceWidth - 1});
+        let y1 = clamp(baseY + 1, 0, ${surfaceHeight - 1});
+        let surface00 = sampleSurface(surface, vec2<i32>(x0, y0));
+        let surface10 = sampleSurface(surface, vec2<i32>(x1, y0));
+        let surface01 = sampleSurface(surface, vec2<i32>(x0, y1));
+        let surface11 = sampleSurface(surface, vec2<i32>(x1, y1));
+        let surfaceTop = mix(surface00, surface10, frac.x);
+        let surfaceBottom = mix(surface01, surface11, frac.x);
+        return mix(surfaceTop, surfaceBottom, frac.y);
+      }
+
+      fn averageSurfaceSamples(surface: texture_2d<f32>, mapUV: vec2<f32>) -> vec4<f32> {
+        let sampleOffset = vec2<f32>(${(0.5 / surfaceWidth).toFixed(8)}, ${(0.5 / surfaceHeight).toFixed(8)});
+        let surfaceNorth = sampleSurfaceLinear(surface, mapUV + vec2<f32>(0.0, sampleOffset.y));
+        let surfaceSouth = sampleSurfaceLinear(surface, mapUV - vec2<f32>(0.0, sampleOffset.y));
+        let surfaceEast = sampleSurfaceLinear(surface, mapUV + vec2<f32>(sampleOffset.x, 0.0));
+        let surfaceWest = sampleSurfaceLinear(surface, mapUV - vec2<f32>(sampleOffset.x, 0.0));
+        return (surfaceNorth + surfaceSouth + surfaceEast + surfaceWest) * 0.25;
+      }
+
+      fn decodeSurfaceHeight(surfaceTexel: vec4<f32>) -> f32 {
+        return surfaceTexel.a * ${(surfaceMaxHeight - surfaceMinHeight).toFixed(8)} + ${surfaceMinHeight.toFixed(8)};
+      }
+
+      fn decodeSurfaceNormal(surfaceTexel: vec4<f32>) -> vec3<f32> {
+        let rotation45Cos = ${Math.SQRT1_2.toFixed(8)};
+        let rotation45Sin = ${Math.SQRT1_2.toFixed(8)};
+        let packedNormal = surfaceTexel.rgb * 2.0 - vec3<f32>(1.0, 1.0, 1.0);
+        let packedNormalLengthSq = dot(packedNormal, packedNormal);
+
+        if (packedNormalLengthSq <= 0.000001) {
+          return vec3<f32>(0.0, 0.0, 1.0);
+        }
+
+        let normalizedPackedNormal = normalize(packedNormal);
+        let rotatedNormal = vec3<f32>(
+          rotation45Cos * normalizedPackedNormal.x - rotation45Sin * normalizedPackedNormal.y,
+          rotation45Sin * normalizedPackedNormal.x + rotation45Cos * normalizedPackedNormal.y,
+          normalizedPackedNormal.z,
+        );
+        return normalize(rotatedNormal);
+      }
+
+      fn decodeTerrainColor(atlasTexel: vec4<f32>) -> vec3<f32> {
+        var linearRed = atlasTexel.r;
+        var linearGreen = atlasTexel.g;
+        var linearBlue = atlasTexel.b;
+
+        if (linearRed <= 0.04045) {
+          linearRed = linearRed / 12.92;
+        } else {
+          linearRed = pow((linearRed + 0.055) / 1.055, 2.4);
+        }
+
+        if (linearGreen <= 0.04045) {
+          linearGreen = linearGreen / 12.92;
+        } else {
+          linearGreen = pow((linearGreen + 0.055) / 1.055, 2.4);
+        }
+
+        if (linearBlue <= 0.04045) {
+          linearBlue = linearBlue / 12.92;
+        } else {
+          linearBlue = pow((linearBlue + 0.055) / 1.055, 2.4);
+        }
+
+        return vec3<f32>(linearRed, linearGreen, linearBlue);
+      }
+
+      fn getSurfaceCheckerParity(surfaceTexelCoord: vec2<i32>) -> i32 {
+        let checkerX = surfaceTexelCoord.x / ${surfaceCheckerCellSize.toFixed(0)};
+        let checkerY = surfaceTexelCoord.y / ${surfaceCheckerCellSize.toFixed(0)};
+        return (checkerX + checkerY) & 1;
+      }
+
+      fn getCheckerAtlasParity(checkerAtlasTexel: vec4<f32>) -> i32 {
+        return select(1, 0, checkerAtlasTexel.r >= 0.5);
+      }
+
+      fn isSurfaceCheckerMismatch(checkerAtlasTexel: vec4<f32>, surfaceTexelCoord: vec2<i32>) -> bool {
+        return getCheckerAtlasParity(checkerAtlasTexel) != getSurfaceCheckerParity(surfaceTexelCoord);
+      }
+
+      fn solveGroundScreenY(screen: vec2<f32>, surface: texture_2d<f32>) -> f32 {
+        var minY = screen.y;
+        var maxY = screen.y + ${((surfaceMaxHeight - surfaceMinHeight) * surfaceHeightImpactOnScreenY).toFixed(8)};
+        var groundY = screen.y;
+
+        for (var iteration = 0; iteration < ${SURFACE_GROUND_SEARCH_ITERATIONS}; iteration++) {
+          groundY = (minY + maxY) * 0.5;
+          let surfaceTexel = sampleSurfaceLinear(surface, worldToMapUV(vec2<f32>(screen.x, groundY)));
+          let height = decodeSurfaceHeight(surfaceTexel);
+          let occlusionPoint = groundY - height * ${surfaceHeightImpactOnScreenY.toFixed(8)};
+
+          if (occlusionPoint >= screen.y) {
+            maxY = groundY;
+          } else {
+            minY = groundY;
+          }
+        }
+
+        return (minY + maxY) * 0.5;
+      }
     `);
     const screen = vec2(
       this.cameraWorldUniform.x.add(viewportUV.x.mul(this.cameraViewSizeUniform.x)),
       this.cameraWorldUniform.y.add(viewportUV.y.mul(this.cameraViewSizeUniform.y)),
     );
-    const terrainColor = vec4(resolveTerrain({
-      screen,
-      packedMap: textureLoad(this.bundle.packedTerrain.texture),
-      atlas: textureLoad(this.bundle.colorAtlas.texture),
-      metadataAtlas: textureLoad(this.bundle.metadataAtlas.texture),
-      sunDirection: this.sunDirectionUniform,
-      ambient: this.ambientUniform,
-    }));
+    const terrainColor = vec4(
+      resolveTerrain({
+        screen,
+        packedMap: textureLoad(this.bundle.packedTerrain.texture),
+        atlas: textureLoad(this.bundle.colorAtlas.texture),
+        checkerAtlas: textureLoad(this.bundle.checkerAtlas.texture),
+        surface: textureLoad(this.bundle.surface.texture),
+        sunDirection: this.sunDirectionUniform,
+        ambient: this.ambientUniform,
+        debugView: this.debugViewUniform,
+        debugSurfaceGrid: this.debugSurfaceGridUniform,
+      }),
+    );
 
     material.colorNode = terrainColor.rgb;
     material.opacityNode = terrainColor.a;
@@ -301,11 +559,17 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.bundle.colorAtlas.texture.generateMipmaps = false;
     this.bundle.colorAtlas.texture.needsUpdate = true;
 
-    this.bundle.metadataAtlas.texture.colorSpace = THREE.NoColorSpace;
-    this.bundle.metadataAtlas.texture.magFilter = THREE.NearestFilter;
-    this.bundle.metadataAtlas.texture.minFilter = THREE.NearestFilter;
-    this.bundle.metadataAtlas.texture.generateMipmaps = false;
-    this.bundle.metadataAtlas.texture.needsUpdate = true;
+    this.bundle.checkerAtlas.texture.colorSpace = THREE.NoColorSpace;
+    this.bundle.checkerAtlas.texture.magFilter = THREE.NearestFilter;
+    this.bundle.checkerAtlas.texture.minFilter = THREE.NearestFilter;
+    this.bundle.checkerAtlas.texture.generateMipmaps = false;
+    this.bundle.checkerAtlas.texture.needsUpdate = true;
+
+    this.bundle.surface.texture.colorSpace = THREE.NoColorSpace;
+    this.bundle.surface.texture.magFilter = THREE.NearestFilter;
+    this.bundle.surface.texture.minFilter = THREE.NearestFilter;
+    this.bundle.surface.texture.generateMipmaps = false;
+    this.bundle.surface.texture.needsUpdate = true;
 
     this.bundle.packedTerrain.texture.colorSpace = THREE.NoColorSpace;
     this.bundle.packedTerrain.texture.magFilter = THREE.NearestFilter;
@@ -317,13 +581,16 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.renderer,
       this.terrainMaterial,
       this.bundle.colorAtlas.texture,
-      this.bundle.metadataAtlas.texture,
+      this.bundle.checkerAtlas.texture,
+      this.bundle.surface.texture,
       this.bundle.packedTerrain.texture,
     );
 
     this.setupSelection();
     this.resize(this.viewport.width, this.viewport.height);
     this.setLighting(DEFAULT_THREE_LIGHTING_SETTINGS);
+    this.setDebugView(DEFAULT_THREE_DEBUG_VIEW);
+    this.setDebugSurfaceGridVisible(true);
     this.bindEvents();
     this.renderer.setAnimationLoop(this.render);
   }
@@ -538,6 +805,14 @@ class TerrainRuntime implements ThreeTerrainApp {
   setLighting(settings: ThreeLightingSettings) {
     this.sunDirectionUniform.value.copy(getSunDirectionVector(settings));
     this.ambientUniform.value = settings.ambient;
+  }
+
+  setDebugView(view: ThreeDebugView) {
+    this.debugViewUniform.value = getThreeDebugViewUniformValue(view);
+  }
+
+  setDebugSurfaceGridVisible(visible: boolean) {
+    this.debugSurfaceGridUniform.value = visible ? 1 : 0;
   }
 }
 

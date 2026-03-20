@@ -45,6 +45,7 @@ samplingProfile = nativeExact
 ## Pipeline Notes
 
 - `scripts/tileset.ts` still copies the source texture to `scripts/texture.png`, renders frame PNGs to `scripts/out`, then assembles `tileset.png`, `tileset.json`, maps, and derived height/normal maps exactly as before.
+- `tileset.checker.png` is not a beauty render. It is rasterized directly from the shared terrain scene spec and ownership logic, then quantized onto the same per-tile surface-texel lattice that feeds the packed terrain surface, so the Three checker diagnostic matches terrain-space surface lookups instead of per-face beauty UVs or continuous beauty-space interpolation.
 - `elevationYOffsetPx` still comes from the rendered tile dimensions, so the runtime tile contract remains `128 x 96` render size with `16px` vertical offset and `64px` logical diamond height.
 - The pixel-art look depends on the render settings as much as the mesh: the active Cycles path keeps denoising off and uses a tiny `0.01` Gaussian pixel filter, which matches the legacy `.blend` scenes much more closely than Blender's softer defaults.
 - The rotated legacy scenes were authored against a screen-space rule, not just a static UV rule: texture north should keep reading along the upper-right edge of the diamond even as the terrain mesh rotates. In the procedural builder `cameraAlignedLegacy` reproduces that by counter-rotating the mapping node per frame instead of hardcoding one `-pi/2` turn.

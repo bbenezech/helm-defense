@@ -1,4 +1,5 @@
 import { TERRAIN_TILE_INDEX, type TerrainTileName } from "../../src/game/lib/terrain.ts";
+import type { ImageData } from "../../src/game/lib/heightmap.ts";
 import { terrainSceneSpec, type TerrainSceneSpec } from "./terrain-scene-spec.ts";
 
 export type BinaryFrame = { width: number; height: number; coverage: Uint8Array<ArrayBuffer> };
@@ -9,6 +10,13 @@ type Mat3 = [Vec3, Vec3, Vec3];
 type ProjectedVertex = { x: number; y: number; depth: number };
 type ScreenTriangle = [Vec2, Vec2, Vec2];
 type LocalPoint = { u: number; v: number };
+type LocalUvFrame = {
+  width: number;
+  height: number;
+  coverage: Uint8Array<ArrayBuffer>;
+  uValues: Float32Array<ArrayBuffer>;
+  vValues: Float32Array<ArrayBuffer>;
+};
 
 const PIXEL_SAMPLE_BIAS = 1e-6;
 const DEPTH_EPSILON = 1e-9;
@@ -189,10 +197,25 @@ function rasterizeTopSurfaceFrame(
   sceneSpec: TerrainSceneSpec,
   excludeSouthAndEastBoundaries: boolean,
 ): BinaryFrame {
+  const uvFrame = rasterizeTopSurfaceLocalUvFrame(tileName, sceneSpec, excludeSouthAndEastBoundaries);
+  return {
+    width: uvFrame.width,
+    height: uvFrame.height,
+    coverage: uvFrame.coverage,
+  };
+}
+
+function rasterizeTopSurfaceLocalUvFrame(
+  tileName: TerrainTileName,
+  sceneSpec: TerrainSceneSpec,
+  excludeSouthAndEastBoundaries: boolean,
+): LocalUvFrame {
   const width = sceneSpec.render.resolution.width;
   const height = sceneSpec.render.resolution.height;
   const { N, E, S, W, C } = getTopSurfaceScreenVertices(tileName);
   const coverage = new Uint8Array(width * height);
+  const uValues = new Float32Array(width * height);
+  const vValues = new Float32Array(width * height);
   const triangles: Array<{ screen: ScreenTriangle; local: [LocalPoint, LocalPoint, LocalPoint] }> = [
     {
       screen: [W, N, C],
@@ -261,12 +284,17 @@ function rasterizeTopSurfaceFrame(
         const fullU = localU >= -PIXEL_SAMPLE_BIAS && localU <= 1 + PIXEL_SAMPLE_BIAS;
         const fullV = localV >= -PIXEL_SAMPLE_BIAS && localV <= 1 + PIXEL_SAMPLE_BIAS;
 
-        if (excludeSouthAndEastBoundaries ? ownsU && ownsV : fullU && fullV) coverage[pixelY * width + pixelX] = 1;
+        if (excludeSouthAndEastBoundaries ? ownsU && ownsV : fullU && fullV) {
+          const pixelIndex = pixelY * width + pixelX;
+          coverage[pixelIndex] = 1;
+          uValues[pixelIndex] = localU;
+          vValues[pixelIndex] = localV;
+        }
       }
     }
   }
 
-  return { width, height, coverage };
+  return { width, height, coverage, uValues, vValues };
 }
 
 export function rasterizeOwnershipFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): BinaryFrame {
@@ -291,6 +319,82 @@ export function rasterizeOwnershipFrame(sceneSpec: TerrainSceneSpec, poseIndex: 
 
 export function rasterizeOwnershipFrames(sceneSpec: TerrainSceneSpec = terrainSceneSpec): BinaryFrame[] {
   return sceneSpec.poses.map((_, poseIndex) => rasterizeOwnershipFrame(sceneSpec, poseIndex));
+}
+
+function getSurfaceTexelIndex(localCoordinate: number, precision: number): number {
+  const adjustedCoordinate = localCoordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : localCoordinate;
+  return Math.floor(adjustedCoordinate * precision);
+}
+
+export function rasterizeCheckerFrames(
+  {
+    precision,
+    cellsPerAxis,
+    lightValue,
+    darkValue,
+    sideValue,
+    topAlphaValue,
+    sideAlphaValue,
+  }: {
+    precision: number;
+    cellsPerAxis: number;
+    lightValue: number;
+    darkValue: number;
+    sideValue: number;
+    topAlphaValue: number;
+    sideAlphaValue: number;
+  },
+  sceneSpec: TerrainSceneSpec = terrainSceneSpec,
+): ImageData[] {
+  if (!Number.isInteger(precision)) throw new Error(`Checker precision must be an integer, received ${precision}.`);
+  if (precision <= 0) throw new Error(`Checker precision must be greater than zero, received ${precision}.`);
+  if (cellsPerAxis <= 0) throw new Error(`Checker cells per axis must be greater than zero, received ${cellsPerAxis}.`);
+  if (precision % cellsPerAxis !== 0) {
+    throw new Error(`Checker precision ${precision} must be divisible by ${cellsPerAxis} cells per axis.`);
+  }
+  const checkerCellSize = precision / cellsPerAxis;
+
+  return sceneSpec.poses.map((_, poseIndex) => {
+    const tileName = sceneSpec.order[poseIndex];
+    if (tileName === undefined) throw new Error(`Missing terrain tile order entry ${poseIndex}`);
+
+    const sceneFrame = rasterizeSceneSilhouetteFrame(sceneSpec, poseIndex);
+    const topSurface = rasterizeTopSurfaceLocalUvFrame(tileName, sceneSpec, true);
+    const topSurfaceFullExpanded = dilateBinaryFrame(rasterizeTopSurfaceFrame(tileName, sceneSpec, false));
+    const data = new Uint8ClampedArray(sceneFrame.coverage.length * 4);
+
+    for (let pixelIndex = 0; pixelIndex < sceneFrame.coverage.length; pixelIndex++) {
+      const dataOffset = pixelIndex * 4;
+      if (topSurface.coverage[pixelIndex] === 1) {
+        const surfaceTexelU = getSurfaceTexelIndex(topSurface.uValues[pixelIndex], precision);
+        const surfaceTexelV = getSurfaceTexelIndex(topSurface.vValues[pixelIndex], precision);
+        const checkerU = Math.floor(surfaceTexelU / checkerCellSize);
+        const checkerV = Math.floor(surfaceTexelV / checkerCellSize);
+        const checkerValue = (checkerU + checkerV) % 2 === 0 ? lightValue : darkValue;
+        data[dataOffset] = checkerValue;
+        data[dataOffset + 1] = checkerValue;
+        data[dataOffset + 2] = checkerValue;
+        data[dataOffset + 3] = topAlphaValue;
+        continue;
+      }
+
+      const sidePixel =
+        sceneFrame.coverage[pixelIndex] === 1 && topSurfaceFullExpanded.coverage[pixelIndex] === 0 ? 1 : 0;
+      if (sidePixel === 1) {
+        data[dataOffset] = sideValue;
+        data[dataOffset + 1] = sideValue;
+        data[dataOffset + 2] = sideValue;
+        data[dataOffset + 3] = sideAlphaValue;
+      }
+    }
+
+    return {
+      width: sceneFrame.width,
+      height: sceneFrame.height,
+      channels: 4,
+      data,
+    };
+  });
 }
 
 export function countCoveredPixels(frame: BinaryFrame) {

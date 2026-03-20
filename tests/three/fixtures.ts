@@ -1,4 +1,5 @@
 import type { TerrainMap, TerrainTileset } from "../../three/assets.ts";
+import type { Heightmap } from "../../src/game/lib/heightmap.ts";
 
 export const sampleTileset = {
   type: "tileset",
@@ -66,3 +67,10 @@ export const sampleMap = {
   ],
   tilesets: [{ firstgid: 1, ...sampleTileset }],
 } satisfies TerrainMap;
+
+export const sampleTileableHeightmap = [
+  [0, 0, 1, 1],
+  [0, 1, 1, 2],
+  [1, 1, 2, 2],
+  [1, 2, 2, 3],
+] satisfies Heightmap;

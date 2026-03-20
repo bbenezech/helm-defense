@@ -2,6 +2,8 @@ import React from "react";
 import { startThreeApp, type ThreeTerrainApp } from "../../three/app.ts";
 import { start } from "../game/index.ts";
 import rendererModeStore from "../store/renderer-mode.ts";
+import threeDebugSurfaceGridStore from "../store/three-debug-surface-grid.ts";
+import threeDebugViewStore from "../store/three-debug-view.ts";
 import threeLightingStore from "../store/three-lighting.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useStoreValue } from "./useStore.ts";
@@ -29,6 +31,8 @@ type RunningApp = { kind: "phaser"; instance: Phaser.Game } | { kind: "three"; i
 
 export const Game = () => {
   const rendererMode = useStoreValue(rendererModeStore);
+  const threeDebugSurfaceGrid = useStoreValue(threeDebugSurfaceGridStore);
+  const threeDebugView = useStoreValue(threeDebugViewStore);
   const timeScale = useStoreValue(timeScaleStore);
   const threeLighting = useStoreValue(threeLightingStore);
   const appReference = React.useRef<RunningApp | undefined>(undefined);
@@ -77,6 +81,8 @@ export const Game = () => {
 
           app.setPaused(timeScaleStore.get() === 0);
           app.setLighting(threeLightingStore.get());
+          app.setDebugView(threeDebugViewStore.get());
+          app.setDebugSurfaceGridVisible(threeDebugSurfaceGridStore.get());
           app.resize(host.clientWidth, host.clientHeight);
           appReference.current = { kind: "three", instance: app };
         } catch (error) {
@@ -127,6 +133,20 @@ export const Game = () => {
       runningApp.instance.setLighting(threeLighting);
     }
   }, [threeLighting]);
+
+  React.useEffect(() => {
+    const runningApp = appReference.current;
+    if (runningApp !== undefined && runningApp.kind === "three") {
+      runningApp.instance.setDebugView(threeDebugView);
+    }
+  }, [threeDebugView]);
+
+  React.useEffect(() => {
+    const runningApp = appReference.current;
+    if (runningApp !== undefined && runningApp.kind === "three") {
+      runningApp.instance.setDebugSurfaceGridVisible(threeDebugSurfaceGrid);
+    }
+  }, [threeDebugSurfaceGrid]);
 
   return <div id={GAME_DOM_ID}></div>;
 };

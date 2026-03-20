@@ -260,7 +260,9 @@ function enumerateCandidateSlots(
   for (let stripeIndex = 0; stripeIndex < 2; stripeIndex++) {
     const d = stripeRight + stripeIndex - 1;
     for (let slice = 0; slice < stack.slices; slice++) {
-      const baseS = Math.floor((screenY + layout.frameTopOffset + layout.elevationStep * slice) / layout.halfTileHeight);
+      const baseS = Math.floor(
+        (screenY - layout.halfTileHeight + layout.frameTopOffset + layout.elevationStep * slice) / layout.halfTileHeight,
+      );
       for (let delta = 0; delta < 3; delta++) {
         const s = baseS - delta;
         if (((s - d) & 1) !== 0) continue;
@@ -336,7 +338,11 @@ export function createPackedTerrainCodec(
         const tileId = shapeReference - 1;
         const localX = Math.floor(screenX - candidate.d * layout.halfTileWidth);
         const localY = Math.floor(
-          screenY - (candidate.s * layout.halfTileHeight - layout.frameTopOffset - candidate.slice * layout.elevationStep),
+          screenY -
+            (candidate.s * layout.halfTileHeight +
+              layout.halfTileHeight -
+              layout.frameTopOffset -
+              candidate.slice * layout.elevationStep),
         );
         const rgba = sampleAtlasPixel(atlas, tileset, tileId, biomeIndex, localX, localY);
         if (rgba[3] === 0) continue;

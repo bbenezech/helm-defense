@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
         choices=("legacyMatched", "strictPixel", "nativeExact"),
         default="nativeExact",
     )
-    parser.add_argument("--render-kind", choices=("textured", "oracleMask", "metadata"), default="textured")
+    parser.add_argument("--render-kind", choices=("textured", "oracleMask"), default="textured")
     parser.add_argument("--samples", type=int, default=10)
     parser.add_argument("--scene-spec", default=str(DEFAULT_SCENE_SPEC_PATH), help="Machine-readable terrain scene spec")
     args = parser.parse_args(argv)
@@ -183,30 +183,10 @@ def build_material(
 
     emission = nodes.new("ShaderNodeEmission")
     emission.location = (20.0, 300.0)
-    emission.inputs["Strength"].default_value = 1.0 if render_kind in {"oracleMask", "metadata"} else EMISSION_STRENGTHS[shading][name]
+    emission.inputs["Strength"].default_value = 1.0 if render_kind == "oracleMask" else EMISSION_STRENGTHS[shading][name]
 
     if render_kind == "oracleMask":
         emission.inputs["Color"].default_value = ORACLE_MASK_COLOR
-        links.new(emission.outputs["Emission"], output.inputs["Surface"])
-        return material
-
-    if render_kind == "metadata":
-        geometry = nodes.new("ShaderNodeNewGeometry")
-        geometry.location = (-620.0, 320.0)
-
-        scale = nodes.new("ShaderNodeVectorMath")
-        scale.location = (-400.0, 320.0)
-        scale.operation = "SCALE"
-        scale.inputs[3].default_value = 0.5
-
-        offset = nodes.new("ShaderNodeVectorMath")
-        offset.location = (-180.0, 320.0)
-        offset.operation = "ADD"
-        offset.inputs[1].default_value = (0.5, 0.5, 0.5)
-
-        links.new(geometry.outputs["Normal"], scale.inputs[0])
-        links.new(scale.outputs["Vector"], offset.inputs[0])
-        links.new(offset.outputs["Vector"], emission.inputs["Color"])
         links.new(emission.outputs["Emission"], output.inputs["Surface"])
         return material
 
