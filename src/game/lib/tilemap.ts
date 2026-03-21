@@ -57,7 +57,7 @@ export function terrainToLayers(terrain: TileData[][], tileset: Tileset): Tilema
 
   const maxHeight = Math.max(...terrain.flat().map((t) => t.level));
   const layers: TilemapLayer[] = Array.from({ length: maxHeight + 1 }, () =>
-    Array.from({ length: terrain.length }, () => Array.from({ length: terrain[0].length })),
+    Array.from({ length: terrain.length }, () => Array.from({ length: terrain[0].length }, () => 0)),
   );
 
   for (const [y, element] of terrain.entries()) {

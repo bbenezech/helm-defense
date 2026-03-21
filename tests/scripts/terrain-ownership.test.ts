@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVE_BLENDER_RENDER_VARIANT } from "../../scripts/lib/blender.ts";
 import { terrainSceneSpec } from "../../scripts/lib/terrain-scene-spec.ts";
-import { rasterizeCheckerFrames, rasterizeOwnershipFrames, type BinaryFrame } from "../../scripts/lib/terrain-ownership.ts";
+import {
+  DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
+  DEFAULT_CHECKER_ATLAS_DARK_VALUE,
+  DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
+  rasterizeCheckerFrames,
+  rasterizeCheckerSeedFrames,
+  rasterizeOwnershipFrames,
+  type BinaryFrame,
+} from "../../scripts/lib/terrain-ownership.ts";
 import { sampleMap, sampleTileset } from "../three/fixtures.ts";
 
 type Placement = { frameIndex: number; left: number; top: number };
@@ -10,14 +18,14 @@ type CoverageImage = { width: number; height: number; counts: Uint16Array<ArrayB
 
 function createCheckerFrames() {
   return rasterizeCheckerFrames({
-    cellsPerAxis: 4,
-    lightValue: 224,
-    darkValue: 80,
+    cellsPerAxis: DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
+    lightValue: DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
+    darkValue: DEFAULT_CHECKER_ATLAS_DARK_VALUE,
     textureRotation: ACTIVE_BLENDER_RENDER_VARIANT.textureRotation,
   }, terrainSceneSpec);
 }
 
-function createBinaryFrameFromCheckerAlpha(frame: ReturnType<typeof createCheckerFrames>[number]): BinaryFrame {
+function createBinaryFrameFromImageAlpha(frame: ReturnType<typeof createCheckerFrames>[number]): BinaryFrame {
   const coverage = new Uint8Array(frame.width * frame.height);
 
   for (let pixelIndex = 0; pixelIndex < coverage.length; pixelIndex++) {
@@ -98,7 +106,7 @@ function getBounds(placements: Placement[], frameWidth: number, frameHeight: num
   };
 }
 
-function composeCoverage(layers: FixtureLayer[], frames: BinaryFrame[]) {
+function composeCoverage(layers: FixtureLayer[], frames: BinaryFrame[]): CoverageImage {
   const firstFrame = frames[0];
   if (firstFrame === undefined) throw new Error("Missing checker frame.");
   const placements = getPlacements(layers, firstFrame.width, firstFrame.height);
@@ -126,6 +134,13 @@ function composeCoverage(layers: FixtureLayer[], frames: BinaryFrame[]) {
   }
 
   return { width: bounds.width, height: bounds.height, counts };
+}
+
+function getFramePixelValue(frame: ReturnType<typeof createCheckerFrames>[number], x: number, y: number) {
+  const pixelOffset = (y * frame.width + x) * 4;
+  const value = frame.data[pixelOffset];
+  if (value === undefined) throw new Error(`Missing checker pixel at ${x},${y}.`);
+  return value;
 }
 
 describe("terrain checker ownership", () => {
@@ -165,8 +180,46 @@ describe("terrain checker ownership", () => {
     }
   });
 
+  it("keeps checker seed coverage inside ownership and leaves flood-filled-only pixels out of the seed mask", () => {
+    const seedFrames = rasterizeCheckerSeedFrames(terrainSceneSpec);
+    const ownershipFrames = rasterizeOwnershipFrames(terrainSceneSpec);
+    let foundFloodFilledOnlyPixel = false;
+
+    for (const [frameIndex, seedFrame] of seedFrames.entries()) {
+      const ownershipFrame = ownershipFrames[frameIndex];
+      if (ownershipFrame === undefined) throw new Error(`Missing ownership frame ${frameIndex}.`);
+
+      expect(seedFrame.width).toBe(ownershipFrame.width);
+      expect(seedFrame.height).toBe(ownershipFrame.height);
+
+      for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+        if (seedFrame.coverage[pixelIndex] === 1) {
+          expect(ownershipFrame.coverage[pixelIndex]).toBe(1);
+        }
+        if (ownershipFrame.coverage[pixelIndex] === 1 && seedFrame.coverage[pixelIndex] === 0) {
+          foundFloodFilledOnlyPixel = true;
+        }
+      }
+    }
+
+    expect(foundFloodFilledOnlyPixel).toBe(true);
+  });
+
+  it("matches Blender texture row origin on flat checker samples", () => {
+    const checkerFrames = createCheckerFrames();
+    const flatFrameIndex = terrainSceneSpec.order.indexOf("SLOPE_FLAT");
+    if (flatFrameIndex < 0) throw new Error("Missing SLOPE_FLAT pose.");
+    const flatFrame = checkerFrames[flatFrameIndex];
+    if (flatFrame === undefined) throw new Error(`Missing checker frame ${flatFrameIndex}.`);
+
+    expect(getFramePixelValue(flatFrame, 48, 40)).toBe(DEFAULT_CHECKER_ATLAS_DARK_VALUE);
+    expect(getFramePixelValue(flatFrame, 64, 40)).toBe(DEFAULT_CHECKER_ATLAS_LIGHT_VALUE);
+    expect(getFramePixelValue(flatFrame, 48, 56)).toBe(DEFAULT_CHECKER_ATLAS_DARK_VALUE);
+    expect(getFramePixelValue(flatFrame, 64, 56)).toBe(DEFAULT_CHECKER_ATLAS_LIGHT_VALUE);
+  });
+
   it("tiles checker alpha seamlessly for flat neighbors and the sample mixed-slope map", () => {
-    const checkerFrames = createCheckerFrames().map(createBinaryFrameFromCheckerAlpha);
+    const checkerFrames = createCheckerFrames().map(createBinaryFrameFromImageAlpha);
     const ownershipFrames = rasterizeOwnershipFrames(terrainSceneSpec);
     const flatFixture: FixtureLayer[] = [
       {

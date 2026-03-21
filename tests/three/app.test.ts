@@ -10,12 +10,13 @@ import {
   getSurfaceCheckerCellSize,
   getSurfaceCheckerParity,
   getSurfaceHeightImpactOnScreenY,
+  getSurfaceSampleOffsetY,
   getSunDirectionVector,
   getTerrainShade,
   isSurfaceCheckerMismatch,
   solveSurfaceGroundY,
 } from "../../three/app.ts";
-import { sampleMap } from "./fixtures.ts";
+import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 describe("three terrain math", () => {
   it("keeps the default sun direction aligned with the Phaser baseline vector", () => {
@@ -33,6 +34,10 @@ describe("three terrain math", () => {
     expect(topLeftUv.y).toBeCloseTo(0);
     expect(innerUv.x).toBeCloseTo(1 / 3);
     expect(innerUv.y).toBeCloseTo(1 / 3);
+  });
+
+  it("offsets global surface shading by the tileset frame overhang", () => {
+    expect(getSurfaceSampleOffsetY(sampleMap, sampleTileset.tileheight)).toBe(32);
   });
 
   it("decodes packed surface heights and solves constant-height ground intersections", () => {
@@ -80,5 +85,17 @@ describe("three terrain math", () => {
     expect(surfaceNormal.z).toBeCloseTo(1);
     expect(getTerrainShade(surfaceNormal, straightUpSun, 0.6)).toBeCloseTo(1.0);
     expect(getTerrainShade(surfaceNormal, horizonSun, 0.6)).toBeCloseTo(0.6);
+  });
+
+  it("keeps the current main packed-normal rotation basis", () => {
+    const eastFacingPackedNormal = decodeSurfaceNormal(1.0, 0.5, 0.5);
+    const northFacingPackedNormal = decodeSurfaceNormal(0.5, 1.0, 0.5);
+
+    expect(eastFacingPackedNormal.x).toBeCloseTo(Math.SQRT1_2);
+    expect(eastFacingPackedNormal.y).toBeCloseTo(Math.SQRT1_2);
+    expect(eastFacingPackedNormal.z).toBeCloseTo(0.0);
+    expect(northFacingPackedNormal.x).toBeCloseTo(-Math.SQRT1_2);
+    expect(northFacingPackedNormal.y).toBeCloseTo(Math.SQRT1_2);
+    expect(northFacingPackedNormal.z).toBeCloseTo(0.0);
   });
 });

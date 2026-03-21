@@ -1,7 +1,20 @@
+/// <reference lib="dom" />
+
+declare global {
+  interface ImportMetaEnv {
+    BASE_URL: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+}
+
 import * as THREE from "three/src/Three.WebGPU.js";
 import { packTerrain, tileDataToTerrain, tileableHeightmapToTileData } from "../src/game/lib/terrain.ts";
 import type { Heightmap } from "../src/game/lib/heightmap.ts";
-import { createPackedTerrainCodec, type PackedTerrainCodec, type PackedTerrainStack } from "./codec.ts";
+import { type PackedTerrainStack } from "./chunks.ts";
+import { createPackedTerrainCodec, type PackedTerrainCodec } from "./codec.ts";
 import { getMapBounds, type Point2, type Rect } from "./projection.ts";
 
 export type TerrainTilesetProperty =
@@ -433,6 +446,22 @@ function createAtlasArray(images: LoadedAtlasImage[], label: string): TerrainAtl
   };
 }
 
+function createImageTexture(
+  data: Uint8Array<ArrayBuffer>,
+  width: number,
+  height: number,
+): THREE.DataTexture {
+  const texture = new THREE.DataTexture(data, width, height);
+  texture.format = THREE.RGBAFormat;
+  texture.type = THREE.UnsignedByteType;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 async function loadAtlasArray(
   tilesetName: string,
   manifest: BiomeManifest,
@@ -522,17 +551,8 @@ function createSurfaceTexture(
   minHeight: number,
   maxHeight: number,
 ): TerrainSurfaceTexture {
-  const texture = new THREE.DataTexture(data, width, height);
-  texture.format = THREE.RGBAFormat;
-  texture.type = THREE.UnsignedByteType;
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  texture.needsUpdate = true;
-
   return {
-    texture,
+    texture: createImageTexture(data, width, height),
     data,
     width,
     height,

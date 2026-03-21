@@ -29,15 +29,18 @@ import { fastBoxBlur, fastBoxBlurVectors } from "../src/game/lib/blur.ts";
 import { log } from "../src/game/lib/log.ts";
 import { getTileset } from "../src/game/lib/tileset.ts";
 import { saveImageDataToImage, savePrettyHeightmap, saveNormalmap, imageToImageData } from "./lib/file.ts";
-import { rasterizeCheckerFrames, rasterizeOwnershipFrames } from "./lib/terrain-ownership.ts";
+import {
+  DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
+  DEFAULT_CHECKER_ATLAS_DARK_VALUE,
+  DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
+  rasterizeCheckerFrames,
+  rasterizeOwnershipFrames,
+} from "./lib/terrain-ownership.ts";
 
 const __dirname = import.meta.dirname;
 const BLENDER_SCRIPT_NAME = "render_tileset.py";
 const BIOME_MANIFEST_FILENAME = "biomes.json";
 const CHECKER_ATLAS_FILENAME = "tileset.checker.png";
-const CHECKER_ATLAS_CELLS_PER_AXIS = 4;
-const CHECKER_ATLAS_LIGHT = 224;
-const CHECKER_ATLAS_DARK = 80;
 
 function createTileset(
   inputDirectory: string,
@@ -297,9 +300,9 @@ function createGeneratedAtlasImageData(
 
 async function writeCheckerAtlas(outputDirectory: string, tileset: ReturnType<typeof getTileset>) {
   const frames = rasterizeCheckerFrames({
-    cellsPerAxis: CHECKER_ATLAS_CELLS_PER_AXIS,
-    lightValue: CHECKER_ATLAS_LIGHT,
-    darkValue: CHECKER_ATLAS_DARK,
+    cellsPerAxis: DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
+    lightValue: DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
+    darkValue: DEFAULT_CHECKER_ATLAS_DARK_VALUE,
     textureRotation: ACTIVE_BLENDER_RENDER_VARIANT.textureRotation,
   });
   const atlasImageData = createGeneratedAtlasImageData(frames, tileset);

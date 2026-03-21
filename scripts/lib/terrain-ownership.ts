@@ -28,6 +28,9 @@ const HALF_TILE_WIDTH = 64;
 const HALF_TILE_HEIGHT = 32;
 const HEIGHT_STEP = 16;
 const CHECKER_ALPHA = 255;
+export const DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS = 4;
+export const DEFAULT_CHECKER_ATLAS_LIGHT_VALUE = 224;
+export const DEFAULT_CHECKER_ATLAS_DARK_VALUE = 80;
 const CHECKER_FILL_NEIGHBORS: NeighborOffset[] = [
   { x: -1, y: -1 },
   { x: 0, y: -1 },
@@ -434,10 +437,34 @@ export function rasterizeOwnershipFrames(sceneSpec: TerrainSceneSpec = terrainSc
   return sceneSpec.poses.map((_, poseIndex) => rasterizeOwnershipFrame(sceneSpec, poseIndex));
 }
 
+function rasterizeCheckerSeedFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): BinaryFrame {
+  const ownershipFrame = rasterizeOwnershipFrame(sceneSpec, poseIndex);
+  const visibleUvFrame = rasterizeVisibleUvFrame(sceneSpec, poseIndex);
+  const coverage = new Uint8Array(ownershipFrame.coverage.length);
+
+  for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
+    coverage[pixelIndex] = ownershipFrame.coverage[pixelIndex] === 1 && visibleUvFrame.coverage[pixelIndex] === 1 ? 1 : 0;
+  }
+
+  return {
+    width: ownershipFrame.width,
+    height: ownershipFrame.height,
+    coverage,
+  };
+}
+
+export function rasterizeCheckerSeedFrames(sceneSpec: TerrainSceneSpec = terrainSceneSpec): BinaryFrame[] {
+  return sceneSpec.poses.map((_, poseIndex) => rasterizeCheckerSeedFrame(sceneSpec, poseIndex));
+}
+
 function getCheckerCellIndex(coordinate: number, cellsPerAxis: number): number {
   const clampedCoordinate =
     coordinate < 0 ? 0 : coordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : coordinate;
   return Math.floor(clampedCoordinate * cellsPerAxis);
+}
+
+function flipUnitCoordinateForTextureRows(coordinate: number): number {
+  return 1 - coordinate;
 }
 
 function writeCheckerPixel(data: Uint8ClampedArray<ArrayBuffer>, pixelIndex: number, checkerValue: number) {
@@ -563,7 +590,7 @@ export function rasterizeCheckerFrames(
         { u: visibleUvFrame.uValues[pixelIndex], v: visibleUvFrame.vValues[pixelIndex] },
       );
       const checkerU = getCheckerCellIndex(rotatedUv.u, cellsPerAxis);
-      const checkerV = getCheckerCellIndex(rotatedUv.v, cellsPerAxis);
+      const checkerV = getCheckerCellIndex(flipUnitCoordinateForTextureRows(rotatedUv.v), cellsPerAxis);
       const checkerValue = (checkerU + checkerV) % 2 === 0 ? lightValue : darkValue;
       assignedCoverage[pixelIndex] = 1;
       checkerValues[pixelIndex] = checkerValue;

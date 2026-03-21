@@ -132,6 +132,24 @@ describe("packed terrain codec", () => {
     expect(hit.rgba).toEqual([0, 255, 0, 255]);
   });
 
+  it("traceVisibleTile mirrors the production candidate order and winner", () => {
+    const tileset = parseTerrainTileset(sampleTileset);
+    const map = parseTerrainMap(sampleMap);
+    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (tileId) => {
+      return tileId === 1 ? [0, 255, 0, 255] : [255, 255, 255, 255];
+    });
+    const screen = tileToScreen(map, { x: 1, y: 1 }, { x: 0, y: -16 });
+    const trace = codec.traceVisibleTile(atlas, screen.x, screen.y);
+    const enumerated = codec.enumerateCandidates(screen.x, screen.y);
+    const hit = codec.resolveVisibleTile(atlas, screen.x, screen.y);
+
+    expect(trace.candidates).toHaveLength(enumerated.length);
+    expect(trace.candidates.map((candidate) => candidate.ordinal)).toEqual(enumerated.map((candidate) => candidate.ordinal));
+    expect(trace.candidates.map((candidate) => candidate.key)).toEqual(enumerated.map((candidate) => candidate.key));
+    expect(trace.winner).toEqual(hit);
+  });
+
   it("returns null when the visible tile pixel is transparent", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = createTestMap([0], 2, 2);
@@ -151,7 +169,7 @@ describe("packed terrain codec", () => {
     );
     const screen = tileToScreen(map, { x: 2, y: 2 }, { x: 0, y: 0 });
     const frameTopOffset = sampleTileset.tileheight - map.tileheight;
-    const frameTopScreenY = screen.y - frameTopOffset;
+    const frameTopScreenY = screen.y - frameTopOffset - map.tileheight * 0.5;
     const hit = codec.resolveVisibleTile(atlas, screen.x, frameTopScreenY);
 
     expect(hit).not.toBeNull();

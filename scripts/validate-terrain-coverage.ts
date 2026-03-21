@@ -5,110 +5,33 @@ import fs from "node:fs";
 import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { BLENDER_RENDER_CONTRACT, ORDERED_SLOPES } from "./lib/blender.ts";
-import { terrainSceneSpec } from "./lib/terrain-scene-spec.ts";
+import { ORDERED_SLOPES } from "./lib/blender.ts";
 import { countCoveredPixels, rasterizeOwnershipFrames, type BinaryFrame } from "./lib/terrain-ownership.ts";
-import { EXAMPLE_TILE_GID_LAYERS, STRESS_HEIGHTMAP_FIXTURES, type TileGidLayers } from "./lib/terrain-fixtures.ts";
 import { imageToImageData, saveImageDataToImage } from "./lib/file.ts";
-import { generateTilableHeightmap } from "../src/game/lib/heightmap.ts";
-import { tileableHeightmapToTileData } from "../src/game/lib/terrain.ts";
-import { terrainToLayers } from "../src/game/lib/tilemap.ts";
-import { getTileset, type Tileset } from "../src/game/lib/tileset.ts";
+import {
+  assertSceneAndTilesetContracts,
+  buildCoverageFixtures,
+  evaluateCoverageFixture,
+  getCanonicalTileset,
+  getCoverageLayersFromTileGidLayers,
+  getElevationYOffsetPx,
+  hasCoverageFailure,
+  type CoverageFixture,
+  type CoverageFixtureResult,
+  type CoverageImage,
+} from "./lib/terrain-coverage-proof.ts";
+import type { Tileset } from "../src/game/lib/tileset.ts";
 
 const __dirname = import.meta.dirname;
 const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/Grass_23-512x512");
 const DEFAULT_REPORT_DIRECTORY = path.resolve(__dirname, "../tmp/terrain-coverage-report");
 const ALPHA_THRESHOLD = 127;
 
-type Placement = {
-  placementId: number;
-  tileIndex: number;
-  gid: number;
-  layerIndex: number;
-  mapX: number;
-  mapY: number;
-  left: number;
-  top: number;
-  label: string;
-};
-
-type Fixture = { name: string; layers: TileGidLayers };
-
-type CoverageImage = {
-  width: number;
-  height: number;
-  counts: Uint16Array<ArrayBuffer>;
-  ownerIds: Int32Array<ArrayBuffer>;
-};
-
-type FixtureResult = {
-  fixture: Fixture;
-  width: number;
-  height: number;
-  counts: { oracleOverlap: number; uncovered: number; actualOverlap: number; stray: number; wrongOwner: number };
-  oracleCoverage: CoverageImage;
-  actualCoverage: CoverageImage;
-};
-
 type ValidationSummary = {
   tilesetDirectory: string;
   reportDirectory: string;
-  fixtures: Array<{ name: string; width: number; height: number; counts: FixtureResult["counts"] }>;
+  fixtures: Array<{ name: string; width: number; height: number; counts: CoverageFixtureResult["counts"] }>;
 };
-
-function getElevationYOffsetPx(tileset: Tileset) {
-  const property = tileset.properties.find((entry) => entry.name === "elevationYOffsetPx");
-  if (property === undefined) throw new Error(`Tileset "${tileset.name}" is missing elevationYOffsetPx`);
-  return Number(property.value);
-}
-
-function getCanonicalTileset(actualTileset: Tileset) {
-  const elevationYOffsetPx = getElevationYOffsetPx(actualTileset);
-  return getTileset({
-    name: "coverage-proof",
-    imageFilename: actualTileset.image,
-    tilewidth: actualTileset.tilewidth,
-    tileheight: actualTileset.tileheight,
-    elevationYOffsetPx,
-    terrainTileNames: ORDERED_SLOPES,
-    tileMargin: actualTileset.spacing / 2,
-    tilesetMargin: actualTileset.margin - actualTileset.spacing / 2,
-  });
-}
-
-function assertSceneAndTilesetContracts(actualTileset: Tileset, canonicalTileset: Tileset) {
-  if (terrainSceneSpec.order.length !== ORDERED_SLOPES.length)
-    throw new Error(
-      `Scene spec order mismatch: expected ${ORDERED_SLOPES.length}, got ${terrainSceneSpec.order.length}`,
-    );
-  if (terrainSceneSpec.poses.length !== ORDERED_SLOPES.length)
-    throw new Error(
-      `Scene spec pose mismatch: expected ${ORDERED_SLOPES.length}, got ${terrainSceneSpec.poses.length}`,
-    );
-  if (actualTileset.tilecount !== ORDERED_SLOPES.length)
-    throw new Error(`Tileset tilecount mismatch: expected ${ORDERED_SLOPES.length}, got ${actualTileset.tilecount}`);
-  if (actualTileset.tilewidth !== BLENDER_RENDER_CONTRACT.resolution.width)
-    throw new Error(
-      `Tileset tilewidth mismatch: expected ${BLENDER_RENDER_CONTRACT.resolution.width}, got ${actualTileset.tilewidth}`,
-    );
-  if (actualTileset.tileheight !== BLENDER_RENDER_CONTRACT.resolution.height)
-    throw new Error(
-      `Tileset tileheight mismatch: expected ${BLENDER_RENDER_CONTRACT.resolution.height}, got ${actualTileset.tileheight}`,
-    );
-  if (getElevationYOffsetPx(actualTileset) !== (actualTileset.tileheight - actualTileset.tilewidth / 2) / 2)
-    throw new Error(`Tileset elevationYOffsetPx does not match the native 128x96 -> 16px contract.`);
-  if (actualTileset.columns !== canonicalTileset.columns || actualTileset.rows !== canonicalTileset.rows)
-    throw new Error(
-      `Tileset atlas shape mismatch: expected ${canonicalTileset.columns}x${canonicalTileset.rows}, got ${actualTileset.columns}x${actualTileset.rows}`,
-    );
-
-  const actualNESW = actualTileset.tiles.map((tile) => tile.properties.find((entry) => entry.name === "NESW")?.value);
-  const canonicalNESW = canonicalTileset.tiles.map(
-    (tile) => tile.properties.find((entry) => entry.name === "NESW")?.value,
-  );
-  if (actualNESW.join(",") !== canonicalNESW.join(","))
-    throw new Error(`Tileset tile order does not match ORDERED_SLOPES`);
-}
 
 function imageDataToBinaryFrame(
   image: Awaited<ReturnType<typeof imageToImageData>>,
@@ -144,123 +67,7 @@ async function loadFramesFromTilesetSheet(tilesetDirectory: string, tileset: Til
   return frames;
 }
 
-function getFixturePlacements(layers: TileGidLayers, tileset: Tileset) {
-  const elevationYOffsetPx = getElevationYOffsetPx(tileset);
-  const logicalTileHeight = tileset.tileheight - 2 * elevationYOffsetPx;
-  const halfTileWidth = tileset.tilewidth / 2;
-  const halfLogicalTileHeight = logicalTileHeight / 2;
-  const imageTopOffset = tileset.tileheight - logicalTileHeight;
-
-  const placements: Placement[] = [];
-  let placementId = 0;
-
-  for (const [layerIndex, layer] of layers.entries()) {
-    const layerOffsetY = -(layerIndex * elevationYOffsetPx);
-    for (const [mapY, row] of layer.entries()) {
-      for (const [mapX, gid] of row.entries()) {
-        const gidNumber = Number(gid ?? 0);
-        if (!Number.isFinite(gidNumber) || gidNumber <= 0) continue;
-        const tileIndex = gidNumber - 1;
-        if (tileIndex < 0 || tileIndex >= tileset.tilecount)
-          throw new Error(`Invalid gid ${gidNumber} at (${mapX}, ${mapY}, layer ${layerIndex})`);
-        const left = (mapX - mapY) * halfTileWidth;
-        const top = (mapX + mapY) * halfLogicalTileHeight - imageTopOffset + layerOffsetY;
-        placements.push({
-          placementId,
-          tileIndex,
-          gid: gidNumber,
-          layerIndex,
-          mapX,
-          mapY,
-          left,
-          top,
-          label: `${ORDERED_SLOPES[tileIndex]}@L${layerIndex}:${mapX},${mapY}`,
-        });
-        placementId++;
-      }
-    }
-  }
-
-  return placements;
-}
-
-function getCanvasBounds(placements: Placement[], frameWidth: number, frameHeight: number) {
-  if (placements.length === 0) return { minX: 0, minY: 0, width: 1, height: 1 };
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const placement of placements) {
-    minX = Math.min(minX, placement.left);
-    minY = Math.min(minY, placement.top);
-    maxX = Math.max(maxX, placement.left + frameWidth);
-    maxY = Math.max(maxY, placement.top + frameHeight);
-  }
-  return {
-    minX: Math.floor(minX),
-    minY: Math.floor(minY),
-    width: Math.ceil(maxX - minX),
-    height: Math.ceil(maxY - minY),
-  };
-}
-
-function composeCoverage(placements: Placement[], frames: BinaryFrame[], bounds: ReturnType<typeof getCanvasBounds>) {
-  const width = bounds.width;
-  const height = bounds.height;
-  const counts = new Uint16Array(width * height);
-  const ownerIds = new Int32Array(width * height).fill(-1);
-
-  for (const placement of placements) {
-    const frame = frames[placement.tileIndex];
-    if (frame === undefined) throw new Error(`Missing frame for tile index ${placement.tileIndex}`);
-    const baseX = Math.round(placement.left - bounds.minX);
-    const baseY = Math.round(placement.top - bounds.minY);
-    for (let y = 0; y < frame.height; y++) {
-      const canvasY = baseY + y;
-      if (canvasY < 0 || canvasY >= height) continue;
-      for (let x = 0; x < frame.width; x++) {
-        if (frame.coverage[y * frame.width + x] === 0) continue;
-        const canvasX = baseX + x;
-        if (canvasX < 0 || canvasX >= width) continue;
-        const index = canvasY * width + canvasX;
-        counts[index]++;
-        if (ownerIds[index] === -1) ownerIds[index] = placement.placementId;
-      }
-    }
-  }
-
-  return { width, height, counts, ownerIds } satisfies CoverageImage;
-}
-
-function evaluateFixture(fixture: Fixture, tileset: Tileset, oracleFrames: BinaryFrame[], actualFrames: BinaryFrame[]) {
-  const placements = getFixturePlacements(fixture.layers, tileset);
-  const bounds = getCanvasBounds(placements, tileset.tilewidth, tileset.tileheight);
-  const oracleCoverage = composeCoverage(placements, oracleFrames, bounds);
-  const actualCoverage = composeCoverage(placements, actualFrames, bounds);
-  const counts = { oracleOverlap: 0, uncovered: 0, actualOverlap: 0, stray: 0, wrongOwner: 0 };
-
-  for (let index = 0; index < oracleCoverage.counts.length; index++) {
-    const oracleCount = oracleCoverage.counts[index];
-    const actualCount = actualCoverage.counts[index];
-    if (oracleCount > 1) counts.oracleOverlap++;
-    if (oracleCount > 0 && actualCount === 0) counts.uncovered++;
-    if (actualCount > 1) counts.actualOverlap++;
-    if (oracleCount === 0 && actualCount > 0) counts.stray++;
-    if (oracleCount === 1 && actualCount === 1 && oracleCoverage.ownerIds[index] !== actualCoverage.ownerIds[index])
-      counts.wrongOwner++;
-  }
-
-  return {
-    fixture,
-    width: bounds.width,
-    height: bounds.height,
-    counts,
-    oracleCoverage,
-    actualCoverage,
-  } satisfies FixtureResult;
-}
-
-function createFixtureReportImage(result: FixtureResult) {
+function createFixtureReportImage(result: CoverageFixtureResult) {
   const image = new Uint8ClampedArray(result.width * result.height * 4);
   for (let index = 0; index < result.oracleCoverage.counts.length; index++) {
     const oracleCount = result.oracleCoverage.counts[index];
@@ -304,7 +111,7 @@ function createCoverageImage(coverage: CoverageImage, color: [number, number, nu
   return { data: image, width: coverage.width, height: coverage.height, channels: 4 as const };
 }
 
-async function writeFixtureDiagnostics(reportDirectory: string, result: FixtureResult) {
+async function writeFixtureDiagnostics(reportDirectory: string, result: CoverageFixtureResult) {
   const fixtureDirectory = path.join(reportDirectory, result.fixture.name);
   fs.mkdirSync(fixtureDirectory, { recursive: true });
   await Promise.all([
@@ -382,29 +189,36 @@ function erodeFrame(frame: BinaryFrame) {
 
 function assertNegativeCheck(
   label: string,
-  result: FixtureResult,
-  predicate: (counts: FixtureResult["counts"]) => boolean,
+  result: CoverageFixtureResult,
+  predicate: (counts: CoverageFixtureResult["counts"]) => boolean,
 ) {
   if (!predicate(result.counts)) throw new Error(`Negative self-check "${label}" did not fail as expected.`);
 }
 
 function runNegativeSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[], actualFrames: BinaryFrame[]) {
-  const singleTileFixture: Fixture = { name: "self-check-single", layers: [[[1]]] };
-  const adjacentFixture: Fixture = {
+  const elevationYOffsetPx = getElevationYOffsetPx(tileset);
+  const singleTileFixture: CoverageFixture = {
+    name: "self-check-single",
+    layers: getCoverageLayersFromTileGidLayers([[[1]]], elevationYOffsetPx),
+  };
+  const adjacentFixture: CoverageFixture = {
     name: "self-check-adjacent",
-    layers: [
+    layers: getCoverageLayersFromTileGidLayers(
       [
-        [1, 1],
-        [1, 1],
+        [
+          [1, 1],
+          [1, 1],
+        ],
       ],
-    ],
+      elevationYOffsetPx,
+    ),
   };
 
   const shiftedFrames = cloneFrames(actualFrames);
   shiftedFrames[0] = shiftFrame(shiftedFrames[0], 1, 0);
   assertNegativeCheck(
     "shifted tile",
-    evaluateFixture(singleTileFixture, tileset, oracleFrames, shiftedFrames),
+    evaluateCoverageFixture(singleTileFixture, tileset, oracleFrames, shiftedFrames),
     (counts) => counts.uncovered > 0 || counts.stray > 0 || counts.wrongOwner > 0,
   );
 
@@ -412,7 +226,7 @@ function runNegativeSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[], ac
   dilatedFrames[0] = dilateFrame(dilatedFrames[0]);
   assertNegativeCheck(
     "dilated tile",
-    evaluateFixture(adjacentFixture, tileset, oracleFrames, dilatedFrames),
+    evaluateCoverageFixture(adjacentFixture, tileset, oracleFrames, dilatedFrames),
     (counts) => counts.actualOverlap > 0 || counts.stray > 0,
   );
 
@@ -420,51 +234,37 @@ function runNegativeSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[], ac
   erodedFrames[0] = erodeFrame(erodedFrames[0]);
   assertNegativeCheck(
     "eroded tile",
-    evaluateFixture(singleTileFixture, tileset, oracleFrames, erodedFrames),
+    evaluateCoverageFixture(singleTileFixture, tileset, oracleFrames, erodedFrames),
     (counts) => counts.uncovered > 0,
   );
 }
 
 function runOracleSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[]) {
-  const fixtures: Fixture[] = [
-    { name: "oracle-single-flat", layers: [[[1]]] },
+  const elevationYOffsetPx = getElevationYOffsetPx(tileset);
+  const fixtures: CoverageFixture[] = [
+    {
+      name: "oracle-single-flat",
+      layers: getCoverageLayersFromTileGidLayers([[[1]]], elevationYOffsetPx),
+    },
     {
       name: "oracle-flat-neighbors",
-      layers: [
+      layers: getCoverageLayersFromTileGidLayers(
         [
-          [1, 1],
-          [1, 1],
+          [
+            [1, 1],
+            [1, 1],
+          ],
         ],
-      ],
+        elevationYOffsetPx,
+      ),
     },
   ];
 
   for (const fixture of fixtures) {
-    const result = evaluateFixture(fixture, tileset, oracleFrames, oracleFrames);
+    const result = evaluateCoverageFixture(fixture, tileset, oracleFrames, oracleFrames);
     if (hasCoverageFailure(result))
       throw new Error(`Ownership oracle self-check "${fixture.name}" failed: ${JSON.stringify(result.counts)}`);
   }
-}
-
-function buildFixtures(canonicalTileset: Tileset) {
-  const fixtures: Fixture[] = [{ name: "example", layers: EXAMPLE_TILE_GID_LAYERS }];
-  for (const stressFixture of STRESS_HEIGHTMAP_FIXTURES) {
-    const heightmap = generateTilableHeightmap({
-      tileWidth: stressFixture.tileWidth,
-      tileHeight: stressFixture.tileHeight,
-      maxValue: stressFixture.maxValue,
-      seed: stressFixture.seed,
-    });
-    fixtures.push({
-      name: stressFixture.name,
-      layers: terrainToLayers(tileableHeightmapToTileData(heightmap), canonicalTileset),
-    });
-  }
-  return fixtures;
-}
-
-function hasCoverageFailure(result: FixtureResult) {
-  return Object.values(result.counts).some((count) => count > 0);
 }
 
 async function main() {
@@ -515,10 +315,10 @@ async function main() {
   runOracleSelfChecks(canonicalTileset, oracleFrames);
   runNegativeSelfChecks(canonicalTileset, oracleFrames, actualFrames);
 
-  const fixtures = buildFixtures(canonicalTileset);
-  const results: FixtureResult[] = [];
+  const fixtures = buildCoverageFixtures(canonicalTileset);
+  const results: CoverageFixtureResult[] = [];
   for (const fixture of fixtures) {
-    const result = evaluateFixture(fixture, actualTileset, oracleFrames, actualFrames);
+    const result = evaluateCoverageFixture(fixture, actualTileset, oracleFrames, actualFrames);
     results.push(result);
     await writeFixtureDiagnostics(reportDirectory, result);
   }

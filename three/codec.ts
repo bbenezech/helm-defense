@@ -1,15 +1,9 @@
 import type { TerrainMap, TerrainTileset } from "./assets.ts";
+import {
+  type PackedTerrainStack,
+  type PackedTerrainWord,
+} from "./chunks.ts";
 import type { Point2 } from "./projection.ts";
-
-export type PackedTerrainWord = number;
-
-export type PackedTerrainStack = {
-  data: Uint32Array<ArrayBuffer>;
-  width: number;
-  height: number;
-  slices: 8;
-  origin: Point2;
-};
 
 export type PainterCandidate = {
   ordinal: number;
@@ -40,7 +34,24 @@ export type ResolveHit = {
   rgba: [number, number, number, number];
 };
 
-type ResolveColorAtlas = {
+export type ResolveTraceCandidate = PainterCandidate & {
+  word: PackedTerrainWord;
+  shapeRef: number;
+  tileId: number | null;
+  biomeIndex: number;
+  painterRank: number;
+  localX: number;
+  localY: number;
+  rgba: [number, number, number, number];
+  sampledAlpha: number;
+};
+
+export type ResolveTrace = {
+  winner: ResolveHit | null;
+  candidates: ResolveTraceCandidate[];
+};
+
+export type ResolveColorAtlas = {
   data: Uint8Array<ArrayBuffer>;
   width: number;
   height: number;
@@ -248,6 +259,20 @@ function getCandidateKey(stack: PackedTerrainStack, textureX: number, textureY: 
   return slice * stack.width * stack.height + textureY * stack.width + textureX;
 }
 
+function getLocalCoordinates(
+  layout: LayoutContract,
+  candidate: PainterCandidate,
+  screenX: number,
+  screenY: number,
+): Point2 {
+  const frameTop = candidate.s * layout.halfTileHeight - layout.halfTileHeight - candidate.slice * layout.elevationStep;
+
+  return {
+    x: Math.floor(screenX - candidate.d * layout.halfTileWidth),
+    y: Math.floor(screenY - frameTop),
+  };
+}
+
 function enumerateCandidateSlots(
   screenX: number,
   screenY: number,
@@ -260,9 +285,7 @@ function enumerateCandidateSlots(
   for (let stripeIndex = 0; stripeIndex < 2; stripeIndex++) {
     const d = stripeRight + stripeIndex - 1;
     for (let slice = 0; slice < stack.slices; slice++) {
-      const baseS = Math.floor(
-        (screenY - layout.halfTileHeight + layout.frameTopOffset + layout.elevationStep * slice) / layout.halfTileHeight,
-      );
+      const baseS = Math.floor((screenY + layout.halfTileHeight + layout.elevationStep * slice) / layout.halfTileHeight);
       for (let delta = 0; delta < 3; delta++) {
         const s = baseS - delta;
         if (((s - d) & 1) !== 0) continue;
@@ -302,6 +325,7 @@ export type PackedTerrainCodec = {
   stack: PackedTerrainStack;
   getCandidateByOrdinal: (screenX: number, screenY: number, ordinal: number) => PainterCandidate | null;
   resolveVisibleTile: (atlas: ResolveColorAtlas, screenX: number, screenY: number) => ResolveHit | null;
+  traceVisibleTile: (atlas: ResolveColorAtlas, screenX: number, screenY: number) => ResolveTrace;
   enumerateCandidates: (screenX: number, screenY: number) => PainterCandidate[];
   getPackedScreen: (packedX: number, packedY: number, slice: number) => Point2;
 };
@@ -316,57 +340,67 @@ export function createPackedTerrainCodec(
   const stack = createPackedTerrainStack(map, tileset, elevationStep, biomeIndex);
 
   const enumerateCandidates = (screenX: number, screenY: number) => enumerateCandidateSlots(screenX, screenY, stack, layout);
+  const traceVisibleTile = (atlas: ResolveColorAtlas, screenX: number, screenY: number): ResolveTrace => {
+    let winner: ResolveHit | null = null;
+    const candidates: ResolveTraceCandidate[] = [];
+
+    for (const candidate of enumerateCandidates(screenX, screenY)) {
+      const word = getStackWord(stack, candidate.textureX, candidate.textureY, candidate.slice);
+      const shapeReference = decodeShapeReference(word);
+      const tileId = shapeReference === 0 ? null : shapeReference - 1;
+      const local = getLocalCoordinates(layout, candidate, screenX, screenY);
+      const resolvedBiomeIndex = decodeBiomeIndex(word);
+      const painterRank = decodePainterRank(word);
+      const rgba: [number, number, number, number] =
+        tileId === null ? [0, 0, 0, 0] : sampleAtlasPixel(atlas, tileset, tileId, resolvedBiomeIndex, local.x, local.y);
+      const sampledAlpha = rgba[3];
+
+      candidates.push({
+        ...candidate,
+        word,
+        shapeRef: shapeReference,
+        tileId,
+        biomeIndex: resolvedBiomeIndex,
+        painterRank,
+        localX: local.x,
+        localY: local.y,
+        rgba,
+        sampledAlpha,
+      });
+
+      if (shapeReference === 0 || sampledAlpha === 0) continue;
+      if (tileId === null) throw new Error("Expected a tile id for a non-empty packed terrain word.");
+      if (winner !== null && painterRank <= winner.painterRank) continue;
+
+      winner = {
+        word,
+        shapeRef: shapeReference,
+        tileId,
+        biomeIndex: resolvedBiomeIndex,
+        painterRank,
+        packedX: candidate.packedX,
+        packedY: candidate.packedY,
+        textureX: candidate.textureX,
+        textureY: candidate.textureY,
+        slice: candidate.slice,
+        key: candidate.key,
+        screen: candidate.screen,
+        rgba,
+      };
+    }
+
+    return { winner, candidates };
+  };
 
   return {
     stack,
     getPackedScreen: (packedX: number, packedY: number, slice: number) => getPackedScreen(layout, packedX, packedY, slice),
     enumerateCandidates,
+    traceVisibleTile,
     getCandidateByOrdinal: (screenX: number, screenY: number, ordinal: number) => {
       const candidate = enumerateCandidates(screenX, screenY)[ordinal];
       return candidate === undefined ? null : candidate;
     },
-    resolveVisibleTile: (atlas, screenX, screenY) => {
-      let bestHit: ResolveHit | null = null;
-
-      for (const candidate of enumerateCandidates(screenX, screenY)) {
-        const word = getStackWord(stack, candidate.textureX, candidate.textureY, candidate.slice);
-        const shapeReference = decodeShapeReference(word);
-        if (shapeReference === 0) continue;
-
-        const biomeIndex = decodeBiomeIndex(word);
-        const painterRank = decodePainterRank(word);
-        const tileId = shapeReference - 1;
-        const localX = Math.floor(screenX - candidate.d * layout.halfTileWidth);
-        const localY = Math.floor(
-          screenY -
-            (candidate.s * layout.halfTileHeight +
-              layout.halfTileHeight -
-              layout.frameTopOffset -
-              candidate.slice * layout.elevationStep),
-        );
-        const rgba = sampleAtlasPixel(atlas, tileset, tileId, biomeIndex, localX, localY);
-        if (rgba[3] === 0) continue;
-
-        if (bestHit !== null && painterRank <= bestHit.painterRank) continue;
-
-        bestHit = {
-          word,
-          shapeRef: shapeReference,
-          tileId,
-          biomeIndex,
-          painterRank,
-          packedX: candidate.packedX,
-          packedY: candidate.packedY,
-          textureX: candidate.textureX,
-          textureY: candidate.textureY,
-          slice: candidate.slice,
-          key: candidate.key,
-          screen: candidate.screen,
-          rgba,
-        };
-      }
-
-      return bestHit;
-    },
+    resolveVisibleTile: (atlas, screenX, screenY) => traceVisibleTile(atlas, screenX, screenY).winner,
   };
 }

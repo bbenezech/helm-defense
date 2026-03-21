@@ -128,6 +128,18 @@ export function getMapUvForScreenPoint(screen: Point2, map: TerrainMap): Point2 
   };
 }
 
+export function getSurfaceSampleOffsetY(map: TerrainMap, tilesetTileHeight: number): number {
+  const offsetY = tilesetTileHeight - map.tileheight;
+
+  if (offsetY < 0) {
+    throw new Error(
+      `Terrain tileset tile height ${tilesetTileHeight} must not be smaller than map tile height ${map.tileheight}.`,
+    );
+  }
+
+  return offsetY;
+}
+
 export function getSurfaceHeightImpactOnScreenY(mapTileHeight: number, precision: number): number {
   if (mapTileHeight <= 0) {
     throw new Error(`Terrain map tile height must be greater than zero, received ${mapTileHeight}.`);
@@ -270,7 +282,6 @@ class TerrainRuntime implements ThreeTerrainApp {
     const halfTileHeight = this.bundle.map.tileheight * 0.5;
     const mapWidth = this.bundle.map.width;
     const mapHeight = this.bundle.map.height;
-    const frameTopOffset = this.bundle.tileset.tileheight - this.bundle.map.tileheight;
     const elevationStep = this.bundle.elevationYOffsetPx;
     const packedOriginX = this.bundle.packedTerrain.stack.origin.x;
     const packedOriginY = this.bundle.packedTerrain.stack.origin.y;
@@ -281,6 +292,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     const margin = this.bundle.tileset.margin;
     const atlasTileWidth = this.bundle.tileset.tilewidth;
     const atlasTileHeight = this.bundle.tileset.tileheight;
+    const surfaceSampleOffsetY = getSurfaceSampleOffsetY(this.bundle.map, this.bundle.tileset.tileheight);
     const surfaceWidth = this.bundle.surface.width;
     const surfaceHeight = this.bundle.surface.height;
     const surfaceMinHeight = this.bundle.surface.minHeight;
@@ -306,23 +318,26 @@ class TerrainRuntime implements ThreeTerrainApp {
         let pixelX = i32(floor(screen.x));
         let pixelY = i32(floor(screen.y));
         let stripeRight = i32(floor(f32(pixelX) / ${halfTileWidth.toFixed(1)}));
-        let groundY = solveGroundScreenY(screen, surface);
-        let surfaceMapUV = worldToMapUV(vec2<f32>(screen.x, groundY));
+        let surfaceScreen = vec2<f32>(screen.x, screen.y + ${surfaceSampleOffsetY.toFixed(1)});
+        let groundY = solveGroundScreenY(surfaceScreen, surface);
+        let surfaceMapUV = worldToMapUV(vec2<f32>(surfaceScreen.x, groundY));
         let surfaceTexelCoord = getSurfaceTexelCoord(surfaceMapUV);
         let surfaceTexel = averageSurfaceSamples(surface, surfaceMapUV);
         let surfaceNormal = decodeSurfaceNormal(surfaceTexel);
         let diffuse = max(dot(surfaceNormal, sunDirection), 0.0);
         let shade = ambient + (1.0 - ambient) * diffuse;
-        var bestColor = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         var bestRank = 0u;
         var found = false;
+        var winnerAtlasX = 0;
+        var winnerAtlasY = 0;
+        var winnerBiomeIndex = 0;
 
         for (var stripeIndex = 0; stripeIndex < 2; stripeIndex++) {
           let d = stripeRight + stripeIndex - 1;
 
           for (var slice = 0; slice < 8; slice++) {
             let baseS = i32(
-              floor((f32(pixelY) - ${halfTileHeight.toFixed(1)} + f32(${frameTopOffset} + slice * ${elevationStep})) / ${halfTileHeight.toFixed(1)}),
+              floor((f32(pixelY) + ${halfTileHeight.toFixed(1)} + f32(slice * ${elevationStep})) / ${halfTileHeight.toFixed(1)}),
             );
 
             for (var delta = 0; delta < 3; delta++) {
@@ -357,7 +372,7 @@ class TerrainRuntime implements ThreeTerrainApp {
               let painterRank = word >> ${PAINTER_RANK_SHIFT}u;
               let tileId = i32(shapeRef) - 1;
               let localX = pixelX - d * ${halfTileWidth};
-              let localY = pixelY - (s * ${halfTileHeight} + ${halfTileHeight} - ${frameTopOffset} - slice * ${elevationStep});
+              let localY = pixelY - (s * ${halfTileHeight} - ${halfTileHeight} - slice * ${elevationStep});
 
               if (localX < 0 || localY < 0 || localX >= ${atlasTileWidth} || localY >= ${atlasTileHeight}) {
                 continue;
@@ -367,35 +382,46 @@ class TerrainRuntime implements ThreeTerrainApp {
               let row = tileId / ${columns};
               let atlasX = ${margin} + column * ${atlasTileWidth + spacing} + localX;
               let atlasY = ${margin} + row * ${atlasTileHeight + spacing} + localY;
-              let atlasTexel = textureLoad(atlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
+              let checkerAtlasTexel = textureLoad(checkerAtlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
 
-              if (atlasTexel.a <= 0.0) {
+              if (checkerAtlasTexel.a <= 0.0) {
                 continue;
               }
 
               if (!found || painterRank > bestRank) {
-                var resolvedRgb = decodeTerrainColor(atlasTexel) * shade;
-                var resolvedAlpha = atlasTexel.a;
-
-                if (debugView >= 0.5) {
-                  let checkerAtlasTexel = textureLoad(checkerAtlas, vec2<i32>(atlasX, atlasY), i32(biomeIndex), 0);
-                  resolvedRgb = decodeTerrainColor(checkerAtlasTexel) * shade;
-                  resolvedAlpha = checkerAtlasTexel.a;
-
-                  if (debugSurfaceGrid >= 0.5 && checkerAtlasTexel.a > 0.75 && isSurfaceCheckerMismatch(checkerAtlasTexel, surfaceTexelCoord)) {
-                    resolvedRgb = mix(resolvedRgb, vec3<f32>(0.0, 1.0, 1.0), ${SURFACE_CHECKER_OVERLAY_ALPHA.toFixed(8)});
-                  }
-                }
-
                 found = true;
                 bestRank = painterRank;
-                bestColor = vec4<f32>(resolvedRgb, resolvedAlpha);
+                winnerAtlasX = atlasX;
+                winnerAtlasY = atlasY;
+                winnerBiomeIndex = i32(biomeIndex);
               }
             }
           }
         }
 
-        return bestColor;
+        if (!found) {
+          return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+
+        let winnerCheckerAtlasTexel = textureLoad(checkerAtlas, vec2<i32>(winnerAtlasX, winnerAtlasY), winnerBiomeIndex, 0);
+        let winnerBeautyAtlasTexel = textureLoad(atlas, vec2<i32>(winnerAtlasX, winnerAtlasY), winnerBiomeIndex, 0);
+        var resolvedRgb = decodeTerrainColor(winnerBeautyAtlasTexel) * shade;
+        var resolvedAlpha = winnerCheckerAtlasTexel.a;
+
+        if (debugView >= 0.5) {
+          resolvedRgb = decodeTerrainColor(winnerCheckerAtlasTexel) * shade;
+          resolvedAlpha = winnerCheckerAtlasTexel.a;
+
+          if (
+            debugSurfaceGrid >= 0.5 &&
+            winnerCheckerAtlasTexel.a > 0.75 &&
+            isSurfaceCheckerMismatch(winnerCheckerAtlasTexel, surfaceTexelCoord)
+          ) {
+            resolvedRgb = mix(resolvedRgb, vec3<f32>(0.0, 1.0, 1.0), ${SURFACE_CHECKER_OVERLAY_ALPHA.toFixed(8)});
+          }
+        }
+
+        return vec4<f32>(resolvedRgb, resolvedAlpha);
       }
 
       fn worldToMapUV(world: vec2<f32>) -> vec2<f32> {
@@ -670,7 +696,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.cameraState,
       this.viewport,
     );
-    const hit = this.bundle.codec.resolveVisibleTile(this.bundle.colorAtlas, world.x, world.y);
+    const hit = this.bundle.codec.resolveVisibleTile(this.bundle.checkerAtlas, world.x, world.y);
     this.updateSelection(hit);
   };
 
