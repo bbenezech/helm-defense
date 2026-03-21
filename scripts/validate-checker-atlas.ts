@@ -48,15 +48,33 @@ export type CheckerAtlasComparisonCounts = {
   backgroundMismatchPixels: number;
 };
 
+export type CheckerMismatchClassificationCounts = {
+  boundaryBlendDarkPixels: number;
+  boundaryBlendLightPixels: number;
+  boundaryBlendPixels: number;
+  unexpectedOwnedMismatchPixels: number;
+  unexpectedBackgroundMismatchPixels: number;
+  unexpectedMismatchPixels: number;
+};
+
+type CheckerMismatchClassification =
+  | "boundaryBlendDark"
+  | "boundaryBlendLight"
+  | "unexpectedOwnedMismatch"
+  | "unexpectedBackgroundMismatch";
+
 type CheckerFrameComparison = {
   counts: CheckerAtlasComparisonCounts;
+  classificationCounts: CheckerMismatchClassificationCounts;
   diffImage: RgbaImageData;
+  boundaryDiffImage: RgbaImageData;
 };
 
 type CheckerFrameSummary = {
   frameIndex: number;
   tileName: string;
   counts: CheckerAtlasComparisonCounts;
+  classificationCounts: CheckerMismatchClassificationCounts;
 };
 
 type CheckerAtlasValidationSummary = {
@@ -67,6 +85,7 @@ type CheckerAtlasValidationSummary = {
   lightValue: number;
   darkValue: number;
   counts: CheckerAtlasComparisonCounts;
+  classificationCounts: CheckerMismatchClassificationCounts;
   frames: CheckerFrameSummary[];
 };
 
@@ -103,6 +122,29 @@ function addCounts(total: CheckerAtlasComparisonCounts, next: CheckerAtlasCompar
   total.seedMismatchPixels += next.seedMismatchPixels;
   total.floodFilledMismatchPixels += next.floodFilledMismatchPixels;
   total.backgroundMismatchPixels += next.backgroundMismatchPixels;
+}
+
+function createEmptyClassificationCounts(): CheckerMismatchClassificationCounts {
+  return {
+    boundaryBlendDarkPixels: 0,
+    boundaryBlendLightPixels: 0,
+    boundaryBlendPixels: 0,
+    unexpectedOwnedMismatchPixels: 0,
+    unexpectedBackgroundMismatchPixels: 0,
+    unexpectedMismatchPixels: 0,
+  };
+}
+
+function addClassificationCounts(
+  total: CheckerMismatchClassificationCounts,
+  next: CheckerMismatchClassificationCounts,
+) {
+  total.boundaryBlendDarkPixels += next.boundaryBlendDarkPixels;
+  total.boundaryBlendLightPixels += next.boundaryBlendLightPixels;
+  total.boundaryBlendPixels += next.boundaryBlendPixels;
+  total.unexpectedOwnedMismatchPixels += next.unexpectedOwnedMismatchPixels;
+  total.unexpectedBackgroundMismatchPixels += next.unexpectedBackgroundMismatchPixels;
+  total.unexpectedMismatchPixels += next.unexpectedMismatchPixels;
 }
 
 function createImage(data: Uint8ClampedArray<ArrayBuffer>, width: number, height: number): RgbaImageData {
@@ -278,10 +320,129 @@ export function normalizeFrameToOwnershipCoverage(frame: RgbaImageData, ownershi
   return createImage(data, frame.width, frame.height);
 }
 
-function getDiffColor(seedPixel: boolean, ownedPixel: boolean): [number, number, number, number] {
-  if (seedPixel) return [255, 64, 64, 255];
-  if (ownedPixel) return [64, 160, 255, 255];
-  return [255, 224, 64, 255];
+function writePixelColor(
+  data: Uint8ClampedArray<ArrayBuffer>,
+  pixelOffset: number,
+  color: [number, number, number, number],
+) {
+  data[pixelOffset] = color[0];
+  data[pixelOffset + 1] = color[1];
+  data[pixelOffset + 2] = color[2];
+  data[pixelOffset + 3] = color[3];
+}
+
+function pixelMatchesCheckerValue(
+  frame: RgbaImageData,
+  pixelOffset: number,
+  checkerValue: number,
+) {
+  return (
+    frame.data[pixelOffset] === checkerValue &&
+    frame.data[pixelOffset + 1] === checkerValue &&
+    frame.data[pixelOffset + 2] === checkerValue &&
+    frame.data[pixelOffset + 3] === 255
+  );
+}
+
+function isBoundaryBlendPixel(
+  referenceFrame: RgbaImageData,
+  ownershipFrame: BinaryFrame,
+  pixelIndex: number,
+) {
+  const pixelX = pixelIndex % referenceFrame.width;
+  const pixelY = Math.floor(pixelIndex / referenceFrame.width);
+  let sawDark = false;
+  let sawLight = false;
+
+  for (let offsetY = -1; offsetY <= 1; offsetY++) {
+    const neighborY = pixelY + offsetY;
+    if (neighborY < 0 || neighborY >= referenceFrame.height) continue;
+
+    for (let offsetX = -1; offsetX <= 1; offsetX++) {
+      const neighborX = pixelX + offsetX;
+      if (neighborX < 0 || neighborX >= referenceFrame.width) continue;
+
+      const neighborIndex = neighborY * referenceFrame.width + neighborX;
+      if (ownershipFrame.coverage[neighborIndex] !== 1) continue;
+
+      const neighborOffset = neighborIndex * 4;
+      if (pixelMatchesCheckerValue(referenceFrame, neighborOffset, DEFAULT_CHECKER_ATLAS_DARK_VALUE)) {
+        sawDark = true;
+      }
+      if (pixelMatchesCheckerValue(referenceFrame, neighborOffset, DEFAULT_CHECKER_ATLAS_LIGHT_VALUE)) {
+        sawLight = true;
+      }
+      if (sawDark && sawLight) return true;
+    }
+  }
+
+  return false;
+}
+
+function classifyCheckerMismatch(
+  referenceFrame: RgbaImageData,
+  ownershipFrame: BinaryFrame,
+  pixelIndex: number,
+  seedPixel: boolean,
+  ownedPixel: boolean,
+): CheckerMismatchClassification {
+  if (!ownedPixel) return "unexpectedBackgroundMismatch";
+  if (!seedPixel) return "unexpectedOwnedMismatch";
+  if (!isBoundaryBlendPixel(referenceFrame, ownershipFrame, pixelIndex)) {
+    return "unexpectedOwnedMismatch";
+  }
+
+  const pixelOffset = pixelIndex * 4;
+  if (pixelMatchesCheckerValue(referenceFrame, pixelOffset, DEFAULT_CHECKER_ATLAS_DARK_VALUE)) {
+    return "boundaryBlendDark";
+  }
+  if (pixelMatchesCheckerValue(referenceFrame, pixelOffset, DEFAULT_CHECKER_ATLAS_LIGHT_VALUE)) {
+    return "boundaryBlendLight";
+  }
+  return "unexpectedOwnedMismatch";
+}
+
+function addClassificationCount(
+  counts: CheckerMismatchClassificationCounts,
+  classification: CheckerMismatchClassification,
+) {
+  switch (classification) {
+    case "boundaryBlendDark":
+      counts.boundaryBlendDarkPixels++;
+      counts.boundaryBlendPixels++;
+      return;
+    case "boundaryBlendLight":
+      counts.boundaryBlendLightPixels++;
+      counts.boundaryBlendPixels++;
+      return;
+    case "unexpectedOwnedMismatch":
+      counts.unexpectedOwnedMismatchPixels++;
+      counts.unexpectedMismatchPixels++;
+      return;
+    case "unexpectedBackgroundMismatch":
+      counts.unexpectedBackgroundMismatchPixels++;
+      counts.unexpectedMismatchPixels++;
+      return;
+    default:
+      throw new Error(classification satisfies never);
+  }
+}
+
+function getMismatchDiffColor(
+  classification: CheckerMismatchClassification,
+): [number, number, number, number] {
+  switch (classification) {
+    case "boundaryBlendDark":
+      return [255, 0, 255, 255];
+    case "boundaryBlendLight":
+      return [64, 224, 255, 255];
+    case "unexpectedOwnedMismatch":
+      return [255, 64, 64, 255];
+    case "unexpectedBackgroundMismatch":
+      return [255, 224, 64, 255];
+    default:
+      throw new Error(classification satisfies never);
+  }
 }
 
 export function compareCheckerFrameImages(
@@ -305,7 +466,9 @@ export function compareCheckerFrameImages(
   }
 
   const counts = createEmptyCounts();
+  const classificationCounts = createEmptyClassificationCounts();
   const diffData = new Uint8ClampedArray(referenceFrame.data.length);
+  const boundaryDiffData = new Uint8ClampedArray(referenceFrame.data.length);
   for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
     const pixelOffset = pixelIndex * 4;
     const seedPixel = seedFrame.coverage[pixelIndex] === 1;
@@ -340,16 +503,20 @@ export function compareCheckerFrameImages(
     else if (ownedPixel) counts.floodFilledMismatchPixels++;
     else counts.backgroundMismatchPixels++;
 
-    const diffColor = getDiffColor(seedPixel, ownedPixel);
-    diffData[pixelOffset] = diffColor[0];
-    diffData[pixelOffset + 1] = diffColor[1];
-    diffData[pixelOffset + 2] = diffColor[2];
-    diffData[pixelOffset + 3] = diffColor[3];
+    const classification = classifyCheckerMismatch(referenceFrame, ownershipFrame, pixelIndex, seedPixel, ownedPixel);
+    addClassificationCount(classificationCounts, classification);
+    const diffColor = getMismatchDiffColor(classification);
+    writePixelColor(diffData, pixelOffset, diffColor);
+    if (classification === "boundaryBlendDark" || classification === "boundaryBlendLight") {
+      writePixelColor(boundaryDiffData, pixelOffset, diffColor);
+    }
   }
 
   return {
     counts,
+    classificationCounts,
     diffImage: createImage(diffData, referenceFrame.width, referenceFrame.height),
+    boundaryDiffImage: createImage(boundaryDiffData, referenceFrame.width, referenceFrame.height),
   };
 }
 
@@ -386,7 +553,9 @@ async function writeFrameDiagnostics(
   referenceFrame: RgbaImageData,
   blenderFrame: RgbaImageData,
   diffFrame: RgbaImageData,
+  boundaryDiffFrame: RgbaImageData,
   counts: CheckerAtlasComparisonCounts,
+  classificationCounts: CheckerMismatchClassificationCounts,
 ) {
   const frameDirectory = path.join(reportDirectory, getFrameDirectoryName(frameIndex, tileName));
   fs.mkdirSync(frameDirectory, { recursive: true });
@@ -394,8 +563,19 @@ async function writeFrameDiagnostics(
     saveImageDataToImage(referenceFrame, path.join(frameDirectory, "reference.png")),
     saveImageDataToImage(blenderFrame, path.join(frameDirectory, "blender.png")),
     saveImageDataToImage(diffFrame, path.join(frameDirectory, "diff.png")),
+    saveImageDataToImage(boundaryDiffFrame, path.join(frameDirectory, "boundary-diff.png")),
   ]);
-  fs.writeFileSync(path.join(frameDirectory, "summary.json"), JSON.stringify(counts, null, 2));
+  fs.writeFileSync(
+    path.join(frameDirectory, "summary.json"),
+    JSON.stringify(
+      {
+        counts,
+        classificationCounts,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function renderCheckerFramesWithBlender(
@@ -513,8 +693,10 @@ async function main() {
     extractAtlasFrame(referenceAtlas, tileset, frameIndex),
   );
   const diffFrames: RgbaImageData[] = [];
+  const boundaryDiffFrames: RgbaImageData[] = [];
   const frameSummaries: CheckerFrameSummary[] = [];
   const totalCounts = createEmptyCounts();
+  const totalClassificationCounts = createEmptyClassificationCounts();
 
   for (let frameIndex = 0; frameIndex < tileset.tilecount; frameIndex++) {
     const referenceFrame = referenceFrames[frameIndex];
@@ -530,12 +712,15 @@ async function main() {
 
     const comparison = compareCheckerFrameImages(referenceFrame, blenderFrame, seedFrame, ownershipFrame);
     diffFrames.push(comparison.diffImage);
+    boundaryDiffFrames.push(comparison.boundaryDiffImage);
     frameSummaries.push({
       frameIndex,
       tileName,
       counts: comparison.counts,
+      classificationCounts: comparison.classificationCounts,
     });
     addCounts(totalCounts, comparison.counts);
+    addClassificationCounts(totalClassificationCounts, comparison.classificationCounts);
     await writeFrameDiagnostics(
       reportDirectory,
       frameIndex,
@@ -543,16 +728,20 @@ async function main() {
       referenceFrame,
       blenderFrame,
       comparison.diffImage,
+      comparison.boundaryDiffImage,
       comparison.counts,
+      comparison.classificationCounts,
     );
   }
 
   const blenderAtlas = createAtlasImageData(blenderFrames, tileset);
   const diffAtlas = createAtlasImageData(diffFrames, tileset);
+  const boundaryDiffAtlas = createAtlasImageData(boundaryDiffFrames, tileset);
   await Promise.all([
     saveImageDataToImage(referenceAtlas, path.join(reportDirectory, "reference-atlas.png")),
     saveImageDataToImage(blenderAtlas, path.join(reportDirectory, "blender-atlas.png")),
     saveImageDataToImage(diffAtlas, path.join(reportDirectory, "diff-atlas.png")),
+    saveImageDataToImage(boundaryDiffAtlas, path.join(reportDirectory, "boundary-diff-atlas.png")),
   ]);
 
   const summary: CheckerAtlasValidationSummary = {
@@ -563,12 +752,13 @@ async function main() {
     lightValue: DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
     darkValue: DEFAULT_CHECKER_ATLAS_DARK_VALUE,
     counts: totalCounts,
+    classificationCounts: totalClassificationCounts,
     frames: frameSummaries,
   };
   fs.writeFileSync(path.join(reportDirectory, "summary.json"), JSON.stringify(summary, null, 2));
 
   console.log(
-    `checker-atlas: mismatched=${totalCounts.mismatchedPixels}, seed=${totalCounts.seedMismatchPixels}, flood=${totalCounts.floodFilledMismatchPixels}, background=${totalCounts.backgroundMismatchPixels}`,
+    `checker-atlas: mismatched=${totalCounts.mismatchedPixels}, boundary=${totalClassificationCounts.boundaryBlendPixels}, unexpected=${totalClassificationCounts.unexpectedMismatchPixels}, seed=${totalCounts.seedMismatchPixels}, flood=${totalCounts.floodFilledMismatchPixels}, background=${totalCounts.backgroundMismatchPixels}`,
   );
   console.log(`Checker atlas diagnostics written to ${reportDirectory}`);
 }

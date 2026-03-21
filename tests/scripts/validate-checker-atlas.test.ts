@@ -71,9 +71,125 @@ describe("checker atlas validator helpers", () => {
     expect(comparison.counts.matchingPixels).toBe(4);
     expect(comparison.counts.seedMismatchPixels).toBe(0);
     expect(comparison.counts.floodFilledMismatchPixels).toBe(0);
+    expect(comparison.classificationCounts.boundaryBlendPixels).toBe(0);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(0);
   });
 
-  it("classifies seed and flood-filled checker mismatches separately", () => {
+  it("classifies dark checker-boundary blends separately from unexpected mismatches", () => {
+    const reference = createRgbaImage(3, 3, [
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+    ]);
+    const blender = createRgbaImage(3, 3, [
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      107, 107, 107, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+    ]);
+    const seed = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const ownership = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const comparison = compareCheckerFrameImages(reference, blender, seed, ownership);
+
+    expect(comparison.counts.mismatchedPixels).toBe(1);
+    expect(comparison.counts.seedMismatchPixels).toBe(1);
+    expect(comparison.counts.floodFilledMismatchPixels).toBe(0);
+    expect(comparison.counts.backgroundMismatchPixels).toBe(0);
+    expect(comparison.classificationCounts.boundaryBlendDarkPixels).toBe(1);
+    expect(comparison.classificationCounts.boundaryBlendLightPixels).toBe(0);
+    expect(comparison.classificationCounts.boundaryBlendPixels).toBe(1);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(0);
+  });
+
+  it("classifies light checker-boundary blends separately from unexpected mismatches", () => {
+    const reference = createRgbaImage(3, 3, [
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+    ]);
+    const blender = createRgbaImage(3, 3, [
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      215, 215, 215, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+      80, 80, 80, 255,
+      224, 224, 224, 255,
+    ]);
+    const seed = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const ownership = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const comparison = compareCheckerFrameImages(reference, blender, seed, ownership);
+
+    expect(comparison.classificationCounts.boundaryBlendDarkPixels).toBe(0);
+    expect(comparison.classificationCounts.boundaryBlendLightPixels).toBe(1);
+    expect(comparison.classificationCounts.boundaryBlendPixels).toBe(1);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(0);
+  });
+
+  it("classifies non-boundary owned mismatches as unexpected", () => {
+    const reference = createRgbaImage(3, 3, [
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+    ]);
+    const blender = createRgbaImage(3, 3, [
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      107, 107, 107, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+      80, 80, 80, 255,
+    ]);
+    const seed = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const ownership = createBinaryFrame(3, 3, [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    const comparison = compareCheckerFrameImages(reference, blender, seed, ownership);
+
+    expect(comparison.classificationCounts.boundaryBlendPixels).toBe(0);
+    expect(comparison.classificationCounts.unexpectedOwnedMismatchPixels).toBe(1);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(1);
+  });
+
+  it("classifies background mismatches separately from owned mismatches", () => {
+    const reference = createRgbaImage(1, 1, [0, 0, 0, 0]);
+    const blender = createRgbaImage(1, 1, [80, 80, 80, 255]);
+    const seed = createBinaryFrame(1, 1, [0]);
+    const ownership = createBinaryFrame(1, 1, [0]);
+    const comparison = compareCheckerFrameImages(reference, blender, seed, ownership);
+
+    expect(comparison.counts.backgroundMismatchPixels).toBe(1);
+    expect(comparison.classificationCounts.unexpectedBackgroundMismatchPixels).toBe(1);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(1);
+  });
+
+  it("keeps flood-filled mismatches in the unexpected owned bucket", () => {
     const reference = createRgbaImage(2, 1, [
       224, 224, 224, 255,
       80, 80, 80, 255,
@@ -82,13 +198,13 @@ describe("checker atlas validator helpers", () => {
       80, 80, 80, 255,
       224, 224, 224, 255,
     ]);
-    const seed = createBinaryFrame(2, 1, [1, 0]);
+    const seed = createBinaryFrame(2, 1, [0, 0]);
     const ownership = createBinaryFrame(2, 1, [1, 1]);
     const comparison = compareCheckerFrameImages(reference, blender, seed, ownership);
 
-    expect(comparison.counts.mismatchedPixels).toBe(2);
-    expect(comparison.counts.seedMismatchPixels).toBe(1);
-    expect(comparison.counts.floodFilledMismatchPixels).toBe(1);
-    expect(comparison.counts.backgroundMismatchPixels).toBe(0);
+    expect(comparison.counts.floodFilledMismatchPixels).toBe(2);
+    expect(comparison.classificationCounts.boundaryBlendPixels).toBe(0);
+    expect(comparison.classificationCounts.unexpectedOwnedMismatchPixels).toBe(2);
+    expect(comparison.classificationCounts.unexpectedMismatchPixels).toBe(2);
   });
 });
