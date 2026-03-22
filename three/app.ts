@@ -10,7 +10,6 @@ import {
   resizeCameraState,
   screenPointToWorld,
   type CameraState,
-  type Point2,
   type Viewport,
 } from "./projection.ts";
 
@@ -62,18 +61,6 @@ export function getSunDirectionVector(settings: ThreeLightingSettings): THREE.Ve
   return sunDirection.normalize();
 }
 
-export function decodeSurfaceNormal(red: number, green: number, blue: number): THREE.Vector3 {
-  const normal = new THREE.Vector3(red * 2 - 1, green * 2 - 1, blue * 2 - 1);
-  if (normal.lengthSq() === 0) return new THREE.Vector3(0, 0, 1);
-  normal.normalize();
-  normal.applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4);
-  return normal.normalize();
-}
-
-export function decodeSurfaceHeight(alpha: number, minHeight: number, maxHeight: number): number {
-  return alpha * (maxHeight - minHeight) + minHeight;
-}
-
 function getCheckerCellSize(size: number): number {
   if (size <= 0) throw new Error(`Checker size must be greater than zero, received ${size}.`);
   return size / CHECKER_CELLS_PER_TILE;
@@ -87,50 +74,6 @@ export function getSurfaceCheckerCellSize(precision: number): number {
     );
   }
   return cellSize;
-}
-
-export function getSurfaceCheckerParity(surfaceTexelX: number, surfaceTexelY: number, precision: number): 0 | 1 {
-  const cellSize = getSurfaceCheckerCellSize(precision);
-  const checkerX = Math.floor(surfaceTexelX / cellSize);
-  const checkerY = Math.floor(surfaceTexelY / cellSize);
-  return (checkerX + checkerY) % 2 === 0 ? 0 : 1;
-}
-
-export function getCheckerAtlasParity(checkerChannel: number): 0 | 1 {
-  return checkerChannel >= 0.5 ? 0 : 1;
-}
-
-export function isSurfaceCheckerMismatch(
-  checkerChannel: number,
-  surfaceTexelX: number,
-  surfaceTexelY: number,
-  precision: number,
-): boolean {
-  return getCheckerAtlasParity(checkerChannel) !== getSurfaceCheckerParity(surfaceTexelX, surfaceTexelY, precision);
-}
-
-export function getTerrainDebugAlpha(view: ThreeDebugView, atlasAlpha: number, checkerAlpha: number): number {
-  switch (view) {
-    case "terrain": {
-      return atlasAlpha;
-    }
-    case "checker-compare": {
-      return checkerAlpha;
-    }
-    default: {
-      throw new Error(view satisfies never);
-    }
-  }
-}
-
-export function getMapUvForScreenPoint(screen: Point2, map: TerrainMap): Point2 {
-  const halfTileWidthInv = 2 / map.tilewidth;
-  const halfTileHeightInv = 2 / map.tileheight;
-
-  return {
-    x: ((screen.x * halfTileWidthInv + screen.y * halfTileHeightInv) * 0.5 - 1) / map.width,
-    y: ((screen.y * halfTileHeightInv - screen.x * halfTileWidthInv) * 0.5) / map.height,
-  };
 }
 
 export function getSurfaceSampleOffsetY(map: TerrainMap, tilesetTileHeight: number): number {
@@ -153,37 +96,6 @@ export function getSurfaceHeightImpactOnScreenY(mapTileHeight: number, precision
     throw new Error(`Terrain surface precision must be greater than zero, received ${precision}.`);
   }
   return ((5 / 4) * mapTileHeight) / precision;
-}
-
-export function solveSurfaceGroundY(
-  screenY: number,
-  minHeight: number,
-  maxHeight: number,
-  surfaceHeightImpactOnScreenY: number,
-  sampleHeightAtGroundY: (groundY: number) => number,
-  iterations = SURFACE_GROUND_SEARCH_ITERATIONS,
-): number {
-  let minY = screenY;
-  let maxY = screenY + (maxHeight - minHeight) * surfaceHeightImpactOnScreenY;
-
-  for (let iteration = 0; iteration < iterations; iteration++) {
-    const groundY = (minY + maxY) * 0.5;
-    const height = sampleHeightAtGroundY(groundY);
-    const occlusionPoint = groundY - height * surfaceHeightImpactOnScreenY;
-
-    if (occlusionPoint >= screenY) {
-      maxY = groundY;
-    } else {
-      minY = groundY;
-    }
-  }
-
-  return (minY + maxY) * 0.5;
-}
-
-export function getTerrainShade(normal: THREE.Vector3, sunDirection: THREE.Vector3, ambient: number): number {
-  const diffuse = Math.max(normal.dot(sunDirection), 0);
-  return ambient + (1 - ambient) * diffuse;
 }
 
 function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
@@ -244,7 +156,7 @@ class TerrainRuntime implements ThreeTerrainApp {
   private readonly sunDirectionUniform = uniform(getSunDirectionVector(DEFAULT_THREE_LIGHTING_SETTINGS));
   private readonly ambientUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.ambient);
   private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
-  private readonly debugSurfaceGridUniform = uniform(1);
+  private readonly debugSurfaceGridUniform = uniform(true);
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly cleanups: Array<() => void> = [];
   private paused = false;
@@ -310,7 +222,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     );
     const surfaceCheckerCellSize = getSurfaceCheckerCellSize(this.bundle.surface.precision);
 
-    const resolveTerrain = wgslFn(`
+    const resolveTerrain = wgslFn(/* wgsl */ `
       fn resolveTerrain(
         screen: vec2<f32>,
         packedMap: texture_2d_array<f32>,
@@ -858,7 +770,7 @@ class TerrainRuntime implements ThreeTerrainApp {
   }
 
   setDebugSurfaceGridVisible(visible: boolean) {
-    this.debugSurfaceGridUniform.value = visible ? 1 : 0;
+    this.debugSurfaceGridUniform.value = visible;
   }
 }
 
