@@ -314,11 +314,7 @@ function rasterizeTopSurfaceFrame(
   excludeSouthAndEastBoundaries: boolean,
 ): BinaryFrame {
   const uvFrame = rasterizeTopSurfaceLocalUvFrame(tileName, sceneSpec, excludeSouthAndEastBoundaries);
-  return {
-    width: uvFrame.width,
-    height: uvFrame.height,
-    coverage: uvFrame.coverage,
-  };
+  return { width: uvFrame.width, height: uvFrame.height, coverage: uvFrame.coverage };
 }
 
 function rasterizeTopSurfaceLocalUvFrame(
@@ -443,14 +439,11 @@ function rasterizeCheckerSeedFrame(sceneSpec: TerrainSceneSpec, poseIndex: numbe
   const coverage = new Uint8Array(ownershipFrame.coverage.length);
 
   for (let pixelIndex = 0; pixelIndex < ownershipFrame.coverage.length; pixelIndex++) {
-    coverage[pixelIndex] = ownershipFrame.coverage[pixelIndex] === 1 && visibleUvFrame.coverage[pixelIndex] === 1 ? 1 : 0;
+    coverage[pixelIndex] =
+      ownershipFrame.coverage[pixelIndex] === 1 && visibleUvFrame.coverage[pixelIndex] === 1 ? 1 : 0;
   }
 
-  return {
-    width: ownershipFrame.width,
-    height: ownershipFrame.height,
-    coverage,
-  };
+  return { width: ownershipFrame.width, height: ownershipFrame.height, coverage };
 }
 
 export function rasterizeCheckerSeedFrames(sceneSpec: TerrainSceneSpec = terrainSceneSpec): BinaryFrame[] {
@@ -458,8 +451,7 @@ export function rasterizeCheckerSeedFrames(sceneSpec: TerrainSceneSpec = terrain
 }
 
 function getCheckerCellIndex(coordinate: number, cellsPerAxis: number): number {
-  const clampedCoordinate =
-    coordinate < 0 ? 0 : coordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : coordinate;
+  const clampedCoordinate = coordinate < 0 ? 0 : coordinate >= 1 ? 1 - PIXEL_SAMPLE_BIAS : coordinate;
   return Math.floor(clampedCoordinate * cellsPerAxis);
 }
 
@@ -500,7 +492,8 @@ function floodFillCheckerCoverage(
     for (const offset of CHECKER_FILL_NEIGHBORS) {
       const neighborX = pixelX + offset.x;
       const neighborY = pixelY + offset.y;
-      if (neighborX < 0 || neighborY < 0 || neighborX >= ownershipFrame.width || neighborY >= ownershipFrame.height) continue;
+      if (neighborX < 0 || neighborY < 0 || neighborX >= ownershipFrame.width || neighborY >= ownershipFrame.height)
+        continue;
 
       const neighborIndex = neighborY * ownershipFrame.width + neighborX;
       if (ownershipFrame.coverage[neighborIndex] !== 1 || assignedCoverage[neighborIndex] === 1) continue;
@@ -523,16 +516,21 @@ function getQuarterTurn(rotationZRad: number): 0 | 1 | 2 | 3 {
   const quarterTurn = Math.round((rotationZRad % (2 * Math.PI)) / (Math.PI / 2));
   const normalizedQuarterTurn = ((quarterTurn % 4) + 4) % 4;
   switch (normalizedQuarterTurn) {
-    case 0:
+    case 0: {
       return 0;
-    case 1:
+    }
+    case 1: {
       return 1;
-    case 2:
+    }
+    case 2: {
       return 2;
-    case 3:
+    }
+    case 3: {
       return 3;
-    default:
+    }
+    default: {
       throw new Error(`Unexpected quarter turn ${normalizedQuarterTurn}.`);
+    }
   }
 }
 
@@ -541,19 +539,29 @@ function applyCheckerTextureRotation(
   poseRotationZRad: number,
   uv: LocalPoint,
 ): LocalPoint {
-  const quarterTurn = textureRotation === "cameraAlignedLegacy" ? getQuarterTurn(poseRotationZRad) : textureRotation === "quarterTurn" ? 1 : 0;
+  const quarterTurn =
+    textureRotation === "cameraAlignedLegacy"
+      ? getQuarterTurn(poseRotationZRad)
+      : textureRotation === "quarterTurn"
+        ? 1
+        : 0;
 
   switch (quarterTurn) {
-    case 0:
+    case 0: {
       return uv;
-    case 1:
+    }
+    case 1: {
       return { u: uv.v, v: 1 - uv.u };
-    case 2:
+    }
+    case 2: {
       return { u: 1 - uv.u, v: 1 - uv.v };
-    case 3:
+    }
+    case 3: {
       return { u: 1 - uv.v, v: uv.u };
-    default:
+    }
+    default: {
       throw new Error(`Unexpected quarter turn ${quarterTurn satisfies never}.`);
+    }
   }
 }
 
@@ -563,12 +571,7 @@ export function rasterizeCheckerFrames(
     lightValue,
     darkValue,
     textureRotation,
-  }: {
-    cellsPerAxis: number;
-    lightValue: number;
-    darkValue: number;
-    textureRotation: CheckerTextureRotation;
-  },
+  }: { cellsPerAxis: number; lightValue: number; darkValue: number; textureRotation: CheckerTextureRotation },
   sceneSpec: TerrainSceneSpec = terrainSceneSpec,
 ): CheckerRasterFrame[] {
   if (cellsPerAxis <= 0) throw new Error(`Checker cells per axis must be greater than zero, received ${cellsPerAxis}.`);
@@ -584,11 +587,10 @@ export function rasterizeCheckerFrames(
       if (ownershipFrame.coverage[pixelIndex] !== 1) continue;
       if (visibleUvFrame.coverage[pixelIndex] !== 1) continue;
 
-      const rotatedUv = applyCheckerTextureRotation(
-        textureRotation,
-        pose.rotationZRad,
-        { u: visibleUvFrame.uValues[pixelIndex], v: visibleUvFrame.vValues[pixelIndex] },
-      );
+      const rotatedUv = applyCheckerTextureRotation(textureRotation, pose.rotationZRad, {
+        u: visibleUvFrame.uValues[pixelIndex],
+        v: visibleUvFrame.vValues[pixelIndex],
+      });
       const checkerU = getCheckerCellIndex(rotatedUv.u, cellsPerAxis);
       const checkerV = getCheckerCellIndex(flipUnitCoordinateForTextureRows(rotatedUv.v), cellsPerAxis);
       const checkerValue = (checkerU + checkerV) % 2 === 0 ? lightValue : darkValue;
@@ -599,12 +601,7 @@ export function rasterizeCheckerFrames(
 
     floodFillCheckerCoverage(ownershipFrame, assignedCoverage, checkerValues, data);
 
-    return {
-      width: ownershipFrame.width,
-      height: ownershipFrame.height,
-      channels: 4,
-      data,
-    };
+    return { width: ownershipFrame.width, height: ownershipFrame.height, channels: 4, data };
   });
 }
 

@@ -2,7 +2,7 @@
 
 declare global {
   interface ImportMetaEnv {
-    BASE_URL: string;
+    readonly BASE_URL: string;
   }
 
   interface ImportMeta {
@@ -22,11 +22,7 @@ export type TerrainTilesetProperty =
   | { name: "CENTER"; type: string; value: number }
   | { name: string; type: string; value: number | string };
 
-export type TerrainTilesetTile = {
-  id: number;
-  probability: number;
-  properties: TerrainTilesetProperty[];
-};
+export type TerrainTilesetTile = { id: number; probability: number; properties: TerrainTilesetProperty[] };
 
 export type TerrainTileset = {
   type: "tileset";
@@ -47,11 +43,7 @@ export type TerrainTileset = {
   properties: TerrainTilesetProperty[];
 };
 
-export type TerrainMapLayerProperty = {
-  name: string;
-  type: string;
-  value: number | string;
-};
+export type TerrainMapLayerProperty = { name: string; type: string; value: number | string };
 
 export type TerrainMapLayer = {
   id: number;
@@ -81,20 +73,11 @@ export type TerrainMap = {
   tilesets: Array<{ firstgid: number } & TerrainTileset>;
 };
 
-export type TileAtlasRegion = {
-  offset: Point2;
-  scale: Point2;
-};
+export type TileAtlasRegion = { offset: Point2; scale: Point2 };
 
-export type BiomeManifestEntry = {
-  id: string;
-  atlas: string;
-  checkerAtlas: string;
-};
+export type BiomeManifestEntry = { id: string; atlas: string; checkerAtlas: string };
 
-export type BiomeManifest = {
-  biomes: BiomeManifestEntry[];
-};
+export type BiomeManifest = { biomes: BiomeManifestEntry[] };
 
 type TerrainAtlasArray = {
   texture: THREE.DataArrayTexture;
@@ -107,10 +90,7 @@ type TerrainAtlasArray = {
 export type ColorAtlasArray = TerrainAtlasArray;
 export type CheckerAtlasArray = TerrainAtlasArray;
 
-export type PackedTerrainTexture = {
-  texture: THREE.DataArrayTexture;
-  stack: PackedTerrainStack;
-};
+export type PackedTerrainTexture = { texture: THREE.DataArrayTexture; stack: PackedTerrainStack };
 
 export type TerrainSurfaceTexture = {
   texture: THREE.DataTexture;
@@ -204,8 +184,8 @@ function parseTilesetTile(value: unknown, index: number) {
   return {
     id: assertNumber(value["id"], `Missing tileset tile id at index ${index}`),
     probability: assertNumber(value["probability"], `Missing tileset tile probability at index ${index}`),
-    properties: assertArray(value["properties"], `Missing tileset tile properties at index ${index}`).map((property, propertyIndex) =>
-      parseTilesetProperty(property, propertyIndex),
+    properties: assertArray(value["properties"], `Missing tileset tile properties at index ${index}`).map(
+      (property, propertyIndex) => parseTilesetProperty(property, propertyIndex),
     ),
   };
 }
@@ -265,8 +245,8 @@ function parseMapLayer(value: unknown, index: number): TerrainMapLayer {
     data: assertArray(value["data"], `Missing map layer data at index ${index}`).map((gid, gidIndex) =>
       assertNumber(gid, `Invalid gid at index ${gidIndex} in layer ${index}`),
     ),
-    properties: assertArray(value["properties"], `Missing map layer properties at index ${index}`).map((property, propertyIndex) =>
-      parseLayerProperty(property, propertyIndex),
+    properties: assertArray(value["properties"], `Missing map layer properties at index ${index}`).map(
+      (property, propertyIndex) => parseLayerProperty(property, propertyIndex),
     ),
   };
 }
@@ -327,7 +307,9 @@ export function parseTileableHeightmap(value: unknown): Heightmap {
   return rows.map((row, rowIndex) => {
     const cells = assertArray(row, `Invalid tileable heightmap row ${rowIndex}.`);
     if (cells.length !== width) {
-      throw new Error(`Tileable heightmap row ${rowIndex} width mismatch: expected ${width}, received ${cells.length}.`);
+      throw new Error(
+        `Tileable heightmap row ${rowIndex} width mismatch: expected ${width}, received ${cells.length}.`,
+      );
     }
 
     return cells.map((cell, columnIndex) =>
@@ -361,14 +343,8 @@ export function getAtlasRegion(tileset: TerrainTileset, tileId: number): TileAtl
   const y = tileset.margin + row * (tileset.tileheight + tileset.spacing);
 
   return {
-    offset: {
-      x: x / tileset.imagewidth,
-      y: 1 - (y + tileset.tileheight) / tileset.imageheight,
-    },
-    scale: {
-      x: tileset.tilewidth / tileset.imagewidth,
-      y: tileset.tileheight / tileset.imageheight,
-    },
+    offset: { x: x / tileset.imagewidth, y: 1 - (y + tileset.tileheight) / tileset.imageheight },
+    scale: { x: tileset.tilewidth / tileset.imagewidth, y: tileset.tileheight / tileset.imageheight },
   };
 }
 
@@ -386,29 +362,16 @@ async function loadImagePixels(url: string): Promise<{ data: Uint8Array<ArrayBuf
   context.drawImage(image, 0, 0);
   const imageData = context.getImageData(0, 0, image.width, image.height);
 
-  return {
-    data: new Uint8Array(imageData.data),
-    width: image.width,
-    height: image.height,
-  };
+  return { data: new Uint8Array(imageData.data), width: image.width, height: image.height };
 }
 
-type LoadedAtlasImage = {
-  data: Uint8Array<ArrayBuffer>;
-  width: number;
-  height: number;
-  pathname: string;
-};
+type LoadedAtlasImage = { data: Uint8Array<ArrayBuffer>; width: number; height: number; pathname: string };
 
 function getAtlasLayout(images: LoadedAtlasImage[], label: string): { width: number; height: number; depth: number } {
   const firstImage = images[0];
   if (firstImage === undefined) throw new Error(`${label} did not produce any atlas images.`);
 
-  const layout = {
-    width: firstImage.width,
-    height: firstImage.height,
-    depth: images.length,
-  };
+  const layout = { width: firstImage.width, height: firstImage.height, depth: images.length };
 
   for (const [index, image] of images.entries()) {
     if (image.width !== layout.width || image.height !== layout.height) {
@@ -437,20 +400,10 @@ function createAtlasArray(images: LoadedAtlasImage[], label: string): TerrainAtl
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
 
-  return {
-    texture,
-    data,
-    width: layout.width,
-    height: layout.height,
-    depth: layout.depth,
-  };
+  return { texture, data, width: layout.width, height: layout.height, depth: layout.depth };
 }
 
-function createImageTexture(
-  data: Uint8Array<ArrayBuffer>,
-  width: number,
-  height: number,
-): THREE.DataTexture {
+function createImageTexture(data: Uint8Array<ArrayBuffer>, width: number, height: number): THREE.DataTexture {
   const texture = new THREE.DataTexture(data, width, height);
   texture.format = THREE.RGBAFormat;
   texture.type = THREE.UnsignedByteType;
@@ -487,10 +440,7 @@ async function loadCheckerAtlasArray(tilesetName: string, manifest: BiomeManifes
   return loadAtlasArray(tilesetName, manifest, (biome) => biome.checkerAtlas, "Biome checker atlas");
 }
 
-function assertAtlasArrayLayoutsMatch(
-  colorAtlas: ColorAtlasArray,
-  checkerAtlas: CheckerAtlasArray,
-) {
+function assertAtlasArrayLayoutsMatch(colorAtlas: ColorAtlasArray, checkerAtlas: CheckerAtlasArray) {
   if (
     colorAtlas.width !== checkerAtlas.width ||
     colorAtlas.height !== checkerAtlas.height ||
@@ -535,7 +485,7 @@ function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTex
 function getTerrainSurfacePrecision(tileset: TerrainTileset): number {
   const precision = tileset.tilewidth / 8;
   if (!Number.isInteger(precision)) {
-    throw new Error(`Three terrain surface precision must be an integer, received ${precision}.`);
+    throw new TypeError(`Three terrain surface precision must be an integer, received ${precision}.`);
   }
   if (precision <= 0) {
     throw new Error(`Three terrain surface precision must be greater than zero, received ${precision}.`);
@@ -551,15 +501,7 @@ function createSurfaceTexture(
   minHeight: number,
   maxHeight: number,
 ): TerrainSurfaceTexture {
-  return {
-    texture: createImageTexture(data, width, height),
-    data,
-    width,
-    height,
-    precision,
-    minHeight,
-    maxHeight,
-  };
+  return { texture: createImageTexture(data, width, height), data, width, height, precision, minHeight, maxHeight };
 }
 
 function createTerrainSurfaceTexture(

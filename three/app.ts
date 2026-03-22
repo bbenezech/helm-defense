@@ -37,7 +37,7 @@ const { textureLoad, uniform, vec2, vec4, viewportUV, wgslFn } = THREE.TSL;
 const SURFACE_GROUND_SEARCH_ITERATIONS = 16;
 const CHECKER_CELLS_PER_TILE = 4;
 const SURFACE_CHECKER_OVERLAY_ALPHA = 0.7;
-const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1.0, 0.7).normalize();
+const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
   (Math.atan2(DEFAULT_SUN_DIRECTION.z, Math.hypot(DEFAULT_SUN_DIRECTION.x, DEFAULT_SUN_DIRECTION.y)) * 180) / Math.PI;
@@ -82,7 +82,9 @@ function getCheckerCellSize(size: number): number {
 export function getSurfaceCheckerCellSize(precision: number): number {
   const cellSize = getCheckerCellSize(precision);
   if (!Number.isInteger(cellSize)) {
-    throw new Error(`Surface checker cell size must be an integer, received ${cellSize} from precision ${precision}.`);
+    throw new TypeError(
+      `Surface checker cell size must be an integer, received ${cellSize} from precision ${precision}.`,
+    );
   }
   return cellSize;
 }
@@ -109,12 +111,15 @@ export function isSurfaceCheckerMismatch(
 
 export function getTerrainDebugAlpha(view: ThreeDebugView, atlasAlpha: number, checkerAlpha: number): number {
   switch (view) {
-    case "terrain":
+    case "terrain": {
       return atlasAlpha;
-    case "checker-compare":
+    }
+    case "checker-compare": {
       return checkerAlpha;
-    default:
+    }
+    default: {
       throw new Error(view satisfies never);
+    }
   }
 }
 
@@ -183,10 +188,12 @@ export function getTerrainShade(normal: THREE.Vector3, sunDirection: THREE.Vecto
 
 function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
   switch (view) {
-    case "terrain":
+    case "terrain": {
       return 0;
-    case "checker-compare":
+    }
+    case "checker-compare": {
       return 1;
+    }
     default: {
       const exhaustiveView: never = view;
       throw new Error(`Unexpected Three debug view "${exhaustiveView}".`);

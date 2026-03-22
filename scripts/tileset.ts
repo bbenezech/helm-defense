@@ -169,15 +169,7 @@ function writeBiomeManifest(outputDirectory: string, tilesetName: string) {
   fs.writeFileSync(
     path.join(outputDirectory, BIOME_MANIFEST_FILENAME),
     JSON.stringify(
-      {
-        biomes: [
-          {
-            id: getBiomeId(tilesetName),
-            atlas: "tileset.png",
-            checkerAtlas: CHECKER_ATLAS_FILENAME,
-          },
-        ],
-      },
+      { biomes: [{ id: getBiomeId(tilesetName), atlas: "tileset.png", checkerAtlas: CHECKER_ATLAS_FILENAME }] },
       null,
       2,
     ),
@@ -262,7 +254,7 @@ function createGeneratedAtlasImageData(
     throw new Error(`Checker frame count mismatch: expected ${tileset.tilecount}, received ${frames.length}.`);
   }
 
-  const channels: 4 = 4;
+  const channels = 4 as const;
   const data = new Uint8ClampedArray(tileset.imagewidth * tileset.imageheight * channels);
 
   for (const [frameIndex, frame] of frames.entries()) {
@@ -290,12 +282,7 @@ function createGeneratedAtlasImageData(
     }
   }
 
-  return {
-    width: tileset.imagewidth,
-    height: tileset.imageheight,
-    channels,
-    data,
-  };
+  return { width: tileset.imagewidth, height: tileset.imageheight, channels, data };
 }
 
 async function writeCheckerAtlas(outputDirectory: string, tileset: ReturnType<typeof getTileset>) {
