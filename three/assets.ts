@@ -2,7 +2,7 @@
 
 declare global {
   interface ImportMetaEnv {
-    readonly BASE_URL: string;
+    BASE_URL: string;
   }
 
   interface ImportMeta {

@@ -58,6 +58,7 @@ export default tseslint.config(
     rules: {
       // whitelist
       "unicorn/prefer-import-meta-properties": "error",
+      "unicorn/prevent-abbreviations": "off",
       "prefer-const": ["error", { destructuring: "all" }],
 
       // blacklist
