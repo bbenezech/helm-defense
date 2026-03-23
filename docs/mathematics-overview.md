@@ -2,7 +2,7 @@
 
 This project mixes several kinds of math: coordinate transforms, angle-based aiming, terrain slope reconstruction, procedural geometry, and shader-space lighting. The most important trigonometric work happens in the camera/projection layer, the cannon and bullet orientation code, terrain slope constants, procedural texture generation, and the lighting fragment shader.
 
-This overview is exhaustive for inspectable TypeScript, Python, and shader code in `src/**`, `scripts/*.ts`, `scripts/render_tileset.py`, and `src/game/scene/lightningShader.frag`. It explicitly calls out binary Blender assets in `scripts/*.blend` as reference-only authoring assets that remain out of static-analysis scope.
+This overview is exhaustive for inspectable TypeScript and shader code in `src/**`, `scripts/*.ts`, and `src/game/scene/lightningShader.frag`.
 
 ## Coordinate Systems, Units, and Conventions
 
@@ -155,24 +155,22 @@ Related but non-trig shader math:
 - The included simplex and Voronoi functions are math-heavy procedural primitives, but they do not currently introduce additional trigonometric calculations.
 - Most of the lighting after the view-direction step is linear algebra and tone-mapping rather than angle conversion.
 
-## Scripts and Binary Authoring Assets
+## Scripts
 
 The executable TypeScript files in `scripts/` are orchestration layers, not new sources of trig:
 
 
-| Location               | Role                                                     | Mathematical note                                                                                                                                     |
+| Location | Role | Mathematical note |
 | ---------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/heightmap.ts`          | Runs the terrain/normalmap generation pipeline                              | Calls shared math in `src/game/lib/heightmap.ts` and `src/game/lib/terrain.ts`; no meaningful local trig                                               |
-| `scripts/tileset.ts`            | Invokes the scripted Blender renderer and assembles derived assets          | Mostly pipeline geometry and image processing; no meaningful local trig, but it does encode project-specific proportions such as `elevationYOffsetPx`  |
-| `scripts/render_tileset.py`     | Recreates the terrain tile scene directly in `bpy`                         | Holds the fixed render contract: orthographic camera, 45 degree map alignment, 19 animated slope poses, and variant-driven material rotation/shading   |
-| `scripts/lib/terrain-ownership.ts` | Rasterizes exact native ownership masks from the shared scene/tile contract | Uses deterministic screen-space projection and half-open tile ownership to make the `nativeExact` atlas provably hole-free and overlap-free at native resolution |
-| `scripts/*.blend`               | Legacy Blender scene references                                            | Binary authoring assets kept for comparison; not statically inspected here                                                                              |
+| `scripts/heightmap.ts` | Runs the terrain/normalmap generation pipeline | Calls shared math in `src/game/lib/heightmap.ts` and `src/game/lib/terrain.ts`; no meaningful local trig |
+| `scripts/tileset.ts` | Rasterizes the terrain tileset bundle and assembles derived assets | Mostly pipeline geometry and image processing; no meaningful local trig, but it does encode project-specific proportions such as `elevationYOffsetPx` |
+| `scripts/lib/terrain-raster.ts` | Rasterizes beauty terrain frames directly from scene-spec UVs | Uses deterministic screen-space projection, nearest-neighbor texture sampling, UV rotation, clamp-to-edge addressing, and ownership flood fill |
+| `scripts/lib/terrain-ownership.ts` | Rasterizes exact native ownership masks and analytic checker frames from the shared scene/tile contract | Uses deterministic screen-space projection and half-open tile ownership to make the terrain atlas provably hole-free and overlap-free at native resolution |
 
 
 Scope note:
 
-- This review is exhaustive for inspectable TypeScript and shader code.
-- The `.blend` files may contain additional geometric or lighting choices, but they are reference artifacts rather than the active render path and were intentionally excluded from this pass.
+- This review is exhaustive for inspectable TypeScript and shader code in the active pipeline.
 
 ## Recurring Mathematical Patterns
 

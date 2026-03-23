@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVE_BLENDER_RENDER_VARIANT } from "../../scripts/lib/blender.ts";
-import { terrainSceneSpec } from "../../scripts/lib/terrain-scene-spec.ts";
+import { ACTIVE_TERRAIN_TEXTURE_ROTATION, terrainSceneSpec } from "../../scripts/lib/terrain-scene-spec.ts";
 import {
   DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
   DEFAULT_CHECKER_ATLAS_DARK_VALUE,
@@ -21,7 +20,7 @@ function createCheckerFrames() {
     cellsPerAxis: DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
     lightValue: DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
     darkValue: DEFAULT_CHECKER_ATLAS_DARK_VALUE,
-    textureRotation: ACTIVE_BLENDER_RENDER_VARIANT.textureRotation,
+    textureRotation: ACTIVE_TERRAIN_TEXTURE_ROTATION,
   }, terrainSceneSpec);
 }
 
@@ -205,7 +204,7 @@ describe("terrain checker ownership", () => {
     expect(foundFloodFilledOnlyPixel).toBe(true);
   });
 
-  it("matches Blender texture row origin on flat checker samples", () => {
+  it("matches texture row origin on flat checker samples", () => {
     const checkerFrames = createCheckerFrames();
     const flatFrameIndex = terrainSceneSpec.order.indexOf("SLOPE_FLAT");
     if (flatFrameIndex < 0) throw new Error("Missing SLOPE_FLAT pose.");

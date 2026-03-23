@@ -1,6 +1,11 @@
 import { TERRAIN_TILE_INDEX, type TerrainTileName } from "../../src/game/lib/terrain.ts";
 import type { ImageData } from "../../src/game/lib/heightmap.ts";
-import { terrainSceneSpec, type TerrainSceneSpec } from "./terrain-scene-spec.ts";
+import {
+  terrainSceneSpec,
+  type TerrainSceneSpec,
+  type TerrainTextureQuarterTurn,
+  type TerrainTextureRotation,
+} from "./terrain-scene-spec.ts";
 
 export type BinaryFrame = { width: number; height: number; coverage: Uint8Array<ArrayBuffer> };
 
@@ -9,8 +14,8 @@ type Vec3 = { x: number; y: number; z: number };
 type Mat3 = [Vec3, Vec3, Vec3];
 type ProjectedVertex = { x: number; y: number; depth: number };
 type ScreenTriangle = [Vec2, Vec2, Vec2];
-type LocalPoint = { u: number; v: number };
-type LocalUvFrame = {
+export type LocalPoint = { u: number; v: number };
+export type LocalUvFrame = {
   width: number;
   height: number;
   coverage: Uint8Array<ArrayBuffer>;
@@ -19,7 +24,6 @@ type LocalUvFrame = {
 };
 type CheckerRasterFrame = ImageData;
 type NeighborOffset = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
-type CheckerTextureRotation = "none" | "quarterTurn" | "cameraAlignedLegacy";
 
 const PIXEL_SAMPLE_BIAS = 1e-6;
 const DEPTH_EPSILON = 1e-9;
@@ -242,7 +246,7 @@ function rasterizeSceneSilhouetteFrame(sceneSpec: TerrainSceneSpec, poseIndex: n
   return { width, height, coverage };
 }
 
-function rasterizeVisibleUvFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): LocalUvFrame {
+export function rasterizeVisibleUvFrame(sceneSpec: TerrainSceneSpec, poseIndex: number): LocalUvFrame {
   const width = sceneSpec.render.resolution.width;
   const height = sceneSpec.render.resolution.height;
   const projectedVertices = projectVerticesForPose(sceneSpec, poseIndex);
@@ -455,7 +459,7 @@ function getCheckerCellIndex(coordinate: number, cellsPerAxis: number): number {
   return Math.floor(clampedCoordinate * cellsPerAxis);
 }
 
-function flipUnitCoordinateForTextureRows(coordinate: number): number {
+export function flipUnitCoordinateForTextureRows(coordinate: number): number {
   return 1 - coordinate;
 }
 
@@ -512,57 +516,41 @@ function floodFillCheckerCoverage(
   }
 }
 
-function getQuarterTurn(rotationZRad: number): 0 | 1 | 2 | 3 {
-  const quarterTurn = Math.round((rotationZRad % (2 * Math.PI)) / (Math.PI / 2));
-  const normalizedQuarterTurn = ((quarterTurn % 4) + 4) % 4;
-  switch (normalizedQuarterTurn) {
-    case 0: {
-      return 0;
-    }
-    case 1: {
-      return 1;
-    }
-    case 2: {
-      return 2;
-    }
-    case 3: {
-      return 3;
-    }
-    default: {
-      throw new Error(`Unexpected quarter turn ${normalizedQuarterTurn}.`);
-    }
-  }
-}
-
-function applyCheckerTextureRotation(
-  textureRotation: CheckerTextureRotation,
-  poseRotationZRad: number,
-  uv: LocalPoint,
-): LocalPoint {
-  const quarterTurn =
-    textureRotation === "cameraAlignedLegacy"
-      ? getQuarterTurn(poseRotationZRad)
-      : textureRotation === "quarterTurn"
-        ? 1
-        : 0;
-
+function rotateTerrainUvByQuarterTurn(quarterTurn: TerrainTextureQuarterTurn, uv: LocalPoint): LocalPoint {
   switch (quarterTurn) {
     case 0: {
       return uv;
     }
     case 1: {
-      return { u: uv.v, v: 1 - uv.u };
+      return { u: 1 - uv.v, v: uv.u };
     }
     case 2: {
       return { u: 1 - uv.u, v: 1 - uv.v };
     }
     case 3: {
-      return { u: 1 - uv.v, v: uv.u };
+      return { u: uv.v, v: 1 - uv.u };
     }
     default: {
       throw new Error(`Unexpected quarter turn ${quarterTurn satisfies never}.`);
     }
   }
+}
+
+export function getTerrainTextureQuarterTurn(
+  textureRotation: TerrainTextureRotation,
+  pose: TerrainSceneSpec["poses"][number],
+): TerrainTextureQuarterTurn {
+  if (textureRotation === "cameraAlignedLegacy") return pose.textureQuarterTurn;
+  if (textureRotation === "quarterTurn") return 1;
+  return 0;
+}
+
+export function applyTerrainTextureRotation(
+  textureRotation: TerrainTextureRotation,
+  pose: TerrainSceneSpec["poses"][number],
+  uv: LocalPoint,
+): LocalPoint {
+  return rotateTerrainUvByQuarterTurn(getTerrainTextureQuarterTurn(textureRotation, pose), uv);
 }
 
 export function rasterizeCheckerFrames(
@@ -571,7 +559,7 @@ export function rasterizeCheckerFrames(
     lightValue,
     darkValue,
     textureRotation,
-  }: { cellsPerAxis: number; lightValue: number; darkValue: number; textureRotation: CheckerTextureRotation },
+  }: { cellsPerAxis: number; lightValue: number; darkValue: number; textureRotation: TerrainTextureRotation },
   sceneSpec: TerrainSceneSpec = terrainSceneSpec,
 ): CheckerRasterFrame[] {
   if (cellsPerAxis <= 0) throw new Error(`Checker cells per axis must be greater than zero, received ${cellsPerAxis}.`);
@@ -587,7 +575,7 @@ export function rasterizeCheckerFrames(
       if (ownershipFrame.coverage[pixelIndex] !== 1) continue;
       if (visibleUvFrame.coverage[pixelIndex] !== 1) continue;
 
-      const rotatedUv = applyCheckerTextureRotation(textureRotation, pose.rotationZRad, {
+      const rotatedUv = applyTerrainTextureRotation(textureRotation, pose, {
         u: visibleUvFrame.uValues[pixelIndex],
         v: visibleUvFrame.vValues[pixelIndex],
       });

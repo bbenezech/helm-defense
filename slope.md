@@ -11,12 +11,11 @@ This document extracts the math behind the project's 30 degree isometric view an
 - `src/game/scene/LightningFilter.ts`
 - `src/game/scene/lightningShader.frag`
 - `scripts/tileset.ts`
-- `scripts/render_tileset.py`
-- `scripts/lib/blender.ts`
+- `scripts/lib/terrain-scene-spec.ts`
+- `scripts/lib/terrain-raster.ts`
+- `scripts/lib/terrain-ownership.ts`
 
-The active asset pipeline now builds the Blender scene from `scripts/render_tileset.py`. The binary Blender scene files in `scripts/*.blend` remain in the repo as reference assets, but their internal formulas are still not text-inspectable here.
-
-For exact native atlas guarantees, the project now also uses `scripts/lib/terrain-ownership.ts`: it converts the same `128 x 96 / 64 / 16` tile contract into deterministic ownership masks and clips the `nativeExact` atlas so terrain pixels are covered exactly once at native resolution.
+The active asset pipeline now rasterizes the terrain tileset directly from the shared terrain scene spec. `scripts/lib/terrain-raster.ts` and `scripts/lib/terrain-ownership.ts` convert the same `128 x 96 / 64 / 16` tile contract into deterministic beauty pixels, checker pixels, and ownership masks so terrain coverage stays exact at native resolution.
 
 ## 1. Core Idea
 
@@ -363,7 +362,7 @@ The repo encodes exactly `19` terrain tile families:
 export const TERRAIN_TILE_COUNT = 19;
 ```
 
-`scripts/lib/blender.ts` keeps the scripted Blender frame order aligned with the runtime catalog through `ORDERED_SLOPES`.
+`scripts/lib/terrain-scene-spec.ts` keeps the fixed scene pose order aligned with the runtime catalog through `ORDERED_SLOPES`.
 
 It also enforces:
 
@@ -371,7 +370,7 @@ It also enforces:
 new Set(ORDERED_SLOPES).size === TERRAIN_TILE_COUNT
 ```
 
-and its comments record local Blender face normals such as:
+The fixed scene contract and runtime slope catalog still agree on face normals such as:
 
 ```text
 <0, -0.1985, 0.9801>

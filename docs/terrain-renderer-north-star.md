@@ -50,7 +50,7 @@ Classic isometric tile rendering is traditionally a painter-ordered process:
 - later tiles visually win where they overlap earlier tiles
 - the tile art itself encodes silhouettes, faces, and which lower parts remain visible
 
-This repo's slope tileset was authored for exactly that kind of composition. The current `nativeExact` pipeline goes even further and clips every frame to deterministic ownership masks, but that stronger property is a current asset guarantee, not the long-term mental model we want the renderer to depend on.
+This repo's slope tileset was authored for exactly that kind of composition. The current deterministic CPU pipeline goes even further and clips every frame to deterministic ownership masks, but that stronger property is a current asset guarantee, not the long-term mental model we want the renderer to depend on.
 
 The north star is therefore:
 
@@ -80,7 +80,7 @@ This model remains valid even if future art intentionally reintroduces overlap, 
 
 ### 3.2 Current stronger asset property
 
-The current `nativeExact` generator and validator provide a stronger present-day property:
+The current deterministic generator and validator provide a stronger present-day property:
 
 - composed terrain coverage is exact-one under the validated contract
 - holes, double ownership, and wrong ownership all fail validation
@@ -152,7 +152,7 @@ The winning pixel's `biome` still comes from the winning `PackedTerrainWord`.
 The production method has two layers:
 
 - the base renderer contract, which must work for any compatible future atlas family
-- the current-atlas `nativeExact` specialization, which is allowed to exploit stronger present-day guarantees
+- the current-atlas deterministic specialization, which is allowed to exploit stronger present-day guarantees
 
 ### 5.1 Base renderer contract
 
@@ -174,7 +174,7 @@ The base resolve method is:
 
 ### 5.2 Current-atlas specialization
 
-For today's `nativeExact` atlas family, the fast path should not be “run the same loop and hope early exit helps.”
+For today's deterministic atlas family, the fast path should not be “run the same loop and hope early exit helps.”
 
 It should be a real specialization:
 
@@ -219,10 +219,10 @@ There is no geometric depth reconstruction in the base method.
 
 There is no per-pixel search for the nearest 3D triangle in the base method.
 
-For the current-atlas `nativeExact` specialization:
+For the current-atlas deterministic specialization:
 
 - ownership does not come from candidate atlas-alpha reads
-- ownership comes from a precomputed bitset derived from the same deterministic ownership oracle that produced the `nativeExact` atlas
+- ownership comes from a precomputed bitset derived from the same deterministic ownership oracle that produced the current atlas
 - once a winner is found, the renderer still performs the usual one final color fetch and one final global surface fetch
 
 ## 7. Painter Traversal Reflection
@@ -259,7 +259,7 @@ The first owned hit is therefore the visible result.
 
 ### 7.3 Why this matters more than “no overlap”
 
-The stronger current `nativeExact` contract means:
+The stronger current deterministic contract means:
 
 - today's atlas system usually yields exact-one ownership
 
@@ -358,7 +358,7 @@ For the current atlas family, that means a band can share one ownership test for
 
 ### 8.4 Current-atlas bound
 
-Brute-force evaluation over the fundamental residue cell for the current 19-shape `nativeExact` atlas family gives a stronger present-day result:
+Brute-force evaluation over the fundamental residue cell for the current 19-shape deterministic atlas family gives a stronger present-day result:
 
 - at most `16` packed positions can ever be possible visible winners for one screen pixel
 
@@ -404,12 +404,12 @@ The current-atlas specialization must respect this boundary:
 
 The fast path is therefore an ownership acceleration layer, not a second visibility model.
 
-## 10. `nativeExact` Specialization
+## 10. Deterministic Specialization
 
 Today's production atlas family gives three unusually strong facts:
 
 1. the placement contract is fixed at `128 x 96 / 64 / 16 / 8`
-2. `nativeExact` replaces frame alpha with deterministic ownership masks from [scripts/lib/terrain-ownership.ts](../scripts/lib/terrain-ownership.ts)
+2. the current atlas replaces frame alpha with deterministic ownership masks from [scripts/lib/terrain-ownership.ts](../scripts/lib/terrain-ownership.ts)
 3. [scripts/validate-terrain-coverage.ts](../scripts/validate-terrain-coverage.ts) enforces exact-one native coverage and guarantees owned pixels do not expose undefined RGB
 
 That means the current-atlas fast path should do two things:
@@ -417,7 +417,7 @@ That means the current-atlas fast path should do two things:
 - skip slots or bands that can never own the current residue
 - replace per-candidate atlas-alpha sampling with tiny integer bitset tests
 
-It should not keep doing one atlas-alpha fetch per candidate in `nativeExact` mode. That would miss the biggest specialization win the current atlas family makes available.
+It should not keep doing one atlas-alpha fetch per candidate in deterministic-atlas mode. That would miss the biggest specialization win the current atlas family makes available.
 
 ### 10.1 Phase 1: slot-oriented LUT
 
@@ -538,7 +538,7 @@ Its memory footprint is substantially smaller than the slot-oriented version, on
 
 The specialization is valid only when all of these are true:
 
-- sampling profile is `nativeExact`
+- the runtime path is using the current deterministic atlas contract
 - the lookup tables were generated from the same 19-frame order, scene spec, ownership masks, and `128 x 96 / 64 / 16 / 8` placement contract
 - the runtime path is using the same native screen contract assumed by the validator
 - the stored fast-path revision matches the active atlas family
@@ -673,7 +673,7 @@ The north-star design is only valid if all of these are proven.
 
 ### 13.3 Current-atlas fast-path proof
 
-- document the current-atlas observation that the present `nativeExact` slope family reduces possible winners to `16`
+- document the current-atlas observation that the present deterministic slope family reduces possible winners to `16`
 - derive the corollary that the present atlas family therefore has at most `8` live bands
 - generate fast-path tables from the same ownership oracle trusted by the validator
 - compare fast-path winners against the CPU reference compositor in exact reverse painter order
@@ -681,7 +681,7 @@ The north-star design is only valid if all of these are proven.
 
 ### 13.4 Current-generator parity
 
-- reproduce the current `nativeExact` visible winners exactly
+- reproduce the current deterministic visible winners exactly
 - verify parity against the CPU reference compositor
 - keep the existing no-hole / no-overlap / wrong-owner checks in the loop
 
@@ -739,7 +739,7 @@ The north star for this repo is:
 - biome atlas arrays
 - a reverse-painter screen-space resolve shader
 - atlas alpha deciding ownership in the base path
-- a `nativeExact`-only ownership-bitset specialization for the current atlas family
+- a deterministic-atlas-only ownership-bitset specialization for the current atlas family
 - one final metadata fetch giving height and normal in both paths
 
-The current `nativeExact` pipeline is stronger than that and should remain celebrated and validated, but it should be treated as today's high-quality asset guarantee, not as the only possible long-term terrain art contract.
+The current deterministic pipeline is stronger than that and should remain celebrated and validated, but it should be treated as today's high-quality asset guarantee, not as the only possible long-term terrain art contract.

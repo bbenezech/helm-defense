@@ -1,5 +1,4 @@
-import { BLENDER_RENDER_CONTRACT, ORDERED_SLOPES } from "./blender.ts";
-import { terrainSceneSpec } from "./terrain-scene-spec.ts";
+import { ORDERED_SLOPES, TERRAIN_RENDER_CONTRACT, terrainSceneSpec } from "./terrain-scene-spec.ts";
 import { EXAMPLE_TILE_GID_LAYERS, STRESS_HEIGHTMAP_FIXTURES, type TileGidLayers } from "./terrain-fixtures.ts";
 import { generateTilableHeightmap } from "../../src/game/lib/heightmap.ts";
 import { tileableHeightmapToTileData } from "../../src/game/lib/terrain.ts";
@@ -131,13 +130,13 @@ export function assertSceneAndTilesetContracts(actualTileset: CoverageTileset, c
     );
   if (actualTileset.tilecount !== ORDERED_SLOPES.length)
     throw new Error(`Tileset tilecount mismatch: expected ${ORDERED_SLOPES.length}, got ${actualTileset.tilecount}`);
-  if (actualTileset.tilewidth !== BLENDER_RENDER_CONTRACT.resolution.width)
+  if (actualTileset.tilewidth !== TERRAIN_RENDER_CONTRACT.resolution.width)
     throw new Error(
-      `Tileset tilewidth mismatch: expected ${BLENDER_RENDER_CONTRACT.resolution.width}, got ${actualTileset.tilewidth}`,
+      `Tileset tilewidth mismatch: expected ${TERRAIN_RENDER_CONTRACT.resolution.width}, got ${actualTileset.tilewidth}`,
     );
-  if (actualTileset.tileheight !== BLENDER_RENDER_CONTRACT.resolution.height)
+  if (actualTileset.tileheight !== TERRAIN_RENDER_CONTRACT.resolution.height)
     throw new Error(
-      `Tileset tileheight mismatch: expected ${BLENDER_RENDER_CONTRACT.resolution.height}, got ${actualTileset.tileheight}`,
+      `Tileset tileheight mismatch: expected ${TERRAIN_RENDER_CONTRACT.resolution.height}, got ${actualTileset.tileheight}`,
     );
   if (getElevationYOffsetPx(actualTileset) !== (actualTileset.tileheight - actualTileset.tilewidth / 2) / 2)
     throw new Error(`Tileset elevationYOffsetPx does not match the native 128x96 -> 16px contract.`);

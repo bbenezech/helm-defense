@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { ORDERED_SLOPES } from "./lib/blender.ts";
+import { ORDERED_SLOPES } from "./lib/terrain-scene-spec.ts";
 import { countCoveredPixels, rasterizeOwnershipFrames, type BinaryFrame } from "./lib/terrain-ownership.ts";
 import { imageToImageData, saveImageDataToImage } from "./lib/file.ts";
 import {

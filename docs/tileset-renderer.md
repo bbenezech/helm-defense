@@ -1,105 +1,110 @@
 # Tileset Renderer
 
-The active terrain tileset renderer no longer depends on loading a binary `.blend` scene. `scripts/tileset.ts` now launches Blender in background mode with `scripts/render_tileset.py`, which recreates the terrain mesh, camera, materials, and 19-frame slope animation directly in `bpy`.
+The active terrain tileset pipeline is now fully CPU-driven. `scripts/tileset.ts` reads the shared terrain scene spec, rasterizes the visible UVs for each of the 19 slope poses, samples the source texture with nearest-neighbor lookup, and writes `tileset.png` directly without Blender, Python, or ImageMagick.
 
 ## Active Render Contract
 
-These values are treated as fixed gameplay-facing output contract and are mirrored in `scripts/lib/blender.ts`:
+These values are the gameplay-facing terrain asset contract and now live in `scripts/lib/terrain-scene-spec.ts` plus `scripts/lib/terrain-scene-spec.json`:
 
-| Setting | Value |
-| --- | --- |
-| Camera type | Orthographic |
-| Camera location | `(10, -10, 8.16)` |
-| Camera rotation | `(60 deg, 0 deg, 45 deg)` |
-| Ortho scale | `2.8` |
-| Resolution | `128 x 96` |
-| Frame range | `4..22` |
-| Cycles sampling | `10` render samples, `10` preview samples |
-| Cycles filtering | `GAUSSIAN`, width `0.01`, denoising off |
-| Output path | `scripts/out` |
-| Active variant | `tiles-no-shading-rotation-fast` |
-| Default sampling profile | `nativeExact` |
+| Setting             | Value                 |
+| ------------------- | --------------------- |
+| Resolution          | `128 x 96`            |
+| Frame range         | `4..22`               |
+| Frame count         | `19`                  |
+| Tile order owner    | `ORDERED_SLOPES`      |
+| Texture rotation    | `cameraAlignedLegacy` |
+| Sampling            | nearest-neighbor      |
+| UV outside range    | clamp to edge         |
+| Owned pixel alpha   | `255`                 |
+| Unowned pixel color | transparent black     |
 
-The frame count is intentionally tied to `ORDERED_SLOPES`, so the scripted render still emits one PNG per terrain slope in the same order as the runtime tileset metadata.
-
-## Variant Parameters
-
-The Python builder is parametric even though only the live variant is wired into `scripts/tileset.ts` today.
-
-| Variant knob | Options | Meaning |
-| --- | --- | --- |
-| `engine` | `BLENDER_EEVEE_NEXT`, `CYCLES` | Matches the old normal vs fast scene family |
-| `shading` | `flat`, `shaded` | `flat` keeps all emission strengths at `1.0`; `shaded` uses `2.0 / 1.0 / 0.5` for light/med/dark materials |
-| `textureRotation` | `none`, `quarterTurn`, `cameraAlignedLegacy` | `quarterTurn` applies a literal static UV mapping-node turn; `cameraAlignedLegacy` animates the mapping node so texture north stays on the upper-right screen edge while the terrain mesh rotates through slope variants |
-| `samplingProfile` | `legacyMatched`, `strictPixel`, `nativeExact` | `nativeExact` is now the default production path: it keeps the beauty render look but replaces frame alpha with deterministic ownership masks before montage. `legacyMatched` keeps the current `Linear` sampler and legacy-soft alpha edges; `strictPixel` switches the texture nodes to `Closest` and hardens every rendered frame to binary alpha before montage |
-
-The live production path currently uses:
-
-```text
-engine = CYCLES
-shading = flat
-textureRotation = cameraAlignedLegacy
-samplingProfile = nativeExact
-```
+The fixed scene spec still defines the orthographic camera, the mesh polygons, the UVs, and the 19 pose transforms. It also carries the explicit per-pose texture quarter turn that keeps beauty and checker textures screen-locked even when a pose is not derivable from `rotationZRad` alone. The runtime-facing metadata contract remains the same: `tileset.json` still uses `128 x 96` tiles with the same `elevationYOffsetPx`, ordering, rows, and columns as before.
 
 ## Pipeline Notes
 
-- `scripts/tileset.ts` still copies the source texture to `scripts/texture.png`, renders frame PNGs to `scripts/out`, then assembles `tileset.png`, `tileset.json`, maps, and derived height/normal maps exactly as before.
-- `tileset.checker.png` is not a beauty render. It is rasterized directly from the shared terrain scene spec, but it now follows the same mesh UVs and `cameraAlignedLegacy` quarter-turn mapping contract as the beauty tiles. Ownership masks still define the final alpha, and only the tiny ownership-only boundary leftovers are flood-filled from nearby UV-seeded pixels to avoid transparent gaps.
-- `elevationYOffsetPx` still comes from the rendered tile dimensions, so the runtime tile contract remains `128 x 96` render size with `16px` vertical offset and `64px` logical diamond height.
-- The pixel-art look depends on the render settings as much as the mesh: the active Cycles path keeps denoising off and uses a tiny `0.01` Gaussian pixel filter, which matches the legacy `.blend` scenes much more closely than Blender's softer defaults.
-- The rotated legacy scenes were authored against a screen-space rule, not just a static UV rule: texture north should keep reading along the upper-right edge of the diamond even as the terrain mesh rotates. In the procedural builder `cameraAlignedLegacy` reproduces that by counter-rotating the mapping node per frame instead of hardcoding one `-pi/2` turn.
-- `strictPixel` is intentionally harsher than the production default. It keeps the same geometry, camera, and north-locking rule, but it samples the source texture with `Closest` and then thresholds the alpha channel of every frame to `0/255` before montage so the final silhouettes are hard-edged.
-- `nativeExact` is the proof profile. It renders the same beauty RGB as `legacyMatched`, then clips every frame with a deterministic ownership mask generated from `scripts/lib/terrain-ownership.ts`. The ownership masks use the shared scene spec plus a half-open native tile rule: the top surface owns `north/west` boundaries and excludes `south/east`, while non-top silhouette pixels are preserved only where they are outside the expanded top-surface footprint.
-- `nativeExact` also enforces a color-safety invariant during clipping: an owned pixel is not allowed to come from a fully transparent source pixel, so the exact atlas cannot reveal undefined RGB that was hidden behind zero alpha in the raw beauty render.
-- The legacy `.blend` files stay in `scripts/` as visual references and comparison artifacts; they are no longer required for the active path.
+- `scripts/tileset.ts` now writes the generated bundle directly next to the source `texture.png`. Running `bun run tile public/Grass_23-512x512/texture.png` regenerates the active bundle in `public/Grass_23-512x512/`.
+- `tileset.png` is produced by `scripts/lib/terrain-raster.ts`. The rasterizer reuses the shared visible-UV rasterization, applies the same explicit per-pose `cameraAlignedLegacy` quarter-turn contract as the checker path, samples the source RGBA texture exactly once per visible owned seed pixel, and flood-fills ownership-only leftovers from neighboring seeded colors so there are no transparent gaps.
+- The rasterizer fails fast if an owned pixel would expose a fully transparent source texel. That keeps the beauty atlas honest instead of silently revealing undefined RGB.
+- `tileset.checker.png` stays analytic. It is still generated from the shared scene spec and ownership masks in `scripts/lib/terrain-ownership.ts`; it is not derived from the beauty atlas.
+- Because the beauty path is now deterministic nearest-neighbor rasterization, the output is intentionally harder-edged than the old filtered Blender render.
 
 ## CLI
 
-Use `--sampling-profile` to switch between the render styles. If you omit it, `nativeExact` is used:
+There is now a single production path:
 
 ```bash
 bun run tile public/Grass_23-512x512/texture.png
-bun run tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
-bun run tile public/Grass_23-512x512/texture.png --sampling-profile legacyMatched
-bun run tile public/Grass_23-512x512/texture.png --sampling-profile strictPixel
 ```
 
-## Native Coverage Proof
+There is no `--sampling-profile`, no `BLENDER_BIN`, and no external image montage step anymore.
 
-`bun run validate:terrain-coverage` validates the terrain tileset without Phaser or Tiled in the loop. It composes maps directly from project-native layer fixtures using the same fixed placement contract the assets target:
+## Validation
 
-- tile image size `128 x 96`
-- logical map diamond height `64`
-- per-layer vertical offset `16`
-- the current `ORDERED_SLOPES` frame order and shared scene spec in `scripts/lib/terrain-scene-spec.json`
+### Raster Parity
 
-The validator compares two native-resolution rasterizations:
+`bun run validate:tileset-raster` renders a canonical checker source texture through the CPU beauty rasterizer and compares the result to `tileset.checker.png` with exact RGBA equality.
 
-- an ownership oracle from `scripts/lib/terrain-ownership.ts`, driven by the shared scene spec plus deterministic top-surface ownership rules
-- the actual `tileset.png` alpha, read as deterministic binary coverage from the generated atlas
+It emits:
 
-For each fixture pixel it enforces exact-one coverage:
+- `reference-atlas.png`
+- `raster-atlas.png`
+- `diff-atlas.png`
+- `summary.json`
+- per-frame `reference.png`, `raster.png`, `diff.png`, and `summary.json`
 
-- `oracle == 1` and `actual == 0`: uncovered pixel
-- `actual > 1`: overlapping pixel
-- `oracle == 0` and `actual > 0`: stray coverage
-- `oracle == 1` and `actual == 1` with different tile owners: wrong shape or wrong placement
-
-The proof always checks the shared demo fixture plus deterministic seeded stress fixtures generated from the heightmap pipeline, and it writes `oracle.png`, `actual.png`, `diff.png`, and `summary.json` into the report directory for every fixture. The oracle also self-checks its own flat-neighbor tiling before the real atlas is compared, so seam bugs in the ownership masks fail fast.
+under `tmp/tileset-raster-report/`.
 
 ```bash
-bun run tile public/Grass_23-512x512/texture.png --sampling-profile nativeExact
-bun run validate:terrain-coverage public/Grass_23-512x512/tilesets/texture
+bun run validate:tileset-raster public/Grass_23-512x512
 ```
 
-`legacyMatched` and `strictPixel` are still valid visual outputs, but only `nativeExact` is intended to satisfy the exact native no-hole/no-overlap proof.
+The validator is expected to reach `0` mismatched pixels. There is no boundary-blend bucket anymore because the CPU rasterizer and the analytic checker atlas share the same deterministic contract.
+
+### Compass Rotation Check
+
+`bun run validate:tileset-compass` renders `assets/compass.png` through the same CPU rasterizer, extracts the four cardinal needles from the monochrome silhouette, tints them inside the validator, and checks all 19 terrain tiles. This catches pose-specific half-turn and mirror mistakes that a plain checker cannot see.
+
+It emits:
+
+- `source-compass.png`
+- `tinted-compass.png`
+- `raster-atlas.png`
+- per-frame `raster.png`, `overlay.png`, and `summary.json`
+
+under `tmp/tileset-compass-report/`.
+
+```bash
+bun run validate:tileset-compass public/Grass_23-512x512
+```
+
+### Native Coverage Proof
+
+`bun run validate:terrain-coverage` still compares atlas alpha against the ownership oracle generated from the same terrain scene contract. It enforces:
+
+- no uncovered pixels
+- no overlap
+- no stray coverage
+- no wrong-owner pixels
+
+```bash
+bun run validate:terrain-coverage public/Grass_23-512x512
+```
+
+### Three Resolver Proof
+
+`bun run validate:three-resolve` is unchanged in purpose: it checks that the CPU-side Three packed-terrain resolver still matches the same ownership oracle the asset pipeline targets.
+
+```bash
+bun run validate:three-resolve public/Grass_23-512x512
+```
 
 ## Regression Check
 
-The safest comparison workflow is behavioral:
+The safest verification loop is now contract-first:
 
-1. Render the same `texture.png` once with the legacy `tiles-no-shading-rotation-fast.blend` scene and once with `scripts/render_tileset.py`.
-2. Confirm both paths emit exactly `19` PNGs with `128 x 96` dimensions.
-3. Confirm the generated `tileset.json` geometry metadata stays unchanged, especially `tilewidth`, `tileheight`, `elevationYOffsetPx`, rows, columns, and tile ordering.
-4. Spot-check the steep and diagonal slope frames against the example map to ensure orientation still matches `ORDERED_SLOPES`.
+1. Run `bun run tile public/Grass_23-512x512/texture.png`.
+2. Run `bun run validate:tileset-compass public/Grass_23-512x512`.
+3. Run `bun run validate:tileset-raster public/Grass_23-512x512`.
+4. Run `bun run validate:terrain-coverage public/Grass_23-512x512`.
+5. Optionally run `bun run validate:three-resolve public/Grass_23-512x512`.
+6. Spot-check steep and diagonal frames in `tileset.png` against the example map if you want a visual confirmation that orientation still matches `ORDERED_SLOPES`.

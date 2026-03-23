@@ -1,0 +1,329 @@
+{
+  "type": "tileset",
+  "name": "Grass_23-512x512",
+  "image": "tileset.png",
+  "tilewidth": 128,
+  "tileheight": 96,
+  "tilecount": 19,
+  "rows": 5,
+  "columns": 4,
+  "spacing": 0,
+  "margin": 0,
+  "imagewidth": 512,
+  "imageheight": 480,
+  "tiles": [
+    {
+      "id": 0,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0000"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0001"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0010"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0100"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1000"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1001"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0011"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0110"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1100"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1011"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0111"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1110"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1101"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0121"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1012"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "2101"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1210"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "1010"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "probability": 1,
+      "properties": [
+        {
+          "name": "NESW",
+          "type": "string",
+          "value": "0101"
+        },
+        {
+          "name": "CENTER",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "version": "1.10",
+  "tiledversion": "1.11.2",
+  "properties": [
+    {
+      "name": "elevationYOffsetPx",
+      "type": "int",
+      "value": 16
+    }
+  ]
+}
