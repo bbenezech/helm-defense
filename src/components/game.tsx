@@ -2,6 +2,7 @@ import React from "react";
 import { startThreeApp, type ThreeTerrainApp } from "../../three/app.ts";
 import threeDebugViewStore from "../store/three-debug-view.ts";
 import threeLightingStore from "../store/three-lighting.ts";
+import threeCompassStore from "../store/three-compass.ts";
 import threeSeaDebugViewStore from "../store/three-sea-debug-view.ts";
 import threeSeaStore from "../store/three-sea.ts";
 import timeScaleStore from "../store/time-scale.ts";
@@ -24,6 +25,7 @@ export const Game = () => {
       throw new TypeError(`Expected #${GAME_DOM_ID} to exist before starting the game host.`);
     }
     let disposed = false;
+    let unsubscribeCompass: (() => void) | null = null;
 
     const onFocus = () => {
       const runningApp = appReference.current;
@@ -55,7 +57,12 @@ export const Game = () => {
         app.setSeaDebugView(threeSeaDebugViewStore.get());
         app.resize(host.clientWidth, host.clientHeight);
         appReference.current = app;
+        threeCompassStore.set(app.getCompassState());
+        unsubscribeCompass = app.subscribeCompass((state) => {
+          threeCompassStore.set(state);
+        });
       } catch (error) {
+        threeCompassStore.reset();
         console.error("Failed to start Three terrain app", error);
         host.textContent = error instanceof Error ? error.message : "Failed to start Three terrain app.";
       }
@@ -74,6 +81,8 @@ export const Game = () => {
 
     return () => {
       disposed = true;
+      if (unsubscribeCompass !== null) unsubscribeCompass();
+      threeCompassStore.reset();
       globalThis.removeEventListener("focus", onFocus);
       globalThis.removeEventListener("blur", onBlur);
       globalThis.removeEventListener("resize", onResize);

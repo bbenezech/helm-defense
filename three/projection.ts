@@ -25,6 +25,7 @@ export type PickedTile = {
 export type CameraState = {
   center: Point2;
   zoom: number;
+  rotationRad: number;
   coverZoom: number;
   zooms: number[];
 };
@@ -32,6 +33,17 @@ export type CameraState = {
 export type Viewport = {
   width: number;
   height: number;
+};
+
+export type CompassCardinal = "north" | "east" | "south" | "west";
+
+export type CompassVector = Point2;
+
+export type ThreeCompassState = {
+  north: CompassVector;
+  east: CompassVector;
+  south: CompassVector;
+  west: CompassVector;
 };
 
 export function getLayerOffset(layer: TerrainMapLayer): Point2 {
@@ -112,18 +124,56 @@ export function createInitialCameraState(bounds: Rect, viewport: Viewport): Came
       y: bounds.y + bounds.height * 0.5,
     },
     zoom: zooms[0],
+    rotationRad: 0,
     coverZoom,
     zooms,
   };
 }
 
-export function clampCameraCenter(center: Point2, bounds: Rect, viewport: Viewport, zoom: number): Point2 {
-  const visibleWidth = viewport.width / zoom;
-  const visibleHeight = viewport.height / zoom;
-  const minX = bounds.x + visibleWidth * 0.5;
-  const maxX = bounds.x + bounds.width - visibleWidth * 0.5;
-  const minY = bounds.y + visibleHeight * 0.5;
-  const maxY = bounds.y + bounds.height - visibleHeight * 0.5;
+function rotateScreenVector(vector: Point2, rotationRad: number): Point2 {
+  const cosRotation = Math.cos(rotationRad);
+  const sinRotation = Math.sin(rotationRad);
+
+  return {
+    x: vector.x * cosRotation - vector.y * sinRotation,
+    y: vector.x * sinRotation + vector.y * cosRotation,
+  };
+}
+
+function normalizeCompassVector(vector: Point2, label: CompassCardinal): CompassVector {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length === 0) throw new Error(`Compass vector "${label}" must not be zero.`);
+
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+  };
+}
+
+function getCameraWorldHalfExtents(viewport: Viewport, zoom: number, rotationRad: number): Point2 {
+  const halfWidth = viewport.width * 0.5 / zoom;
+  const halfHeight = viewport.height * 0.5 / zoom;
+  const cosRotation = Math.abs(Math.cos(rotationRad));
+  const sinRotation = Math.abs(Math.sin(rotationRad));
+
+  return {
+    x: halfWidth * cosRotation + halfHeight * sinRotation,
+    y: halfWidth * sinRotation + halfHeight * cosRotation,
+  };
+}
+
+export function clampCameraCenter(
+  center: Point2,
+  bounds: Rect,
+  viewport: Viewport,
+  zoom: number,
+  rotationRad: number,
+): Point2 {
+  const visibleHalfExtents = getCameraWorldHalfExtents(viewport, zoom, rotationRad);
+  const minX = bounds.x + visibleHalfExtents.x;
+  const maxX = bounds.x + bounds.width - visibleHalfExtents.x;
+  const minY = bounds.y + visibleHalfExtents.y;
+  const maxY = bounds.y + bounds.height - visibleHalfExtents.y;
 
   return {
     x: minX > maxX ? bounds.x + bounds.width * 0.5 : Math.min(Math.max(center.x, minX), maxX),
@@ -147,17 +197,60 @@ export function resizeCameraState(state: CameraState, bounds: Rect, viewport: Vi
   }
 
   return {
-    center: clampCameraCenter(state.center, bounds, viewport, zoom),
+    center: clampCameraCenter(state.center, bounds, viewport, zoom, state.rotationRad),
     zoom,
+    rotationRad: state.rotationRad,
     coverZoom: nextState.coverZoom,
     zooms: nextState.zooms,
   };
 }
 
-export function screenPointToWorld(screen: Point2, camera: CameraState, viewport: Viewport): Point2 {
+export function worldOffsetToScreenOffset(offset: Point2, camera: CameraState): Point2 {
+  return rotateScreenVector(
+    {
+      x: offset.x * camera.zoom,
+      y: offset.y * camera.zoom,
+    },
+    camera.rotationRad,
+  );
+}
+
+export function screenOffsetToWorldOffset(offset: Point2, camera: CameraState): Point2 {
+  const worldOffset = rotateScreenVector(offset, -camera.rotationRad);
+
   return {
-    x: camera.center.x + (screen.x - viewport.width * 0.5) / camera.zoom,
-    y: camera.center.y + (screen.y - viewport.height * 0.5) / camera.zoom,
+    x: worldOffset.x / camera.zoom,
+    y: worldOffset.y / camera.zoom,
+  };
+}
+
+export function screenPointToWorld(screen: Point2, camera: CameraState, viewport: Viewport): Point2 {
+  const worldOffset = screenOffsetToWorldOffset(
+    {
+      x: screen.x - viewport.width * 0.5,
+      y: screen.y - viewport.height * 0.5,
+    },
+    camera,
+  );
+
+  return {
+    x: camera.center.x + worldOffset.x,
+    y: camera.center.y + worldOffset.y,
+  };
+}
+
+export function worldPointToScreen(world: Point2, camera: CameraState, viewport: Viewport): Point2 {
+  const screenOffset = worldOffsetToScreenOffset(
+    {
+      x: world.x - camera.center.x,
+      y: world.y - camera.center.y,
+    },
+    camera,
+  );
+
+  return {
+    x: viewport.width * 0.5 + screenOffset.x,
+    y: viewport.height * 0.5 + screenOffset.y,
   };
 }
 
@@ -189,6 +282,33 @@ function getLevel(layer: TerrainMapLayer): number {
   }
 
   return 0;
+}
+
+function getBaseCompassState(map: TerrainMap): ThreeCompassState {
+  const layerOffset = { x: 0, y: 0 };
+  const origin = tileToScreen(map, { x: 1, y: 1 }, layerOffset);
+  const north = tileToScreen(map, { x: 1, y: 0 }, layerOffset);
+  const east = tileToScreen(map, { x: 2, y: 1 }, layerOffset);
+  const south = tileToScreen(map, { x: 1, y: 2 }, layerOffset);
+  const west = tileToScreen(map, { x: 0, y: 1 }, layerOffset);
+
+  return {
+    north: normalizeCompassVector({ x: north.x - origin.x, y: north.y - origin.y }, "north"),
+    east: normalizeCompassVector({ x: east.x - origin.x, y: east.y - origin.y }, "east"),
+    south: normalizeCompassVector({ x: south.x - origin.x, y: south.y - origin.y }, "south"),
+    west: normalizeCompassVector({ x: west.x - origin.x, y: west.y - origin.y }, "west"),
+  };
+}
+
+export function getProjectedCompassState(map: TerrainMap, rotationRad: number): ThreeCompassState {
+  const baseCompassState = getBaseCompassState(map);
+
+  return {
+    north: rotateScreenVector(baseCompassState.north, rotationRad),
+    east: rotateScreenVector(baseCompassState.east, rotationRad),
+    south: rotateScreenVector(baseCompassState.south, rotationRad),
+    west: rotateScreenVector(baseCompassState.west, rotationRad),
+  };
 }
 
 export function pickTile(map: TerrainMap, screen: Point2): PickedTile | null {

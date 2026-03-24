@@ -13,9 +13,12 @@ import {
   createInitialCameraState,
   getContinuousZoom,
   getDiscreteZoom,
+  getProjectedCompassState,
   resizeCameraState,
+  screenOffsetToWorldOffset,
   screenPointToWorld,
   type CameraState,
+  type ThreeCompassState,
   type Viewport,
 } from "./projection.ts";
 import {
@@ -108,6 +111,8 @@ export type ThreeSeaSettings = {
 
 export type ThreeTerrainApp = {
   destroy: () => void;
+  getCompassState: () => ThreeCompassState | null;
+  subscribeCompass: (callback: (state: ThreeCompassState | null) => void) => () => void;
   resize: (width: number, height: number) => void;
   setPaused: (paused: boolean) => void;
   setLighting: (settings: ThreeLightingSettings) => void;
@@ -278,6 +283,14 @@ class UnsupportedWebGPUApp implements ThreeTerrainApp {
     this.host.replaceChildren();
   }
 
+  getCompassState() {
+    return null;
+  }
+
+  subscribeCompass(_callback: (state: ThreeCompassState | null) => void) {
+    return () => {};
+  }
+
   resize(_width: number, _height: number) {}
 
   setPaused(_paused: boolean) {}
@@ -333,6 +346,8 @@ class TerrainRuntime implements ThreeTerrainApp {
   private readonly seaQualityUniform = uniform(new THREE.Vector2());
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly cleanups: Array<() => void> = [];
+  private compassSubscribers: Array<(state: ThreeCompassState | null) => void> = [];
+  private compassState: ThreeCompassState;
   private paused = false;
   private seaTimeSeconds = 0;
   private drag: { startPointer: { x: number; y: number }; startCenter: { x: number; y: number }; moved: boolean } | null =
@@ -351,6 +366,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       height: host.clientHeight > 0 ? host.clientHeight : 1,
     };
     this.cameraState = createInitialCameraState(bundle.bounds, this.viewport);
+    this.compassState = getProjectedCompassState(bundle.map, this.cameraState.rotationRad);
     this.resolveTarget = createResolveTarget(this.viewport.width, this.viewport.height);
     this.resolveMaterial = this.createResolveMaterial();
     this.lightingMaterial = this.createLightingMaterial();
@@ -1335,17 +1351,19 @@ class TerrainRuntime implements ThreeTerrainApp {
     const dx = event.clientX - this.drag.startPointer.x;
     const dy = event.clientY - this.drag.startPointer.y;
     if (Math.abs(dx) > PICK_DRAG_THRESHOLD_PX || Math.abs(dy) > PICK_DRAG_THRESHOLD_PX) this.drag.moved = true;
+    const dragWorldOffset = screenOffsetToWorldOffset({ x: dx, y: dy }, this.cameraState);
 
     this.cameraState = {
       ...this.cameraState,
       center: clampCameraCenter(
         {
-          x: this.drag.startCenter.x - dx / this.cameraState.zoom,
-          y: this.drag.startCenter.y - dy / this.cameraState.zoom,
+          x: this.drag.startCenter.x - dragWorldOffset.x,
+          y: this.drag.startCenter.y - dragWorldOffset.y,
         },
         this.bundle.bounds,
         this.viewport,
         this.cameraState.zoom,
+        this.cameraState.rotationRad,
       ),
     };
     this.syncCamera();
@@ -1374,14 +1392,26 @@ class TerrainRuntime implements ThreeTerrainApp {
     const pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const anchoredWorld = screenPointToWorld(pointer, this.cameraState, this.viewport);
     const zoom = getContinuousZoom(this.cameraState.zoom, event.deltaY, this.cameraState.zooms);
+    const nextCameraState = {
+      ...this.cameraState,
+      zoom,
+    };
+    const pointerWorldOffset = screenOffsetToWorldOffset(
+      {
+        x: pointer.x - this.viewport.width * 0.5,
+        y: pointer.y - this.viewport.height * 0.5,
+      },
+      nextCameraState,
+    );
     const center = clampCameraCenter(
       {
-        x: anchoredWorld.x - (pointer.x - this.viewport.width * 0.5) / zoom,
-        y: anchoredWorld.y - (pointer.y - this.viewport.height * 0.5) / zoom,
+        x: anchoredWorld.x - pointerWorldOffset.x,
+        y: anchoredWorld.y - pointerWorldOffset.y,
       },
       this.bundle.bounds,
       this.viewport,
       zoom,
+      this.cameraState.rotationRad,
     );
     this.cameraState = { ...this.cameraState, zoom, center };
     this.syncCamera();
@@ -1414,6 +1444,7 @@ class TerrainRuntime implements ThreeTerrainApp {
             this.bundle.bounds,
             this.viewport,
             this.cameraState.coverZoom,
+            this.cameraState.rotationRad,
           ),
         };
         this.syncCamera();
@@ -1455,8 +1486,10 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.bundle.bounds,
       this.viewport,
       this.cameraState.zoom,
+      this.cameraState.rotationRad,
     );
     this.cameraState = { ...this.cameraState, center: clampedCenter };
+    this.syncCompassState();
 
     this.camera.left = 0;
     this.camera.right = this.viewport.width;
@@ -1474,6 +1507,26 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.viewport.width / this.cameraState.zoom,
       this.viewport.height / this.cameraState.zoom,
     );
+  }
+
+  private syncCompassState() {
+    const nextCompassState = getProjectedCompassState(this.bundle.map, this.cameraState.rotationRad);
+
+    if (
+      this.compassState.north.x === nextCompassState.north.x &&
+      this.compassState.north.y === nextCompassState.north.y &&
+      this.compassState.east.x === nextCompassState.east.x &&
+      this.compassState.east.y === nextCompassState.east.y &&
+      this.compassState.south.x === nextCompassState.south.x &&
+      this.compassState.south.y === nextCompassState.south.y &&
+      this.compassState.west.x === nextCompassState.west.x &&
+      this.compassState.west.y === nextCompassState.west.y
+    ) {
+      return;
+    }
+
+    this.compassState = nextCompassState;
+    for (const subscriber of this.compassSubscribers) subscriber(this.compassState);
   }
 
   private readonly render = () => {
@@ -1501,7 +1554,20 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.renderer.setAnimationLoop(null);
     for (const cleanup of this.cleanups) cleanup();
     for (const disposable of this.disposables) disposable.dispose();
+    this.compassSubscribers = [];
     this.host.replaceChildren();
+  }
+
+  getCompassState() {
+    return this.compassState;
+  }
+
+  subscribeCompass(callback: (state: ThreeCompassState | null) => void) {
+    this.compassSubscribers.push(callback);
+
+    return () => {
+      this.compassSubscribers = this.compassSubscribers.filter((subscriber) => subscriber !== callback);
+    };
   }
 
   resize(width: number, height: number) {

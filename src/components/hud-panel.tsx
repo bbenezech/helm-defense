@@ -12,6 +12,8 @@ import threeLightingStore from "../store/three-lighting.ts";
 import threeSeaDebugViewStore from "../store/three-sea-debug-view.ts";
 import threeSeaStore from "../store/three-sea.ts";
 import timeScaleStore from "../store/time-scale.ts";
+import threeCompassStore from "../store/three-compass.ts";
+import { CompassRose } from "./compass-rose.tsx";
 import { useBusValue, useStoreValue } from "./useStore.ts";
 
 type HudPanelSectionKey = keyof HudPanelSections;
@@ -156,6 +158,7 @@ export function HudPanel() {
   const hudPanelState = useStoreValue(hudPanelStore);
   const threeDebugView = useStoreValue(threeDebugViewStore);
   const threeLighting = useStoreValue(threeLightingStore);
+  const threeCompass = useStoreValue(threeCompassStore);
   const threeSea = useStoreValue(threeSeaStore);
   const threeSeaDebugView = useStoreValue(threeSeaDebugViewStore);
   const allSectionsCollapsed = areAllHudPanelSectionsCollapsed(hudPanelState.sections);
@@ -906,6 +909,8 @@ export function HudPanel() {
           </HudSection>
         </div>
       </aside>
+
+      {threeCompass === null ? null : <CompassRose state={threeCompass} />}
     </div>
   );
 }

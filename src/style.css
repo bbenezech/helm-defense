@@ -236,6 +236,56 @@ body {
   width: 54px;
 }
 
+.hud-compass {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.76);
+  border: 1px solid rgba(255, 255, 0, 0.34);
+  bottom: 10px;
+  box-sizing: border-box;
+  display: flex;
+  height: 84px;
+  justify-content: center;
+  left: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 84px;
+}
+
+.hud-compass-svg {
+  display: block;
+  height: 72px;
+  overflow: visible;
+  width: 72px;
+}
+
+.hud-compass-ring {
+  fill: rgba(255, 255, 0, 0.05);
+  stroke: rgba(255, 255, 0, 0.28);
+  stroke-width: 1;
+}
+
+.hud-compass-core {
+  fill: rgba(255, 255, 0, 0.88);
+}
+
+.hud-compass-arm {
+  stroke: rgba(255, 255, 0, 0.55);
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.hud-compass-arm-north {
+  stroke: rgba(255, 255, 0, 0.95);
+  stroke-width: 2.4;
+}
+
+.hud-compass-label {
+  fill: rgba(255, 255, 0, 0.92);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 @media (max-width: 900px) {
   .hud-top {
     gap: 8px;
@@ -247,5 +297,10 @@ body {
     top: 42px;
     bottom: 8px;
     width: min(92vw, 340px);
+  }
+
+  .hud-compass {
+    bottom: 8px;
+    left: 8px;
   }
 }
