@@ -60,7 +60,10 @@ afterEach(() => {
 
 describe("three lighting store", () => {
   it("returns a stable snapshot until lighting changes", async () => {
-    globalThis.localStorage.setItem("three-lighting", '{"sunAzimuthDeg":15,"sunElevationDeg":35,"ambient":0.7}');
+    globalThis.localStorage.setItem(
+      "three-lighting",
+      '{"sunAzimuthDeg":15,"sunElevationDeg":35,"ambient":0.7,"aliasingRadiusTiles":0.125}',
+    );
 
     const threeLightingStoreModule = await import("../../src/store/three-lighting.ts");
     const store = threeLightingStoreModule.default;
@@ -74,6 +77,7 @@ describe("three lighting store", () => {
       sunAzimuthDeg: 20,
       sunElevationDeg: 30,
       ambient: 0.5,
+      aliasingRadiusTiles: 0.05,
     });
 
     const updatedSnapshot = store.get();
@@ -84,5 +88,6 @@ describe("three lighting store", () => {
     expect(updatedSnapshot.sunAzimuthDeg).toBe(20);
     expect(updatedSnapshot.sunElevationDeg).toBe(30);
     expect(updatedSnapshot.ambient).toBe(0.5);
+    expect(updatedSnapshot.aliasingRadiusTiles).toBe(0.05);
   });
 });

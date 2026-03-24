@@ -1,4 +1,9 @@
-import { DEFAULT_THREE_LIGHTING_SETTINGS, type ThreeLightingSettings } from "../../three/app.ts";
+import {
+  DEFAULT_THREE_LIGHTING_SETTINGS,
+  MAX_THREE_ALIASING_RADIUS_TILES,
+  MIN_THREE_ALIASING_RADIUS_TILES,
+  type ThreeLightingSettings,
+} from "../../three/app.ts";
 import { localStore } from "./index.ts";
 
 const STORAGE_KEY = "three-lighting";
@@ -21,6 +26,10 @@ export function parseThreeLightingSettings(value: unknown): ThreeLightingSetting
   const sunAzimuthDeg = assertFiniteNumber(candidate["sunAzimuthDeg"], "Missing Three lighting azimuth.");
   const sunElevationDeg = assertFiniteNumber(candidate["sunElevationDeg"], "Missing Three lighting elevation.");
   const ambient = assertFiniteNumber(candidate["ambient"], "Missing Three lighting ambient.");
+  const aliasingRadiusTiles = assertFiniteNumber(
+    candidate["aliasingRadiusTiles"],
+    "Missing Three lighting aliasing radius.",
+  );
 
   if (sunAzimuthDeg < -180 || sunAzimuthDeg > 180) {
     throw new Error(`Three lighting azimuth must be between -180 and 180 degrees, received ${sunAzimuthDeg}.`);
@@ -31,11 +40,20 @@ export function parseThreeLightingSettings(value: unknown): ThreeLightingSetting
   if (ambient < 0 || ambient > 1) {
     throw new Error(`Three lighting ambient must be between 0 and 1, received ${ambient}.`);
   }
+  if (
+    aliasingRadiusTiles < MIN_THREE_ALIASING_RADIUS_TILES ||
+    aliasingRadiusTiles > MAX_THREE_ALIASING_RADIUS_TILES
+  ) {
+    throw new Error(
+      `Three lighting aliasing radius must be between ${MIN_THREE_ALIASING_RADIUS_TILES} and ${MAX_THREE_ALIASING_RADIUS_TILES} tiles, received ${aliasingRadiusTiles}.`,
+    );
+  }
 
   return {
     sunAzimuthDeg,
     sunElevationDeg,
     ambient,
+    aliasingRadiusTiles,
   };
 }
 

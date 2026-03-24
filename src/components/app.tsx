@@ -6,6 +6,7 @@ import threeLightingStore from "../store/three-lighting.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useBusValue, useStoreValue } from "./useStore.ts";
 import { Game } from "./game.tsx";
+import { MAX_THREE_ALIASING_RADIUS_TILES, MIN_THREE_ALIASING_RADIUS_TILES } from "../../three/app.ts";
 
 export function App() {
   const fsp = useBusValue(fpsBus);
@@ -96,6 +97,22 @@ export function App() {
                   threeLightingStore.set((current) => ({
                     ...current,
                     ambient: event.currentTarget.valueAsNumber,
+                  }))
+                }
+              />
+            </label>
+            <label className="hud-slider">
+              <span>Aliasing Radius {threeLighting.aliasingRadiusTiles.toFixed(3)} tiles</span>
+              <input
+                type="range"
+                min={MIN_THREE_ALIASING_RADIUS_TILES}
+                max={MAX_THREE_ALIASING_RADIUS_TILES}
+                step={0.005}
+                value={threeLighting.aliasingRadiusTiles}
+                onChange={(event) =>
+                  threeLightingStore.set((current) => ({
+                    ...current,
+                    aliasingRadiusTiles: event.currentTarget.valueAsNumber,
                   }))
                 }
               />

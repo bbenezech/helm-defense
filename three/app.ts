@@ -25,7 +25,12 @@ import {
   SURFACE_NORMAL_FILTER_RADIUS_TILES,
 } from "./surface.ts";
 
-export type ThreeLightingSettings = { sunAzimuthDeg: number; sunElevationDeg: number; ambient: number };
+export type ThreeLightingSettings = {
+  sunAzimuthDeg: number;
+  sunElevationDeg: number;
+  ambient: number;
+  aliasingRadiusTiles: number;
+};
 
 export type ThreeDebugView = "beauty" | "checker";
 
@@ -45,12 +50,15 @@ const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
   (Math.atan2(DEFAULT_SUN_DIRECTION.z, Math.hypot(DEFAULT_SUN_DIRECTION.x, DEFAULT_SUN_DIRECTION.y)) * 180) / Math.PI;
+export const MIN_THREE_ALIASING_RADIUS_TILES = 0;
+export const MAX_THREE_ALIASING_RADIUS_TILES = 0.25;
 
 export const DEFAULT_THREE_DEBUG_VIEW: ThreeDebugView = "beauty";
 export const DEFAULT_THREE_LIGHTING_SETTINGS: ThreeLightingSettings = {
   sunAzimuthDeg: DEFAULT_SUN_AZIMUTH_DEG,
   sunElevationDeg: DEFAULT_SUN_ELEVATION_DEG,
   ambient: 0.6,
+  aliasingRadiusTiles: SURFACE_NORMAL_FILTER_RADIUS_TILES,
 };
 
 export function getSunDirectionVector(settings: ThreeLightingSettings): THREE.Vector3 {
@@ -178,6 +186,7 @@ class TerrainRuntime implements ThreeTerrainApp {
   private readonly cameraViewSizeUniform = uniform(new THREE.Vector2());
   private readonly sunDirectionUniform = uniform(getSunDirectionVector(DEFAULT_THREE_LIGHTING_SETTINGS));
   private readonly ambientUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.ambient);
+  private readonly aliasingRadiusUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.aliasingRadiusTiles);
   private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly cleanups: Array<() => void> = [];
@@ -251,7 +260,6 @@ class TerrainRuntime implements ThreeTerrainApp {
     const atlasTileHeight = this.bundle.tileset.tileheight;
     const surfaceSampleOffsetY = getSurfaceSampleOffsetY(this.bundle.map, this.bundle.tileset.tileheight);
     const heightImpactOnScreenY = getSurfaceHeightImpactOnScreenY(this.bundle.map.tileheight);
-    const surfaceNormalFilterRadiusTiles = SURFACE_NORMAL_FILTER_RADIUS_TILES;
     const maxWorldHeight = getWorldHeightFromLevel(getMaxBaseHeightLevel(this.bundle.map) + 2);
     const surfaceShaderTables = createSurfaceShaderTables(this.bundle.tileset);
     const winnerMapStride = Math.max(this.bundle.map.width, this.bundle.map.height) + 1;
@@ -528,18 +536,23 @@ class TerrainRuntime implements ThreeTerrainApp {
         );
       }
 
-      fn deriveAdaptiveHeightGradient(centerHeight: f32, negativeSample: vec2<f32>, positiveSample: vec2<f32>) -> vec2<f32> {
+      fn deriveAdaptiveHeightGradient(
+        centerHeight: f32,
+        negativeSample: vec2<f32>,
+        positiveSample: vec2<f32>,
+        aliasingRadius: f32,
+      ) -> vec2<f32> {
         let hasNegative = negativeSample.x > 0.5;
         let hasPositive = positiveSample.x > 0.5;
 
         if (hasNegative && hasPositive) {
-          return vec2<f32>(1.0, (positiveSample.y - negativeSample.y) / ${(2 * surfaceNormalFilterRadiusTiles).toFixed(8)});
+          return vec2<f32>(1.0, (positiveSample.y - negativeSample.y) / (2.0 * aliasingRadius));
         }
         if (hasPositive) {
-          return vec2<f32>(1.0, (positiveSample.y - centerHeight) / ${surfaceNormalFilterRadiusTiles.toFixed(8)});
+          return vec2<f32>(1.0, (positiveSample.y - centerHeight) / aliasingRadius);
         }
         if (hasNegative) {
-          return vec2<f32>(1.0, (centerHeight - negativeSample.y) / ${surfaceNormalFilterRadiusTiles.toFixed(8)});
+          return vec2<f32>(1.0, (centerHeight - negativeSample.y) / aliasingRadius);
         }
 
         return vec2<f32>(0.0, 0.0);
@@ -550,9 +563,13 @@ class TerrainRuntime implements ThreeTerrainApp {
         winner: vec4<f32>,
         exactSurfaceMeta: vec4<f32>,
         surfaceCells: texture_2d<f32>,
+        aliasingRadius: f32,
       ) -> vec3<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec3<f32>(0.0, 0.0, 1.0);
+        }
+        if (aliasingRadius <= 0.0) {
+          return exactSurfaceMeta.rgb;
         }
 
         let winnerShapeRef = unpackVisibleTerrainShapeRef(winner);
@@ -569,18 +586,18 @@ class TerrainRuntime implements ThreeTerrainApp {
         }
 
         let tileCoord = worldToTileCoord(world);
-        let negativeXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x - ${surfaceNormalFilterRadiusTiles.toFixed(8)}, tileCoord.y));
-        let positiveXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x + ${surfaceNormalFilterRadiusTiles.toFixed(8)}, tileCoord.y));
-        let negativeYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y - ${surfaceNormalFilterRadiusTiles.toFixed(8)}));
-        let positiveYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y + ${surfaceNormalFilterRadiusTiles.toFixed(8)}));
-        let dHeightDx = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeXSample, positiveXSample);
-        let dHeightDy = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeYSample, positiveYSample);
+        let negativeXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x - aliasingRadius, tileCoord.y));
+        let positiveXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x + aliasingRadius, tileCoord.y));
+        let negativeYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y - aliasingRadius));
+        let positiveYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y + aliasingRadius));
+        let dHeightDx = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeXSample, positiveXSample, aliasingRadius);
+        let dHeightDy = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeYSample, positiveYSample, aliasingRadius);
 
         if (dHeightDx.x < 0.5 || dHeightDy.x < 0.5) {
           return exactSurfaceMeta.rgb;
         }
 
-        return rotateTerrainNormalToWorld(normalize(vec3<f32>(-dHeightDx.y, -dHeightDy.y, 1.0)));
+        return rotateTerrainNormalToWorld(normalize(vec3<f32>(-dHeightDx.y, dHeightDy.y, 1.0)));
       }
 
       fn resolveVisibleTerrainWinner(
@@ -769,6 +786,7 @@ class TerrainRuntime implements ThreeTerrainApp {
         screen: vec2<f32>,
         winner: vec4<f32>,
         surfaceCells: texture_2d<f32>,
+        aliasingRadius: f32,
       ) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
@@ -783,7 +801,13 @@ class TerrainRuntime implements ThreeTerrainApp {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
         }
 
-        let lightingNormal = evaluateVisibleTerrainLightingNormal(resolvedPoint, winner, surfaceMeta, surfaceCells);
+        let lightingNormal = evaluateVisibleTerrainLightingNormal(
+          resolvedPoint,
+          winner,
+          surfaceMeta,
+          surfaceCells,
+          aliasingRadius,
+        );
         return vec4<f32>(lightingNormal, surfaceMeta.a);
       }
     `, [resolveHelpers]);
@@ -814,6 +838,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       screen,
       winner: visibleWinner,
       surfaceCells: textureLoad(this.bundle.surfaceCells.texture),
+      aliasingRadius: this.aliasingRadiusUniform,
     });
     material.outputNode = resolvedAlbedo;
     material.mrtNode = mrt({
@@ -1088,6 +1113,7 @@ class TerrainRuntime implements ThreeTerrainApp {
   setLighting(settings: ThreeLightingSettings) {
     this.sunDirectionUniform.value.copy(getSunDirectionVector(settings));
     this.ambientUniform.value = settings.ambient;
+    this.aliasingRadiusUniform.value = settings.aliasingRadiusTiles;
   }
 
   setDebugView(view: ThreeDebugView) {

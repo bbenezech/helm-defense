@@ -197,6 +197,31 @@ describe("analytic terrain surface", () => {
     expect(result.worldNormal[2]).toBeCloseTo(1, 6);
   });
 
+  it("keeps a tiny-radius smoothed normal aligned with the exact normal on a planar diagonal slope", () => {
+    const tileset = loadNativeTileset();
+    const lookup = createSurfaceShapeLookup(tileset);
+    const map = parseTerrainMap({
+      type: "map",
+      orientation: "isometric",
+      renderorder: "right-down",
+      width: 1,
+      height: 1,
+      tilewidth: 128,
+      tileheight: 64,
+      layers: [createLayer(1, 1, 0, [{ x: 0, y: 0, gid: 7 }])],
+      tilesets: [{ firstgid: 1, ...tileset }],
+    });
+    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const winner: SurfaceWinner = { shapeReference: 7, baseHeightLevel: 0, mapX: 0, mapY: 0 };
+    const exactNormal = evaluateSurfaceSample(lookup, winner.shapeReference, winner.baseHeightLevel, 0.5, 0.5).worldNormal;
+    const smoothedResult = evaluateSurfaceLightingNormalFromCells(lookup, surfaceCells, winner, { x: 0.5, y: 0.5 }, 0.005);
+
+    expect(smoothedResult.kind).toBe("smoothed");
+    expect(smoothedResult.worldNormal[0]).toBeCloseTo(exactNormal[0], 6);
+    expect(smoothedResult.worldNormal[1]).toBeCloseTo(exactNormal[1], 6);
+    expect(smoothedResult.worldNormal[2]).toBeCloseTo(exactNormal[2], 6);
+  });
+
   it("smooths a cross-tile seam when neighboring top-surface cells exist", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = parseTerrainMap({

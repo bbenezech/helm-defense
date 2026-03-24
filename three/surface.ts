@@ -294,7 +294,9 @@ export function deriveAdaptiveHeightGradient(
 }
 
 export function deriveLightingNormalFromHeightGradients(dHeightDx: number, dHeightDy: number): Vector3 {
-  return rotateTerrainNormalToWorld(normalizeVector3([-dHeightDx, -dHeightDy, 1]));
+  // Tile-local Y grows from north to west/south-west in the terrain contract,
+  // so its slope sign is inverted relative to the canonical terrain-normal basis.
+  return rotateTerrainNormalToWorld(normalizeVector3([-dHeightDx, dHeightDy, 1]));
 }
 
 export function evaluateSurfaceLightingNormalFromCells(
