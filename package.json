@@ -23,7 +23,6 @@
     "validate:tileset-compass": "bun scripts/validate-tileset-compass.ts",
     "validate:tileset-raster": "bun scripts/validate-tileset-raster.ts",
     "validate:terrain-coverage": "bun scripts/validate-terrain-coverage.ts",
-    "validate:three-resolve": "bun scripts/validate-three-resolve.ts",
     "tsgo:clean": "tsgo --build --clean",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -7,7 +7,7 @@ const store = localStore<ThreeDebugView>(STORAGE_KEY, DEFAULT_THREE_DEBUG_VIEW);
 type SetStateAction = ThreeDebugView | ((previousState: ThreeDebugView) => ThreeDebugView);
 
 export function parseThreeDebugView(value: unknown): ThreeDebugView {
-  if (value === "terrain" || value === "checker-compare") return value;
+  if (value === "beauty" || value === "checker") return value;
   throw new Error(`Invalid Three debug view "${String(value)}".`);
 }
 
@@ -51,6 +51,6 @@ export default {
   get,
   set,
   setDebounced,
-  toggle: () => set((current) => (current === "terrain" ? "checker-compare" : "terrain")),
+  toggle: () => set((current) => (current === "beauty" ? "checker" : "beauty")),
   reset: () => set(DEFAULT_THREE_DEBUG_VIEW),
 };

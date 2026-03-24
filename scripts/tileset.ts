@@ -134,8 +134,6 @@ async function generateAssets(texture: string) {
   fs.writeFileSync(path.join(outputDirectory, "example.map.json"), JSON.stringify(exampleTilemap));
 
   const tileableHeightmap = generateTilableHeightmap({ tileWidth: 100, tileHeight: 100, maxValue: 10 });
-  fs.writeFileSync(path.join(outputDirectory, "random.tileableHeightmap.json"), JSON.stringify(tileableHeightmap));
-
   const randomTerrain = tileableHeightmapToTileData(tileableHeightmap);
   const randomTilemap = getTilemap(terrainToLayers(randomTerrain, tileset), tileset);
   fs.writeFileSync(path.join(outputDirectory, "random.map.json"), JSON.stringify(randomTilemap));

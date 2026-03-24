@@ -8,6 +8,5 @@ export interface ElectronAPI {
 
 declare global {
   var electron: ElectronAPI | undefined;
-  var game: Phaser.Game | undefined;
   var app: React.JSX.Element | undefined;
 }

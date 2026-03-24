@@ -21,7 +21,6 @@ const symbolOwnerConfig = {
     "three/assets.ts": ["TerrainAssetBundle"],
     "three/app.ts": ["ThreeTerrainApp"],
     "three/projection.ts": ["Point2", "Rect", "PickedTile", "CameraState", "Viewport"],
-    "src/store/renderer-mode.ts": ["RendererMode"],
   },
 };
 

@@ -1,8 +1,5 @@
 import type { TerrainMap, TerrainTileset } from "./assets.ts";
-import {
-  type PackedTerrainStack,
-  type PackedTerrainWord,
-} from "./chunks.ts";
+import type { PackedTerrainStack, PackedTerrainWord } from "./chunks.ts";
 import type { Point2 } from "./projection.ts";
 
 export type PainterCandidate = {
@@ -23,7 +20,9 @@ export type ResolveHit = {
   shapeRef: number;
   tileId: number;
   biomeIndex: number;
-  painterRank: number;
+  baseHeightLevel: number;
+  mapX: number;
+  mapY: number;
   packedX: number;
   packedY: number;
   textureX: number;
@@ -31,6 +30,8 @@ export type ResolveHit = {
   slice: number;
   key: number;
   screen: Point2;
+  localX: number;
+  localY: number;
   rgba: [number, number, number, number];
 };
 
@@ -39,7 +40,9 @@ export type ResolveTraceCandidate = PainterCandidate & {
   shapeRef: number;
   tileId: number | null;
   biomeIndex: number;
-  painterRank: number;
+  baseHeightLevel: number;
+  mapX: number;
+  mapY: number;
   localX: number;
   localY: number;
   rgba: [number, number, number, number];
@@ -70,11 +73,25 @@ type LayoutContract = {
   levelsPerOctave: 8;
 };
 
-const SHAPE_REF_MASK = 0b1_1111;
-const BIOME_INDEX_SHIFT = 5;
-const BIOME_INDEX_MASK = 0xff;
-const PAINTER_RANK_SHIFT = 13;
-const PAINTER_RANK_MASK = 524_287;
+type PackedPlacement = {
+  packedX: number;
+  packedY: number;
+  slice: number;
+  word: PackedTerrainWord;
+};
+
+type CandidateOrder = {
+  shapeRef: number;
+  baseHeightLevel: number;
+  mapX: number;
+  mapY: number;
+};
+
+export const SHAPE_REF_MASK = 0b1_1111;
+export const BIOME_INDEX_SHIFT = 5;
+export const BIOME_INDEX_MASK = 0xff;
+export const BASE_HEIGHT_LEVEL_SHIFT = 13;
+export const BASE_HEIGHT_LEVEL_MASK = 0x7f_fff;
 
 function getLevel(layer: TerrainMap["layers"][number]): number {
   for (const property of layer.properties) {
@@ -82,6 +99,25 @@ function getLevel(layer: TerrainMap["layers"][number]): number {
   }
 
   return 0;
+}
+
+function getOrderedLayers(map: TerrainMap): TerrainMap["layers"] {
+  const levels = new Set<number>();
+  const layers = [...map.layers];
+
+  for (const layer of layers) {
+    const level = getLevel(layer);
+    if (!Number.isInteger(level) || level < 0) {
+      throw new Error(`Packed terrain codec requires non-negative integer levels, received ${level}.`);
+    }
+    if (levels.has(level)) {
+      throw new Error(`Packed terrain codec requires unique layer levels, duplicate level ${level} detected.`);
+    }
+    levels.add(level);
+  }
+
+  layers.sort((left, right) => getLevel(left) - getLevel(right));
+  return layers;
 }
 
 function getLayoutContract(map: TerrainMap, tileset: TerrainTileset, elevationStep: number): LayoutContract {
@@ -124,9 +160,23 @@ function createEmptyStack(): PackedTerrainStack {
 export function encodePackedTerrainWord(
   shapeReference: number,
   biomeIndex: number,
-  painterRank = 0,
+  baseHeightLevel: number,
 ): PackedTerrainWord {
-  return (painterRank << PAINTER_RANK_SHIFT) | (biomeIndex << BIOME_INDEX_SHIFT) | (shapeReference & SHAPE_REF_MASK);
+  if (shapeReference < 0 || shapeReference > SHAPE_REF_MASK) {
+    throw new Error(`Packed terrain shape reference ${shapeReference} is out of bounds.`);
+  }
+  if (biomeIndex < 0 || biomeIndex > BIOME_INDEX_MASK) {
+    throw new Error(`Packed terrain biome index ${biomeIndex} is out of bounds.`);
+  }
+  if (baseHeightLevel < 0 || baseHeightLevel > BASE_HEIGHT_LEVEL_MASK) {
+    throw new Error(`Packed terrain base height level ${baseHeightLevel} is out of bounds.`);
+  }
+
+  return (
+    ((baseHeightLevel & BASE_HEIGHT_LEVEL_MASK) << BASE_HEIGHT_LEVEL_SHIFT) |
+    ((biomeIndex & BIOME_INDEX_MASK) << BIOME_INDEX_SHIFT) |
+    (shapeReference & SHAPE_REF_MASK)
+  );
 }
 
 export function decodeShapeReference(word: PackedTerrainWord): number {
@@ -137,8 +187,8 @@ export function decodeBiomeIndex(word: PackedTerrainWord): number {
   return (word >> BIOME_INDEX_SHIFT) & BIOME_INDEX_MASK;
 }
 
-export function decodePainterRank(word: PackedTerrainWord): number {
-  return (word >> PAINTER_RANK_SHIFT) & PAINTER_RANK_MASK;
+export function decodeBaseHeightLevel(word: PackedTerrainWord): number {
+  return (word >> BASE_HEIGHT_LEVEL_SHIFT) & BASE_HEIGHT_LEVEL_MASK;
 }
 
 function getPackedScreen(layout: LayoutContract, packedX: number, packedY: number, slice: number): Point2 {
@@ -147,13 +197,6 @@ function getPackedScreen(layout: LayoutContract, packedX: number, packedY: numbe
     y: (packedX + packedY) * layout.halfTileHeight + layout.halfTileHeight - layout.elevationStep * slice,
   };
 }
-
-type PackedPlacement = {
-  packedX: number;
-  packedY: number;
-  slice: number;
-  word: PackedTerrainWord;
-};
 
 export function createPackedTerrainStack(
   map: TerrainMap,
@@ -168,9 +211,8 @@ export function createPackedTerrainStack(
   const placements: PackedPlacement[] = [];
   const tileset = map.tilesets[0];
   const firstgid = tileset === undefined ? 1 : tileset.firstgid;
-  let painterRank = 0;
 
-  for (const layer of map.layers) {
+  for (const layer of getOrderedLayers(map)) {
     const level = getLevel(layer);
     const octave = Math.floor(level / 8);
     const slice = level % 8;
@@ -181,16 +223,13 @@ export function createPackedTerrainStack(
         if (gid === 0 || gid === undefined) continue;
         const tileId = gid - firstgid;
         const shapeReference = tileId + 1;
-        if (painterRank > PAINTER_RANK_MASK) {
-          throw new Error(`Packed terrain painter rank overflow: ${painterRank} exceeds ${PAINTER_RANK_MASK}.`);
-        }
+
         placements.push({
           packedX: tileX - 2 * octave,
           packedY: tileY - 2 * octave,
           slice,
-          word: encodePackedTerrainWord(shapeReference, biomeIndex, painterRank),
+          word: encodePackedTerrainWord(shapeReference, biomeIndex, level),
         });
-        painterRank++;
       }
     }
   }
@@ -252,7 +291,12 @@ function sampleAtlasPixel(
   const blue = atlas.data[index + 2];
   const alpha = atlas.data[index + 3];
 
-  return [red === undefined ? 0 : red, green === undefined ? 0 : green, blue === undefined ? 0 : blue, alpha === undefined ? 0 : alpha];
+  return [
+    red === undefined ? 0 : red,
+    green === undefined ? 0 : green,
+    blue === undefined ? 0 : blue,
+    alpha === undefined ? 0 : alpha,
+  ];
 }
 
 function getCandidateKey(stack: PackedTerrainStack, textureX: number, textureY: number, slice: number): number {
@@ -271,6 +315,52 @@ function getLocalCoordinates(
     x: Math.floor(screenX - candidate.d * layout.halfTileWidth),
     y: Math.floor(screenY - frameTop),
   };
+}
+
+function getCandidateOrder(candidate: PainterCandidate, stack: PackedTerrainStack): CandidateOrder {
+  const word = getStackWord(stack, candidate.textureX, candidate.textureY, candidate.slice);
+  const shapeRef = decodeShapeReference(word);
+
+  if (shapeRef === 0) {
+    return {
+      shapeRef,
+      baseHeightLevel: -1,
+      mapX: candidate.packedX,
+      mapY: candidate.packedY,
+    };
+  }
+
+  const baseHeightLevel = decodeBaseHeightLevel(word);
+  const octave = Math.floor(baseHeightLevel / 8);
+
+  return {
+    shapeRef,
+    baseHeightLevel,
+    mapX: candidate.packedX + 2 * octave,
+    mapY: candidate.packedY + 2 * octave,
+  };
+}
+
+function compareCandidateOrder(left: PainterCandidate, right: PainterCandidate, stack: PackedTerrainStack): number {
+  const leftOrder = getCandidateOrder(left, stack);
+  const rightOrder = getCandidateOrder(right, stack);
+
+  if (leftOrder.shapeRef === 0 && rightOrder.shapeRef !== 0) {
+    return 1;
+  }
+  if (leftOrder.shapeRef !== 0 && rightOrder.shapeRef === 0) {
+    return -1;
+  }
+  if (leftOrder.baseHeightLevel !== rightOrder.baseHeightLevel) {
+    return rightOrder.baseHeightLevel - leftOrder.baseHeightLevel;
+  }
+  if (leftOrder.mapY !== rightOrder.mapY) {
+    return rightOrder.mapY - leftOrder.mapY;
+  }
+  if (leftOrder.mapX !== rightOrder.mapX) {
+    return rightOrder.mapX - leftOrder.mapX;
+  }
+  return right.key - left.key;
 }
 
 function enumerateCandidateSlots(
@@ -313,7 +403,7 @@ function enumerateCandidateSlots(
     }
   }
 
-  candidates.sort((left, right) => right.key - left.key);
+  candidates.sort((left, right) => compareCandidateOrder(left, right, stack));
 
   return candidates.map((candidate, ordinal) => ({
     ...candidate,
@@ -350,7 +440,10 @@ export function createPackedTerrainCodec(
       const tileId = shapeReference === 0 ? null : shapeReference - 1;
       const local = getLocalCoordinates(layout, candidate, screenX, screenY);
       const resolvedBiomeIndex = decodeBiomeIndex(word);
-      const painterRank = decodePainterRank(word);
+      const baseHeightLevel = shapeReference === 0 ? -1 : decodeBaseHeightLevel(word);
+      const octave = baseHeightLevel < 0 ? 0 : Math.floor(baseHeightLevel / 8);
+      const mapX = candidate.packedX + 2 * octave;
+      const mapY = candidate.packedY + 2 * octave;
       const rgba: [number, number, number, number] =
         tileId === null ? [0, 0, 0, 0] : sampleAtlasPixel(atlas, tileset, tileId, resolvedBiomeIndex, local.x, local.y);
       const sampledAlpha = rgba[3];
@@ -361,23 +454,25 @@ export function createPackedTerrainCodec(
         shapeRef: shapeReference,
         tileId,
         biomeIndex: resolvedBiomeIndex,
-        painterRank,
+        baseHeightLevel,
+        mapX,
+        mapY,
         localX: local.x,
         localY: local.y,
         rgba,
         sampledAlpha,
       });
 
-      if (shapeReference === 0 || sampledAlpha === 0) continue;
-      if (tileId === null) throw new Error("Expected a tile id for a non-empty packed terrain word.");
-      if (winner !== null && painterRank <= winner.painterRank) continue;
+      if (winner !== null || shapeReference === 0 || sampledAlpha === 0 || tileId === null) continue;
 
       winner = {
         word,
         shapeRef: shapeReference,
         tileId,
         biomeIndex: resolvedBiomeIndex,
-        painterRank,
+        baseHeightLevel,
+        mapX,
+        mapY,
         packedX: candidate.packedX,
         packedY: candidate.packedY,
         textureX: candidate.textureX,
@@ -385,11 +480,52 @@ export function createPackedTerrainCodec(
         slice: candidate.slice,
         key: candidate.key,
         screen: candidate.screen,
+        localX: local.x,
+        localY: local.y,
         rgba,
       };
     }
 
     return { winner, candidates };
+  };
+
+  const resolveVisibleTile = (atlas: ResolveColorAtlas, screenX: number, screenY: number): ResolveHit | null => {
+    for (const candidate of enumerateCandidates(screenX, screenY)) {
+      const word = getStackWord(stack, candidate.textureX, candidate.textureY, candidate.slice);
+      const shapeReference = decodeShapeReference(word);
+      if (shapeReference === 0) continue;
+
+      const tileId = shapeReference - 1;
+      const local = getLocalCoordinates(layout, candidate, screenX, screenY);
+      const resolvedBiomeIndex = decodeBiomeIndex(word);
+      const rgba = sampleAtlasPixel(atlas, tileset, tileId, resolvedBiomeIndex, local.x, local.y);
+      if (rgba[3] === 0) continue;
+
+      const baseHeightLevel = decodeBaseHeightLevel(word);
+      const octave = Math.floor(baseHeightLevel / 8);
+
+      return {
+        word,
+        shapeRef: shapeReference,
+        tileId,
+        biomeIndex: resolvedBiomeIndex,
+        baseHeightLevel,
+        mapX: candidate.packedX + 2 * octave,
+        mapY: candidate.packedY + 2 * octave,
+        packedX: candidate.packedX,
+        packedY: candidate.packedY,
+        textureX: candidate.textureX,
+        textureY: candidate.textureY,
+        slice: candidate.slice,
+        key: candidate.key,
+        screen: candidate.screen,
+        localX: local.x,
+        localY: local.y,
+        rgba,
+      };
+    }
+
+    return null;
   };
 
   return {
@@ -401,6 +537,6 @@ export function createPackedTerrainCodec(
       const candidate = enumerateCandidates(screenX, screenY)[ordinal];
       return candidate === undefined ? null : candidate;
     },
-    resolveVisibleTile: (atlas, screenX, screenY) => traceVisibleTile(atlas, screenX, screenY).winner,
+    resolveVisibleTile,
   };
 }

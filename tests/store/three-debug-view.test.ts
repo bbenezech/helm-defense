@@ -60,18 +60,18 @@ afterEach(() => {
 
 describe("three debug view store", () => {
   it("reads and persists valid debug views", async () => {
-    globalThis.localStorage.setItem("three-debug-view", '"checker-compare"');
+    globalThis.localStorage.setItem("three-debug-view", '"checker"');
 
     const threeDebugViewStoreModule = await import("../../src/store/three-debug-view.ts");
     const store = threeDebugViewStoreModule.default;
 
-    expect(store.get()).toBe("checker-compare");
+    expect(store.get()).toBe("checker");
 
-    store.set("terrain");
-    expect(store.get()).toBe("terrain");
+    store.set("beauty");
+    expect(store.get()).toBe("beauty");
 
-    store.set("checker-compare");
-    expect(globalThis.localStorage.getItem("three-debug-view")).toBe('"checker-compare"');
+    store.set("checker");
+    expect(globalThis.localStorage.getItem("three-debug-view")).toBe('"checker"');
   });
 
   it("resets invalid stored debug views", async () => {
@@ -80,7 +80,7 @@ describe("three debug view store", () => {
     const threeDebugViewStoreModule = await import("../../src/store/three-debug-view.ts");
     const store = threeDebugViewStoreModule.default;
 
-    expect(store.get()).toBe("terrain");
+    expect(store.get()).toBe("beauty");
     expect(globalThis.localStorage.getItem("three-debug-view")).toBeNull();
   });
 });

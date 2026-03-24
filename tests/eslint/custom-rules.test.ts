@@ -31,7 +31,6 @@ const ownerOptions = [
     owners: {
       "three/assets.ts": ["TerrainAssetBundle"],
       "three/app.ts": ["ThreeTerrainApp"],
-      "src/store/renderer-mode.ts": ["RendererMode"],
     },
   },
 ];
@@ -64,8 +63,8 @@ tester.run("helm-defense/no-barrel-reexport", noBarrelReexportRule, {
 tester.run("helm-defense/no-types-file", noTypesFileRule, {
   valid: [
     {
-      code: "export type RendererMode = 'three' | 'phaser';",
-      filename: file("src/store/renderer-mode.ts"),
+      code: "export type ThreeTerrainApp = { destroy(): void; };",
+      filename: file("three/app.ts"),
     },
   ],
   invalid: [
@@ -129,7 +128,7 @@ tester.run("helm-defense/enforce-symbol-owner", enforceSymbolOwnerRule, {
   ],
   invalid: [
     {
-      code: 'import type { RendererMode } from "../store/index.ts";',
+      code: 'import type { ThreeTerrainApp } from "../../three/assets.ts";',
       filename: file("src/components/example.tsx"),
       options: ownerOptions,
       errors: [{ messageId: "wrongImport" }],

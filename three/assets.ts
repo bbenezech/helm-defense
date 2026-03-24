@@ -11,8 +11,6 @@ declare global {
 }
 
 import * as THREE from "three/src/Three.WebGPU.js";
-import { packTerrain, tileDataToTerrain, tileableHeightmapToTileData } from "../src/game/lib/terrain.ts";
-import type { Heightmap } from "../src/game/lib/heightmap.ts";
 import { type PackedTerrainStack } from "./chunks.ts";
 import { createPackedTerrainCodec, type PackedTerrainCodec } from "./codec.ts";
 import { getMapBounds, type Point2, type Rect } from "./projection.ts";
@@ -92,16 +90,6 @@ export type CheckerAtlasArray = TerrainAtlasArray;
 
 export type PackedTerrainTexture = { texture: THREE.DataArrayTexture; stack: PackedTerrainStack };
 
-export type TerrainSurfaceTexture = {
-  texture: THREE.DataTexture;
-  data: Uint8Array<ArrayBuffer>;
-  width: number;
-  height: number;
-  precision: number;
-  minHeight: number;
-  maxHeight: number;
-};
-
 export type TerrainAssetBundle = {
   map: TerrainMap;
   tileset: TerrainTileset;
@@ -110,14 +98,12 @@ export type TerrainAssetBundle = {
   biomeManifest: BiomeManifest;
   colorAtlas: ColorAtlasArray;
   checkerAtlas: CheckerAtlasArray;
-  surface: TerrainSurfaceTexture;
   packedTerrain: PackedTerrainTexture;
   codec: PackedTerrainCodec;
 };
 
 const DEFAULT_TILESET_NAME = "Grass_23-512x512";
 const DEFAULT_MAP_NAME = "random.map.json";
-const DEFAULT_TILEABLE_HEIGHTMAP_NAME = "random.tileableHeightmap.json";
 const DEFAULT_BIOME_MANIFEST_NAME = "biomes.json";
 
 function assertObject(value: unknown, message: string): asserts value is Record<string, unknown> {
@@ -293,31 +279,6 @@ export function parseBiomeManifest(value: unknown): BiomeManifest {
   return { biomes };
 }
 
-export function parseTileableHeightmap(value: unknown): Heightmap {
-  const rows = assertArray(value, "Invalid tileable heightmap.");
-  if (rows.length < 2) throw new Error("Tileable heightmap must contain at least two rows.");
-
-  const firstRow = rows[0];
-  if (firstRow === undefined) throw new Error("Tileable heightmap is missing its first row.");
-  const parsedFirstRow = assertArray(firstRow, "Invalid tileable heightmap row.");
-  if (parsedFirstRow.length < 2) throw new Error("Tileable heightmap rows must contain at least two columns.");
-
-  const width = parsedFirstRow.length;
-
-  return rows.map((row, rowIndex) => {
-    const cells = assertArray(row, `Invalid tileable heightmap row ${rowIndex}.`);
-    if (cells.length !== width) {
-      throw new Error(
-        `Tileable heightmap row ${rowIndex} width mismatch: expected ${width}, received ${cells.length}.`,
-      );
-    }
-
-    return cells.map((cell, columnIndex) =>
-      assertNumber(cell, `Invalid tileable heightmap cell at row ${rowIndex}, column ${columnIndex}.`),
-    );
-  });
-}
-
 function getAssetUrl(pathname: string): string {
   const baseUrl = new URL(import.meta.env.BASE_URL, window.location.href);
   return new URL(pathname.replace(/^\//u, ""), baseUrl).toString();
@@ -403,18 +364,6 @@ function createAtlasArray(images: LoadedAtlasImage[], label: string): TerrainAtl
   return { texture, data, width: layout.width, height: layout.height, depth: layout.depth };
 }
 
-function createImageTexture(data: Uint8Array<ArrayBuffer>, width: number, height: number): THREE.DataTexture {
-  const texture = new THREE.DataTexture(data, width, height);
-  texture.format = THREE.RGBAFormat;
-  texture.type = THREE.UnsignedByteType;
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  texture.needsUpdate = true;
-  return texture;
-}
-
 async function loadAtlasArray(
   tilesetName: string,
   manifest: BiomeManifest,
@@ -481,76 +430,17 @@ function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTex
 
   return { texture, stack };
 }
-
-function getTerrainSurfacePrecision(tileset: TerrainTileset): number {
-  const precision = tileset.tilewidth / 8;
-  if (!Number.isInteger(precision)) {
-    throw new TypeError(`Three terrain surface precision must be an integer, received ${precision}.`);
-  }
-  if (precision <= 0) {
-    throw new Error(`Three terrain surface precision must be greater than zero, received ${precision}.`);
-  }
-  return precision;
-}
-
-function createSurfaceTexture(
-  data: Uint8Array<ArrayBuffer>,
-  width: number,
-  height: number,
-  precision: number,
-  minHeight: number,
-  maxHeight: number,
-): TerrainSurfaceTexture {
-  return { texture: createImageTexture(data, width, height), data, width, height, precision, minHeight, maxHeight };
-}
-
-function createTerrainSurfaceTexture(
-  map: TerrainMap,
-  tileset: TerrainTileset,
-  tileableHeightmap: Heightmap,
-): TerrainSurfaceTexture {
-  const tileData = tileableHeightmapToTileData(tileableHeightmap);
-  const mapHeight = tileData.length;
-  if (mapHeight === 0) throw new Error("Tileable heightmap did not produce any terrain rows.");
-  const firstRow = tileData[0];
-  if (firstRow === undefined) throw new Error("Tileable heightmap did not produce any terrain columns.");
-  const mapWidth = firstRow.length;
-  if (map.width !== mapWidth || map.height !== mapHeight) {
-    throw new Error(
-      `Tileable heightmap dimensions mismatch: expected ${map.width}x${map.height} from terrain map, received ${mapWidth}x${mapHeight}.`,
-    );
-  }
-
-  const precision = getTerrainSurfacePrecision(tileset);
-  const terrain = tileDataToTerrain(tileData, precision);
-  const packedTerrainSurface = packTerrain(terrain);
-  const imageData = packedTerrainSurface.imageData;
-  const data = new Uint8Array(imageData.data);
-
-  return createSurfaceTexture(
-    data,
-    imageData.width,
-    imageData.height,
-    packedTerrainSurface.precision,
-    packedTerrainSurface.minHeight,
-    packedTerrainSurface.maxHeight,
-  );
-}
-
 export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME): Promise<TerrainAssetBundle> {
   const tilesetUrl = getAssetUrl(`${tilesetName}/tileset.json`);
   const mapUrl = getAssetUrl(`${tilesetName}/${DEFAULT_MAP_NAME}`);
-  const tileableHeightmapUrl = getAssetUrl(`${tilesetName}/${DEFAULT_TILEABLE_HEIGHTMAP_NAME}`);
   const biomeManifestUrl = getAssetUrl(`${tilesetName}/${DEFAULT_BIOME_MANIFEST_NAME}`);
-  const [tilesetJson, mapJson, tileableHeightmapJson, biomeManifestJson] = await Promise.all([
+  const [tilesetJson, mapJson, biomeManifestJson] = await Promise.all([
     fetchJson(tilesetUrl),
     fetchJson(mapUrl),
-    fetchJson(tileableHeightmapUrl),
     fetchJson(biomeManifestUrl),
   ]);
   const tileset = parseTerrainTileset(tilesetJson);
   const map = parseTerrainMap(mapJson);
-  const tileableHeightmap = parseTileableHeightmap(tileableHeightmapJson);
   const biomeManifest = parseBiomeManifest(biomeManifestJson);
   const elevationYOffsetPx = getTilesetNumberProperty(tileset, "elevationYOffsetPx");
   const [colorAtlas, checkerAtlas] = await Promise.all([
@@ -558,7 +448,6 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
     loadCheckerAtlasArray(tilesetName, biomeManifest),
   ]);
   assertAtlasArrayLayoutsMatch(colorAtlas, checkerAtlas);
-  const surface = createTerrainSurfaceTexture(map, tileset, tileableHeightmap);
   const codec = createPackedTerrainCodec(map, tileset, elevationYOffsetPx, 0);
   const packedTerrain = createPackedTerrainTexture(codec.stack);
 
@@ -570,7 +459,6 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
     biomeManifest,
     colorAtlas,
     checkerAtlas,
-    surface,
     packedTerrain,
     codec,
   };

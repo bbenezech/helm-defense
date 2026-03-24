@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { packTerrain, tileDataToTerrain, tileableHeightmapToTileData } from "../../src/game/lib/terrain.ts";
 import {
   encodePackedTerrainTextureData,
   getAtlasRegion,
@@ -7,9 +6,8 @@ import {
   parseBiomeManifest,
   parseTerrainMap,
   parseTerrainTileset,
-  parseTileableHeightmap,
 } from "../../three/assets.ts";
-import { sampleMap, sampleTileableHeightmap, sampleTileset } from "./fixtures.ts";
+import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -69,11 +67,6 @@ describe("terrain assets", () => {
     );
   });
 
-  it("validates tileable heightmaps", () => {
-    expect(parseTileableHeightmap(sampleTileableHeightmap)).toEqual(sampleTileableHeightmap);
-    expect(() => parseTileableHeightmap([[0, 1], [0]])).toThrow(/width mismatch/u);
-  });
-
   it("packs terrain words into RGBA bytes for WebGPU sampling", () => {
     const data = encodePackedTerrainTextureData({
       data: new Uint32Array([0x12_34_56_78, 0x9a_bc_de_f0]),
@@ -86,7 +79,7 @@ describe("terrain assets", () => {
     expect([...data.slice(0, 8)]).toEqual([0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a]);
   });
 
-  it("loads terrain surface payloads into the terrain bundle", async () => {
+  it("loads terrain atlas payloads into the terrain bundle without requesting a runtime surface", async () => {
     const imageAssets = new Map<string, { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }>([
       ["/Grass_23-512x512/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 10, 20, 30, 255) }],
       [
@@ -94,9 +87,7 @@ describe("terrain assets", () => {
         { width: 2, height: 2, data: createSolidImageData(2, 2, 220, 220, 220, 255) },
       ],
     ]);
-    const expectedSurface = packTerrain(
-      tileDataToTerrain(tileableHeightmapToTileData(sampleTileableHeightmap), sampleTileset.tilewidth / 8),
-    );
+    const fetchCalls: string[] = [];
 
     class MockImage {
       decoding = "async";
@@ -161,11 +152,9 @@ describe("terrain assets", () => {
       writable: true,
       value: vi.fn(async (url: string) => {
         const pathname = new URL(url).pathname;
+        fetchCalls.push(pathname);
         if (pathname.endsWith("/tileset.json")) return { ok: true, json: async () => sampleTileset };
         if (pathname.endsWith("/random.map.json")) return { ok: true, json: async () => sampleMap };
-        if (pathname.endsWith("/random.tileableHeightmap.json")) {
-          return { ok: true, json: async () => sampleTileableHeightmap };
-        }
         if (pathname.endsWith("/biomes.json")) {
           return {
             ok: true,
@@ -189,11 +178,6 @@ describe("terrain assets", () => {
     expect(bundle.checkerAtlas.height).toBe(2);
     expect(bundle.checkerAtlas.depth).toBe(1);
     expect([...bundle.checkerAtlas.data]).toEqual([...createSolidImageData(2, 2, 220, 220, 220, 255)]);
-    expect(bundle.surface.width).toBe(expectedSurface.imageData.width);
-    expect(bundle.surface.height).toBe(expectedSurface.imageData.height);
-    expect(bundle.surface.precision).toBe(expectedSurface.precision);
-    expect(bundle.surface.minHeight).toBe(expectedSurface.minHeight);
-    expect(bundle.surface.maxHeight).toBe(expectedSurface.maxHeight);
-    expect([...bundle.surface.data]).toEqual([...expectedSurface.imageData.data]);
+    expect(fetchCalls).not.toContain("/Grass_23-512x512/random.tileableHeightmap.json");
   });
 });

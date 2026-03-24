@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { parseTerrainMap, parseTerrainTileset, type TerrainMap, type TerrainMapLayer } from "../../three/assets.ts";
-import { createPackedTerrainCodec } from "../../three/codec.ts";
+import {
+  createPackedTerrainCodec,
+  decodeBaseHeightLevel,
+  decodeBiomeIndex,
+  decodeShapeReference,
+  encodePackedTerrainWord,
+} from "../../three/codec.ts";
 import { tileToScreen } from "../../three/projection.ts";
 import { sampleMap, sampleTileset } from "./fixtures.ts";
 
@@ -73,6 +79,14 @@ function createColorAtlas(
 }
 
 describe("packed terrain codec", () => {
+  it("packs and unpacks shape, biome, and base height levels into the terrain word", () => {
+    const word = encodePackedTerrainWord(19, 7, 321);
+
+    expect(decodeShapeReference(word)).toBe(19);
+    expect(decodeBiomeIndex(word)).toBe(7);
+    expect(decodeBaseHeightLevel(word)).toBe(321);
+  });
+
   it("preserves screen placement when folding levels above 8, 16, and 24", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = createTestMap([0, 8, 16, 24], 4, 3);
