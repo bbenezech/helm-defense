@@ -1,4 +1,5 @@
-import type { TerrainMap, TerrainTileset } from "../../three/assets.ts";
+import type { TerrainBiomeGrid, TerrainMap, TerrainTileset } from "../../three/assets.ts";
+import type { BiomeCellGrid } from "../../three/chunks.ts";
 import type { Heightmap } from "../../src/game/lib/heightmap.ts";
 
 export const sampleTileset = {
@@ -67,6 +68,21 @@ export const sampleMap = {
   ],
   tilesets: [{ firstgid: 1, ...sampleTileset }],
 } satisfies TerrainMap;
+
+export const sampleBiomeGrid = {
+  type: "biome-grid",
+  width: 3,
+  height: 3,
+  data: [0, 1, 0, 0, 1, 0, 0, 0, 1],
+} satisfies TerrainBiomeGrid;
+
+export function createFilledBiomeCellGrid(width: number, height: number, biomeIndex: number): BiomeCellGrid {
+  return {
+    data: new Uint8Array(width * height).fill(biomeIndex),
+    width,
+    height,
+  };
+}
 
 export const sampleTileableHeightmap = [
   [0, 0, 1, 1],

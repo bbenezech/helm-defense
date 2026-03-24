@@ -9,7 +9,7 @@ import {
   encodePackedTerrainWord,
 } from "../../three/codec.ts";
 import { tileToScreen } from "../../three/projection.ts";
-import { sampleMap, sampleTileset } from "./fixtures.ts";
+import { createFilledBiomeCellGrid, sampleBiomeGrid, sampleMap, sampleTileset } from "./fixtures.ts";
 
 function createLayer(width: number, height: number, level: number, tileX: number, tileY: number, gid = 1): TerrainMapLayer {
   const data = Array.from<number>({ length: width * height }).fill(0);
@@ -50,7 +50,7 @@ function createColorAtlas(
   width: number,
   height: number,
   depth: number,
-  fill: (tileId: number, x: number, y: number) => [number, number, number, number],
+  fill: (biomeIndex: number, tileId: number, x: number, y: number) => [number, number, number, number],
 ) {
   const data = new Uint8Array(width * height * depth * 4);
 
@@ -66,7 +66,7 @@ function createColorAtlas(
           const atlasX = tileLeft + x;
           const atlasY = tileTop + y;
           const index = layer * width * height * 4 + (atlasY * width + atlasX) * 4;
-          const [r, g, b, a] = fill(tileId, x, y);
+          const [r, g, b, a] = fill(layer, tileId, x, y);
           data[index] = r;
           data[index + 1] = g;
           data[index + 2] = b;
@@ -90,10 +90,21 @@ describe("packed terrain codec", () => {
 
   it("builds a top-surface world-cell grid from the highest non-empty authored level", () => {
     const map = parseTerrainMap(sampleMap);
-    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const surfaceCells = createSurfaceCellGrid(
+      map,
+      {
+        data: new Uint8Array(sampleBiomeGrid.data),
+        width: sampleBiomeGrid.width,
+        height: sampleBiomeGrid.height,
+      },
+    );
     const centerWord = surfaceCells.data[4];
     const topLeftWord = surfaceCells.data[0];
-    const emptyWord = createSurfaceCellGrid(createTestMap([], 0, 0), 0).data[0];
+    const emptyMap = createTestMap([], 0, 0);
+    const emptyWord = createSurfaceCellGrid(
+      emptyMap,
+      createFilledBiomeCellGrid(emptyMap.width, emptyMap.height, 0),
+    ).data[0];
 
     if (centerWord === undefined || topLeftWord === undefined || emptyWord === undefined) {
       throw new Error("Expected the surface cell grid test texels to exist.");
@@ -103,15 +114,17 @@ describe("packed terrain codec", () => {
     expect(surfaceCells.height).toBe(map.height);
     expect(decodeShapeReference(centerWord)).toBe(2);
     expect(decodeBaseHeightLevel(centerWord)).toBe(1);
+    expect(decodeBiomeIndex(centerWord)).toBe(1);
     expect(decodeShapeReference(topLeftWord)).toBe(1);
     expect(decodeBaseHeightLevel(topLeftWord)).toBe(0);
+    expect(decodeBiomeIndex(topLeftWord)).toBe(0);
     expect(emptyWord).toBe(0);
   });
 
   it("preserves screen placement when folding levels above 8, 16, and 24", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = createTestMap([0, 8, 16, 24], 4, 3);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
 
     for (const level of [0, 8, 16, 24]) {
       const octave = Math.floor(level / 8);
@@ -129,7 +142,7 @@ describe("packed terrain codec", () => {
   it("never enumerates more than 24 candidates for a screen pixel", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = parseTerrainMap(sampleMap);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
 
     for (let screenY = -64; screenY <= 256; screenY += 13) {
       for (let screenX = -256; screenX <= 256; screenX += 17) {
@@ -141,8 +154,8 @@ describe("packed terrain codec", () => {
   it("resolves the last painted opaque tile in overlapping coverage", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = parseTerrainMap(sampleMap);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
-    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (tileId) => {
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (_biomeIndex, tileId) => {
       switch (tileId) {
         case 0: {
           return [255, 0, 0, 255];
@@ -170,8 +183,8 @@ describe("packed terrain codec", () => {
   it("traceVisibleTile mirrors the production candidate order and winner", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = parseTerrainMap(sampleMap);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
-    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (tileId) => {
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (_biomeIndex, tileId) => {
       return tileId === 1 ? [0, 255, 0, 255] : [255, 255, 255, 255];
     });
     const screen = tileToScreen(map, { x: 1, y: 1 }, { x: 0, y: -16 });
@@ -188,7 +201,7 @@ describe("packed terrain codec", () => {
   it("returns null when the visible tile pixel is transparent", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = createTestMap([0], 2, 2);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
     const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, () => [255, 255, 255, 0]);
     const screen = tileToScreen(map, { x: 2, y: 2 }, { x: 0, y: 0 });
 
@@ -198,8 +211,8 @@ describe("packed terrain codec", () => {
   it("resolves the top row of a tall frame from the tile screen anchor", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = createTestMap([0], 2, 2);
-    const codec = createPackedTerrainCodec(map, tileset, 16, 0);
-    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (_tileId, _x, y) =>
+    const codec = createPackedTerrainCodec(map, tileset, 16, createFilledBiomeCellGrid(map.width, map.height, 0));
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 1, (_biomeIndex, _tileId, _x, y) =>
       y === 0 ? [255, 255, 255, 255] : [255, 255, 255, 0],
     );
     const screen = tileToScreen(map, { x: 2, y: 2 }, { x: 0, y: 0 });
@@ -210,5 +223,30 @@ describe("packed terrain codec", () => {
     expect(hit).not.toBeNull();
     if (hit === null) throw new Error("Expected the top frame row to resolve.");
     expect(hit.rgba).toEqual([255, 255, 255, 255]);
+  });
+
+  it("encodes per-cell biome ownership into packed visibility words", () => {
+    const tileset = parseTerrainTileset(sampleTileset);
+    const map = parseTerrainMap(sampleMap);
+    const codec = createPackedTerrainCodec(
+      map,
+      tileset,
+      16,
+      {
+        data: new Uint8Array(sampleBiomeGrid.data),
+        width: sampleBiomeGrid.width,
+        height: sampleBiomeGrid.height,
+      },
+    );
+    const atlas = createColorAtlas(sampleTileset.imagewidth, sampleTileset.imageheight, 2, (biomeIndex) => {
+      return biomeIndex === 1 ? [0, 255, 0, 255] : [255, 0, 0, 255];
+    });
+    const screen = tileToScreen(map, { x: 1, y: 1 }, { x: 0, y: -16 });
+    const hit = codec.resolveVisibleTile(atlas, screen.x, screen.y);
+
+    expect(hit).not.toBeNull();
+    if (hit === null) throw new Error("Expected a visible tile hit.");
+    expect(hit.biomeIndex).toBe(1);
+    expect(hit.rgba).toEqual([0, 255, 0, 255]);
   });
 });

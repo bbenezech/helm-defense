@@ -15,3 +15,9 @@ export type SurfaceCellGrid = {
   width: number;
   height: number;
 };
+
+export type BiomeCellGrid = {
+  data: Uint8Array<ArrayBuffer>;
+  width: number;
+  height: number;
+};

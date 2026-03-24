@@ -36,6 +36,13 @@ export type ThreeLightingSettings = {
   aliasingRadiusTiles: number;
 };
 
+export type ThreeTerrainSettings = {
+  cornerNoiseScale: number;
+  cornerNoiseAmplitude: number;
+  octaveScale: number;
+  octaveMix: number;
+};
+
 export type ThreeDebugView = "beauty" | "checker";
 
 export type ThreeSeaMode = "off" | "sea";
@@ -116,6 +123,7 @@ export type ThreeTerrainApp = {
   resize: (width: number, height: number) => void;
   setPaused: (paused: boolean) => void;
   setLighting: (settings: ThreeLightingSettings) => void;
+  setTerrain: (settings: ThreeTerrainSettings) => void;
   setSea: (settings: ThreeSeaSettings) => void;
   setDebugView: (view: ThreeDebugView) => void;
   setSeaDebugView: (view: ThreeSeaDebugView) => void;
@@ -152,6 +160,12 @@ export const DEFAULT_THREE_LIGHTING_SETTINGS: ThreeLightingSettings = {
   sunElevationDeg: DEFAULT_SUN_ELEVATION_DEG,
   ambient: 0.6,
   aliasingRadiusTiles: SURFACE_NORMAL_FILTER_RADIUS_TILES,
+};
+export const DEFAULT_THREE_TERRAIN_SETTINGS: ThreeTerrainSettings = {
+  cornerNoiseScale: 6,
+  cornerNoiseAmplitude: 0.22,
+  octaveScale: 2.03,
+  octaveMix: 0.68,
 };
 
 export function getSunDirectionVector(settings: ThreeLightingSettings): THREE.Vector3 {
@@ -297,6 +311,8 @@ class UnsupportedWebGPUApp implements ThreeTerrainApp {
 
   setLighting(_settings: ThreeLightingSettings) {}
 
+  setTerrain(_settings: ThreeTerrainSettings) {}
+
   setSea(_settings: ThreeSeaSettings) {}
 
   setDebugView(_view: ThreeDebugView) {}
@@ -324,6 +340,14 @@ class TerrainRuntime implements ThreeTerrainApp {
   private readonly sunDirectionUniform = uniform(getSunDirectionVector(DEFAULT_THREE_LIGHTING_SETTINGS));
   private readonly ambientUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.ambient);
   private readonly aliasingRadiusUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.aliasingRadiusTiles);
+  private readonly terrainBlendUniform = uniform(
+    new THREE.Vector4(
+      DEFAULT_THREE_TERRAIN_SETTINGS.cornerNoiseScale,
+      DEFAULT_THREE_TERRAIN_SETTINGS.cornerNoiseAmplitude,
+      DEFAULT_THREE_TERRAIN_SETTINGS.octaveScale,
+      DEFAULT_THREE_TERRAIN_SETTINGS.octaveMix,
+    ),
+  );
   private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
   private readonly seaModeUniform = uniform(1);
   private readonly seaDebugViewUniform = uniform(getThreeSeaDebugViewUniformValue(DEFAULT_THREE_SEA_DEBUG_VIEW));
@@ -527,12 +551,41 @@ class TerrainRuntime implements ThreeTerrainApp {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
 
+        return sampleVisibleTerrainAtlasForBiome(winner, atlas, unpackVisibleTerrainBiomeIndex(winner));
+      }
+
+      fn sampleVisibleTerrainAtlasForBiome(
+        winner: vec4<f32>,
+        atlas: texture_2d_array<f32>,
+        biomeIndex: i32,
+      ) -> vec4<f32> {
+        if (!hasVisibleTerrainWinner(winner)) {
+          return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        if (biomeIndex < 0 || biomeIndex >= ${this.bundle.colorAtlas.depth}) {
+          return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+
         return textureLoad(
           atlas,
           vec2<i32>(unpackVisibleTerrainAtlasX(winner), unpackVisibleTerrainAtlasY(winner)),
-          unpackVisibleTerrainBiomeIndex(winner),
+          biomeIndex,
           0,
         );
+      }
+
+      fn sampleVisibleTerrainAtlasForDebugView(
+        winner: vec4<f32>,
+        atlas: texture_2d_array<f32>,
+        checkerAtlas: texture_2d_array<f32>,
+        debugView: f32,
+        biomeIndex: i32,
+      ) -> vec4<f32> {
+        if (debugView >= 0.5) {
+          return sampleVisibleTerrainAtlasForBiome(winner, checkerAtlas, biomeIndex);
+        }
+
+        return sampleVisibleTerrainAtlasForBiome(winner, atlas, biomeIndex);
       }
 
       fn worldToTileCoord(world: vec2<f32>) -> vec2<f32> {
@@ -760,6 +813,109 @@ class TerrainRuntime implements ThreeTerrainApp {
         return rotateTerrainNormalToWorld(normalize(vec3<f32>(-dHeightDx.y, dHeightDy.y, 1.0)));
       }
 
+      fn loadBiomeCellIndex(biomeCells: texture_2d<f32>, mapX: i32, mapY: i32) -> i32 {
+        let clampedMapX = min(max(mapX, 0), ${this.bundle.map.width - 1});
+        let clampedMapY = min(max(mapY, 0), ${this.bundle.map.height - 1});
+        return i32(floor(textureLoad(biomeCells, vec2<i32>(clampedMapX, clampedMapY), 0).r * 255.0 + 0.5));
+      }
+
+      fn sampleBiomeValueNoise(point: vec2<f32>) -> f32 {
+        let cell = floor(point);
+        let fractCell = fract(point);
+        let smoothCell = fractCell * fractCell * (vec2<f32>(3.0, 3.0) - 2.0 * fractCell);
+        let bottomLeft = fract(sin(dot(cell, vec2<f32>(127.1, 311.7))) * 43758.5453123);
+        let bottomRight = fract(sin(dot(cell + vec2<f32>(1.0, 0.0), vec2<f32>(127.1, 311.7))) * 43758.5453123);
+        let topLeft = fract(sin(dot(cell + vec2<f32>(0.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453123);
+        let topRight = fract(sin(dot(cell + vec2<f32>(1.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453123);
+        let bottom = mix(bottomLeft, bottomRight, smoothCell.x);
+        let top = mix(topLeft, topRight, smoothCell.x);
+        return mix(bottom, top, smoothCell.y);
+      }
+
+      fn sampleBiomeBlendNoise(point: vec2<f32>, terrainBlend: vec4<f32>) -> f32 {
+        let octaveA = sampleBiomeValueNoise(point);
+        let octaveB = sampleBiomeValueNoise(point * terrainBlend.z + vec2<f32>(19.19, -7.73));
+        return octaveA * (1.0 - terrainBlend.w) + octaveB * terrainBlend.w;
+      }
+
+      struct VisibleTerrainBiomeBlend {
+        biomeIndices: vec4<f32>,
+        weights: vec4<f32>,
+      }
+
+      fn createEmptyVisibleTerrainBiomeBlend() -> VisibleTerrainBiomeBlend {
+        return VisibleTerrainBiomeBlend(
+          vec4<f32>(-1.0, -1.0, -1.0, -1.0),
+          vec4<f32>(0.0, 0.0, 0.0, 0.0),
+        );
+      }
+
+      fn accumulateVisibleTerrainBiomeBlend(
+        blend: VisibleTerrainBiomeBlend,
+        biomeIndex: i32,
+        weight: f32,
+      ) -> VisibleTerrainBiomeBlend {
+        var result = blend;
+
+        if (weight <= 0.0) {
+          return result;
+        }
+
+        let biomeIndexFloat = f32(biomeIndex);
+
+        if (result.biomeIndices.x == biomeIndexFloat) {
+          result.weights.x = result.weights.x + weight;
+          return result;
+        }
+        if (result.biomeIndices.y == biomeIndexFloat) {
+          result.weights.y = result.weights.y + weight;
+          return result;
+        }
+        if (result.biomeIndices.z == biomeIndexFloat) {
+          result.weights.z = result.weights.z + weight;
+          return result;
+        }
+        if (result.biomeIndices.w == biomeIndexFloat) {
+          result.weights.w = result.weights.w + weight;
+          return result;
+        }
+
+        if (result.biomeIndices.x < 0.0) {
+          result.biomeIndices.x = biomeIndexFloat;
+          result.weights.x = weight;
+          return result;
+        }
+        if (result.biomeIndices.y < 0.0) {
+          result.biomeIndices.y = biomeIndexFloat;
+          result.weights.y = weight;
+          return result;
+        }
+        if (result.biomeIndices.z < 0.0) {
+          result.biomeIndices.z = biomeIndexFloat;
+          result.weights.z = weight;
+          return result;
+        }
+        if (result.biomeIndices.w < 0.0) {
+          result.biomeIndices.w = biomeIndexFloat;
+          result.weights.w = weight;
+          return result;
+        }
+
+        return result;
+      }
+
+      fn normalizeVisibleTerrainBiomeBlend(blend: VisibleTerrainBiomeBlend) -> VisibleTerrainBiomeBlend {
+        var result = blend;
+        let totalWeight = dot(result.weights, vec4<f32>(1.0, 1.0, 1.0, 1.0));
+
+        if (totalWeight <= 0.0) {
+          return result;
+        }
+
+        result.weights = result.weights / totalWeight;
+        return result;
+      }
+
       fn resolveVisibleTerrainWinner(
         screen: vec2<f32>,
         packedMap: texture_2d_array<f32>,
@@ -877,6 +1033,56 @@ class TerrainRuntime implements ThreeTerrainApp {
         return clamp(localTile, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
       }
 
+      fn evaluateVisibleTerrainBiomeBlend(
+        world: vec2<f32>,
+        biomeCells: texture_2d<f32>,
+        terrainBlend: vec4<f32>,
+      ) -> VisibleTerrainBiomeBlend {
+        let tileCoord = worldToTileCoord(world);
+        let shiftedCoord = tileCoord - vec2<f32>(0.5, 0.5);
+        let cornerBase = vec2<i32>(i32(floor(shiftedCoord.x)), i32(floor(shiftedCoord.y)));
+        let cornerFrac = fract(shiftedCoord);
+        let noisePoint = tileCoord * terrainBlend.x;
+        let noisyCornerFrac = clamp(
+          cornerFrac +
+            vec2<f32>(
+              (sampleBiomeBlendNoise(noisePoint + vec2<f32>(17.13, -8.71), terrainBlend) * 2.0 - 1.0) * terrainBlend.y,
+              (sampleBiomeBlendNoise(noisePoint + vec2<f32>(-11.41, 23.97), terrainBlend) * 2.0 - 1.0) * terrainBlend.y,
+            ),
+          vec2<f32>(0.0, 0.0),
+          vec2<f32>(1.0, 1.0),
+        );
+        let blendWeight = smoothstep(vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0), noisyCornerFrac);
+        let weight00 = (1.0 - blendWeight.x) * (1.0 - blendWeight.y);
+        let weight10 = blendWeight.x * (1.0 - blendWeight.y);
+        let weight01 = (1.0 - blendWeight.x) * blendWeight.y;
+        let weight11 = blendWeight.x * blendWeight.y;
+        var biomeBlend = createEmptyVisibleTerrainBiomeBlend();
+
+        biomeBlend = accumulateVisibleTerrainBiomeBlend(
+          biomeBlend,
+          loadBiomeCellIndex(biomeCells, cornerBase.x, cornerBase.y),
+          weight00,
+        );
+        biomeBlend = accumulateVisibleTerrainBiomeBlend(
+          biomeBlend,
+          loadBiomeCellIndex(biomeCells, cornerBase.x + 1, cornerBase.y),
+          weight10,
+        );
+        biomeBlend = accumulateVisibleTerrainBiomeBlend(
+          biomeBlend,
+          loadBiomeCellIndex(biomeCells, cornerBase.x, cornerBase.y + 1),
+          weight01,
+        );
+        biomeBlend = accumulateVisibleTerrainBiomeBlend(
+          biomeBlend,
+          loadBiomeCellIndex(biomeCells, cornerBase.x + 1, cornerBase.y + 1),
+          weight11,
+        );
+
+        return normalizeVisibleTerrainBiomeBlend(biomeBlend);
+      }
+
       fn evaluateVisibleTerrainSurfaceMeta(world: vec2<f32>, winner: vec4<f32>) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec4<f32>(0.0, 0.0, 1.0, -1.0);
@@ -917,34 +1123,65 @@ class TerrainRuntime implements ThreeTerrainApp {
 
         return (minY + maxY) * 0.5;
       }
+
+      fn resolveVisibleTerrainGroundPoint(screen: vec2<f32>, winner: vec4<f32>) -> vec2<f32> {
+        if (!hasVisibleTerrainWinner(winner)) {
+          return screen;
+        }
+
+        let surfaceScreen = vec2<f32>(screen.x, screen.y + ${surfaceSampleOffsetY.toFixed(1)});
+        let groundY = solveGroundScreenYForWinner(surfaceScreen, winner);
+        return vec2<f32>(surfaceScreen.x, groundY);
+      }
     `);
 
     const resolveTerrainAlbedo = wgslFn(/* wgsl */ `
       fn resolveTerrainAlbedo(
         winner: vec4<f32>,
+        groundPoint: vec2<f32>,
         atlas: texture_2d_array<f32>,
         checkerAtlas: texture_2d_array<f32>,
+        biomeCells: texture_2d<f32>,
         debugView: f32,
+        terrainBlend: vec4<f32>,
       ) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
 
         let beautyTexel = sampleVisibleTerrainAtlas(winner, atlas);
-        var colorTexel = beautyTexel;
+        let biomeBlend = evaluateVisibleTerrainBiomeBlend(groundPoint, biomeCells, terrainBlend);
+        var color = vec3<f32>(0.0, 0.0, 0.0);
 
-        if (debugView >= 0.5) {
-          colorTexel = sampleVisibleTerrainAtlas(winner, checkerAtlas);
+        if (biomeBlend.weights.x > 0.0) {
+          let biomeIndex = i32(floor(biomeBlend.biomeIndices.x + 0.5));
+          let colorTexel = sampleVisibleTerrainAtlasForDebugView(winner, atlas, checkerAtlas, debugView, biomeIndex);
+          color = color + decodeTerrainColor(colorTexel) * biomeBlend.weights.x;
+        }
+        if (biomeBlend.weights.y > 0.0) {
+          let biomeIndex = i32(floor(biomeBlend.biomeIndices.y + 0.5));
+          let colorTexel = sampleVisibleTerrainAtlasForDebugView(winner, atlas, checkerAtlas, debugView, biomeIndex);
+          color = color + decodeTerrainColor(colorTexel) * biomeBlend.weights.y;
+        }
+        if (biomeBlend.weights.z > 0.0) {
+          let biomeIndex = i32(floor(biomeBlend.biomeIndices.z + 0.5));
+          let colorTexel = sampleVisibleTerrainAtlasForDebugView(winner, atlas, checkerAtlas, debugView, biomeIndex);
+          color = color + decodeTerrainColor(colorTexel) * biomeBlend.weights.z;
+        }
+        if (biomeBlend.weights.w > 0.0) {
+          let biomeIndex = i32(floor(biomeBlend.biomeIndices.w + 0.5));
+          let colorTexel = sampleVisibleTerrainAtlasForDebugView(winner, atlas, checkerAtlas, debugView, biomeIndex);
+          color = color + decodeTerrainColor(colorTexel) * biomeBlend.weights.w;
         }
 
-        return vec4<f32>(decodeTerrainColor(colorTexel), beautyTexel.a);
+        return vec4<f32>(color, beautyTexel.a);
       }
     `, [resolveHelpers]);
 
     const resolveTerrainSurfaceMeta = wgslFn(/* wgsl */ `
       fn resolveTerrainSurfaceMeta(
-        screen: vec2<f32>,
         winner: vec4<f32>,
+        groundPoint: vec2<f32>,
         surfaceCells: texture_2d<f32>,
         aliasingRadius: f32,
       ) -> vec4<f32> {
@@ -952,17 +1189,14 @@ class TerrainRuntime implements ThreeTerrainApp {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
         }
 
-        let surfaceScreen = vec2<f32>(screen.x, screen.y + ${surfaceSampleOffsetY.toFixed(1)});
-        let groundY = solveGroundScreenYForWinner(surfaceScreen, winner);
-        let resolvedPoint = vec2<f32>(surfaceScreen.x, groundY);
-        let surfaceMeta = evaluateVisibleTerrainSurfaceMeta(resolvedPoint, winner);
+        let surfaceMeta = evaluateVisibleTerrainSurfaceMeta(groundPoint, winner);
 
         if (surfaceMeta.a < 0.0) {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
         }
 
         let lightingNormal = evaluateVisibleTerrainLightingNormal(
-          resolvedPoint,
+          groundPoint,
           winner,
           surfaceMeta,
           surfaceCells,
@@ -982,21 +1216,34 @@ class TerrainRuntime implements ThreeTerrainApp {
       }
     `, [resolveHelpers]);
 
+    const resolveVisibleTerrainGroundPointNode = wgslFn(/* wgsl */ `
+      fn resolveVisibleTerrainGroundPointNode(screen: vec2<f32>, winner: vec4<f32>) -> vec2<f32> {
+        return resolveVisibleTerrainGroundPoint(screen, winner);
+      }
+    `, [resolveHelpers]);
+
     const screen = this.createScreenNode();
     const visibleWinner = Var(resolveVisibleTerrainWinnerNode({
       screen,
       packedMap: textureLoad(this.bundle.packedTerrain.texture),
       ownershipAtlas: textureLoad(this.bundle.colorAtlas.texture),
     }), "visibleTerrainWinner");
-    const resolvedAlbedo = resolveTerrainAlbedo({
-      winner: visibleWinner,
-      atlas: textureLoad(this.bundle.colorAtlas.texture),
-      checkerAtlas: textureLoad(this.bundle.checkerAtlas.texture),
-      debugView: this.debugViewUniform,
-    });
-    const resolvedSurfaceMeta = resolveTerrainSurfaceMeta({
+    const resolvedGroundPoint = Var(resolveVisibleTerrainGroundPointNode({
       screen,
       winner: visibleWinner,
+    }), "visibleTerrainGroundPoint");
+    const resolvedAlbedo = resolveTerrainAlbedo({
+      winner: visibleWinner,
+      groundPoint: resolvedGroundPoint,
+      atlas: textureLoad(this.bundle.colorAtlas.texture),
+      checkerAtlas: textureLoad(this.bundle.checkerAtlas.texture),
+      biomeCells: textureLoad(this.bundle.biomeCells.texture),
+      debugView: this.debugViewUniform,
+      terrainBlend: this.terrainBlendUniform,
+    });
+    const resolvedSurfaceMeta = resolveTerrainSurfaceMeta({
+      winner: visibleWinner,
+      groundPoint: resolvedGroundPoint,
       surfaceCells: textureLoad(this.bundle.surfaceCells.texture),
       aliasingRadius: this.aliasingRadiusUniform,
     });
@@ -1292,6 +1539,7 @@ class TerrainRuntime implements ThreeTerrainApp {
 
     configureTexture(this.bundle.colorAtlas.texture);
     configureTexture(this.bundle.checkerAtlas.texture);
+    configureTexture(this.bundle.biomeCells.texture);
     configureTexture(this.bundle.packedTerrain.texture);
     configureTexture(this.bundle.surfaceCells.texture);
     configureTexture(this.resolveTarget.texture);
@@ -1304,6 +1552,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.resolveTarget,
       this.bundle.colorAtlas.texture,
       this.bundle.checkerAtlas.texture,
+      this.bundle.biomeCells.texture,
       this.bundle.packedTerrain.texture,
       this.bundle.surfaceCells.texture,
     );
@@ -1311,6 +1560,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.setupSelection();
     this.resize(this.viewport.width, this.viewport.height);
     this.setLighting(DEFAULT_THREE_LIGHTING_SETTINGS);
+    this.setTerrain(DEFAULT_THREE_TERRAIN_SETTINGS);
     this.setSea(DEFAULT_THREE_SEA_SETTINGS);
     this.setDebugView(DEFAULT_THREE_DEBUG_VIEW);
     this.setSeaDebugView(DEFAULT_THREE_SEA_DEBUG_VIEW);
@@ -1589,6 +1839,15 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.sunDirectionUniform.value.copy(getSunDirectionVector(settings));
     this.ambientUniform.value = settings.ambient;
     this.aliasingRadiusUniform.value = settings.aliasingRadiusTiles;
+  }
+
+  setTerrain(settings: ThreeTerrainSettings) {
+    this.terrainBlendUniform.value.set(
+      settings.cornerNoiseScale,
+      settings.cornerNoiseAmplitude,
+      settings.octaveScale,
+      settings.octaveMix,
+    );
   }
 
   setSea(settings: ThreeSeaSettings) {

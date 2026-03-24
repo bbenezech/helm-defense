@@ -15,6 +15,7 @@ import { EXAMPLE_TILE_GID_LAYERS } from "../../scripts/lib/terrain-fixtures.ts";
 import { rasterizeOwnershipFrames } from "../../scripts/lib/terrain-ownership.ts";
 import { parseTerrainTileset } from "../../three/assets.ts";
 import { createPackedTerrainCodec, type ResolveColorAtlas } from "../../three/codec.ts";
+import { createFilledBiomeCellGrid } from "./fixtures.ts";
 
 type ResolveTerrainMap = Parameters<typeof createPackedTerrainCodec>[0];
 type ResolveTerrainTileset = Parameters<typeof createPackedTerrainCodec>[1];
@@ -229,7 +230,12 @@ function validateFixture(fixture: CoverageFixture) {
   const tileset = loadNativeTileset();
   const oracleFrames = rasterizeOwnershipFrames();
   const map = createFixtureMap(fixture, tileset);
-  const codec = createPackedTerrainCodec(map, tileset, getElevationYOffsetPx(tileset), 0);
+  const codec = createPackedTerrainCodec(
+    map,
+    tileset,
+    getElevationYOffsetPx(tileset),
+    createFilledBiomeCellGrid(map.width, map.height, 0),
+  );
   const atlas = createOracleAtlas(tileset, oracleFrames);
   const placements = getFixturePlacements(fixture.layers, tileset);
   const bounds = getCanvasBounds(placements, tileset.tilewidth, tileset.tileheight);

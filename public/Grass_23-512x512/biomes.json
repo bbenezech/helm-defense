@@ -1,9 +1,14 @@
 {
   "biomes": [
     {
-      "id": "color",
+      "id": "grass",
       "atlas": "tileset.png",
       "checkerAtlas": "tileset.checker.png"
+    },
+    {
+      "id": "soil",
+      "atlas": "tileset.soil.png",
+      "checkerAtlas": "tileset.soil.checker.png"
     }
   ]
 }

@@ -1,5 +1,5 @@
 import type { TerrainMap, TerrainTileset } from "./assets.ts";
-import type { PackedTerrainStack, PackedTerrainWord, SurfaceCellGrid } from "./chunks.ts";
+import type { BiomeCellGrid, PackedTerrainStack, PackedTerrainWord, SurfaceCellGrid } from "./chunks.ts";
 import type { Point2 } from "./projection.ts";
 
 export type PainterCandidate = {
@@ -157,6 +157,22 @@ function createEmptyStack(): PackedTerrainStack {
   };
 }
 
+function validateBiomeCellsForMap(map: TerrainMap, biomeCells: BiomeCellGrid) {
+  if (biomeCells.width !== map.width || biomeCells.height !== map.height) {
+    throw new Error(
+      `Packed terrain biome grid ${biomeCells.width}x${biomeCells.height} must match map size ${map.width}x${map.height}.`,
+    );
+  }
+}
+
+function getBiomeCellIndex(biomeCells: BiomeCellGrid, mapX: number, mapY: number): number {
+  const biomeIndex = biomeCells.data[mapY * biomeCells.width + mapX];
+  if (biomeIndex === undefined) {
+    throw new Error(`Missing biome cell at (${mapX}, ${mapY}).`);
+  }
+  return biomeIndex;
+}
+
 export function encodePackedTerrainWord(
   shapeReference: number,
   biomeIndex: number,
@@ -202,11 +218,12 @@ export function createPackedTerrainStack(
   map: TerrainMap,
   _tileset: TerrainTileset,
   _elevationStep: number,
-  biomeIndex = 0,
+  biomeCells: BiomeCellGrid,
 ): PackedTerrainStack {
   if (map.renderorder !== "right-down") {
     throw new Error(`Packed terrain codec requires Tiled renderorder "right-down", received "${map.renderorder}".`);
   }
+  validateBiomeCellsForMap(map, biomeCells);
 
   const placements: PackedPlacement[] = [];
   const tileset = map.tilesets[0];
@@ -223,6 +240,7 @@ export function createPackedTerrainStack(
         if (gid === 0 || gid === undefined) continue;
         const tileId = gid - firstgid;
         const shapeReference = tileId + 1;
+        const biomeIndex = getBiomeCellIndex(biomeCells, tileX, tileY);
 
         placements.push({
           packedX: tileX - 2 * octave,
@@ -261,10 +279,11 @@ export function createPackedTerrainStack(
   };
 }
 
-export function createSurfaceCellGrid(map: TerrainMap, biomeIndex = 0): SurfaceCellGrid {
+export function createSurfaceCellGrid(map: TerrainMap, biomeCells: BiomeCellGrid): SurfaceCellGrid {
   if (map.renderorder !== "right-down") {
     throw new Error(`Surface cell grid requires Tiled renderorder "right-down", received "${map.renderorder}".`);
   }
+  validateBiomeCellsForMap(map, biomeCells);
 
   const data = new Uint32Array(map.width * map.height);
   const tileset = map.tilesets[0];
@@ -279,7 +298,11 @@ export function createSurfaceCellGrid(map: TerrainMap, biomeIndex = 0): SurfaceC
         if (gid === 0 || gid === undefined) continue;
         const tileId = gid - firstgid;
         const shapeReference = tileId + 1;
-        data[tileY * map.width + tileX] = encodePackedTerrainWord(shapeReference, biomeIndex, level);
+        data[tileY * map.width + tileX] = encodePackedTerrainWord(
+          shapeReference,
+          getBiomeCellIndex(biomeCells, tileX, tileY),
+          level,
+        );
       }
     }
   }
@@ -454,10 +477,10 @@ export function createPackedTerrainCodec(
   map: TerrainMap,
   tileset: TerrainTileset,
   elevationStep: number,
-  biomeIndex = 0,
+  biomeCells: BiomeCellGrid,
 ): PackedTerrainCodec {
   const layout = getLayoutContract(map, tileset, elevationStep);
-  const stack = createPackedTerrainStack(map, tileset, elevationStep, biomeIndex);
+  const stack = createPackedTerrainStack(map, tileset, elevationStep, biomeCells);
 
   const enumerateCandidates = (screenX: number, screenY: number) => enumerateCandidateSlots(screenX, screenY, stack, layout);
   const traceVisibleTile = (atlas: ResolveColorAtlas, screenX: number, screenY: number): ResolveTrace => {

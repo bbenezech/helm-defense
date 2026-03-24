@@ -11,6 +11,20 @@ import threeDebugViewStore from "../store/three-debug-view.ts";
 import threeLightingStore from "../store/three-lighting.ts";
 import threeSeaDebugViewStore from "../store/three-sea-debug-view.ts";
 import threeSeaStore from "../store/three-sea.ts";
+import threeTerrainStore, {
+  MAX_THREE_TERRAIN_CORNER_NOISE_AMPLITUDE,
+  MAX_THREE_TERRAIN_CORNER_NOISE_SCALE,
+  MAX_THREE_TERRAIN_OCTAVE_MIX,
+  MAX_THREE_TERRAIN_OCTAVE_SCALE,
+  MIN_THREE_TERRAIN_CORNER_NOISE_AMPLITUDE,
+  MIN_THREE_TERRAIN_CORNER_NOISE_SCALE,
+  MIN_THREE_TERRAIN_OCTAVE_MIX,
+  MIN_THREE_TERRAIN_OCTAVE_SCALE,
+  THREE_TERRAIN_CORNER_NOISE_AMPLITUDE_STEP,
+  THREE_TERRAIN_CORNER_NOISE_SCALE_STEP,
+  THREE_TERRAIN_OCTAVE_MIX_STEP,
+  THREE_TERRAIN_OCTAVE_SCALE_STEP,
+} from "../store/three-terrain.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import threeCompassStore from "../store/three-compass.ts";
 import { CompassRose } from "./compass-rose.tsx";
@@ -161,6 +175,7 @@ export function HudPanel() {
   const threeCompass = useStoreValue(threeCompassStore);
   const threeSea = useStoreValue(threeSeaStore);
   const threeSeaDebugView = useStoreValue(threeSeaDebugViewStore);
+  const threeTerrain = useStoreValue(threeTerrainStore);
   const allSectionsCollapsed = areAllHudPanelSectionsCollapsed(hudPanelState.sections);
 
   return (
@@ -210,6 +225,15 @@ export function HudPanel() {
       <aside className="hud-panel" data-open={hudPanelState.isOpen}>
         <div className="hud-panel-scroll">
           <HudSection title="Quick" sectionKey="quick">
+            <div className="hud-control">
+              <span className="hud-control-label">
+                Terrain Debug <strong>{threeDebugView === "beauty" ? "Beauty" : "Checker"}</strong>
+              </span>
+              <div className="hud-button-row">
+                <HudButton label="Beauty" active={threeDebugView === "beauty"} onClick={() => threeDebugViewStore.set("beauty")} />
+                <HudButton label="Checker" active={threeDebugView === "checker"} onClick={() => threeDebugViewStore.set("checker")} />
+              </div>
+            </div>
             <div className="hud-control">
               <span className="hud-control-label">
                 Sea Mode <strong>{threeSea.mode === "sea" ? "Sea" : "Off"}</strong>
@@ -329,14 +353,64 @@ export function HudPanel() {
           </HudSection>
 
           <HudSection title="Terrain" sectionKey="terrain">
-            <div className="hud-control">
-              <span className="hud-control-label">
-                Terrain Debug <strong>{threeDebugView === "beauty" ? "Beauty" : "Checker"}</strong>
-              </span>
-              <div className="hud-button-row">
-                <HudButton label="Beauty" active={threeDebugView === "beauty"} onClick={() => threeDebugViewStore.set("beauty")} />
-                <HudButton label="Checker" active={threeDebugView === "checker"} onClick={() => threeDebugViewStore.set("checker")} />
-              </div>
+            <HudSlider
+              label="Corner Noise Scale"
+              valueLabel={threeTerrain.cornerNoiseScale.toFixed(1)}
+              min={MIN_THREE_TERRAIN_CORNER_NOISE_SCALE}
+              max={MAX_THREE_TERRAIN_CORNER_NOISE_SCALE}
+              step={THREE_TERRAIN_CORNER_NOISE_SCALE_STEP}
+              value={threeTerrain.cornerNoiseScale}
+              onChange={(cornerNoiseScale) =>
+                threeTerrainStore.set((current) => ({
+                  ...current,
+                  cornerNoiseScale,
+                }))
+              }
+            />
+            <HudSlider
+              label="Corner Noise Amplitude"
+              valueLabel={threeTerrain.cornerNoiseAmplitude.toFixed(3)}
+              min={MIN_THREE_TERRAIN_CORNER_NOISE_AMPLITUDE}
+              max={MAX_THREE_TERRAIN_CORNER_NOISE_AMPLITUDE}
+              step={THREE_TERRAIN_CORNER_NOISE_AMPLITUDE_STEP}
+              value={threeTerrain.cornerNoiseAmplitude}
+              onChange={(cornerNoiseAmplitude) =>
+                threeTerrainStore.set((current) => ({
+                  ...current,
+                  cornerNoiseAmplitude,
+                }))
+              }
+            />
+            <HudSlider
+              label="Octave Scale"
+              valueLabel={threeTerrain.octaveScale.toFixed(2)}
+              min={MIN_THREE_TERRAIN_OCTAVE_SCALE}
+              max={MAX_THREE_TERRAIN_OCTAVE_SCALE}
+              step={THREE_TERRAIN_OCTAVE_SCALE_STEP}
+              value={threeTerrain.octaveScale}
+              onChange={(octaveScale) =>
+                threeTerrainStore.set((current) => ({
+                  ...current,
+                  octaveScale,
+                }))
+              }
+            />
+            <HudSlider
+              label="Octave Mix"
+              valueLabel={threeTerrain.octaveMix.toFixed(2)}
+              min={MIN_THREE_TERRAIN_OCTAVE_MIX}
+              max={MAX_THREE_TERRAIN_OCTAVE_MIX}
+              step={THREE_TERRAIN_OCTAVE_MIX_STEP}
+              value={threeTerrain.octaveMix}
+              onChange={(octaveMix) =>
+                threeTerrainStore.set((current) => ({
+                  ...current,
+                  octaveMix,
+                }))
+              }
+            />
+            <div className="hud-button-row">
+              <HudButton label="Reset Terrain" active={false} onClick={() => threeTerrainStore.reset()} />
             </div>
           </HudSection>
 

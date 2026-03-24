@@ -12,7 +12,7 @@ import {
   SURFACE_NORMAL_FILTER_RADIUS_TILES,
   type SurfaceWinner,
 } from "../../three/surface.ts";
-import { sampleMap, sampleTileset } from "./fixtures.ts";
+import { createFilledBiomeCellGrid, sampleBiomeGrid, sampleMap, sampleTileset } from "./fixtures.ts";
 
 const COS_45 = Math.SQRT1_2;
 const SIN_45 = Math.SQRT1_2;
@@ -151,7 +151,14 @@ describe("analytic terrain surface", () => {
     const tileset = parseTerrainTileset(sampleTileset);
     const map = parseTerrainMap(sampleMap);
     const lookup = createSurfaceShapeLookup(tileset);
-    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const surfaceCells = createSurfaceCellGrid(
+      map,
+      {
+        data: new Uint8Array(sampleBiomeGrid.data),
+        width: sampleBiomeGrid.width,
+        height: sampleBiomeGrid.height,
+      },
+    );
     const winner: SurfaceWinner = { shapeReference: 4, baseHeightLevel: 0, mapX: 1, mapY: 1 };
     const result = evaluateSurfaceLightingNormalFromCells(
       lookup,
@@ -182,7 +189,7 @@ describe("analytic terrain surface", () => {
       tilesets: [{ firstgid: 1, ...sampleTileset }],
     });
     const lookup = createSurfaceShapeLookup(tileset);
-    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const surfaceCells = createSurfaceCellGrid(map, createFilledBiomeCellGrid(map.width, map.height, 0));
     const result = evaluateSurfaceLightingNormalFromCells(
       lookup,
       surfaceCells,
@@ -211,7 +218,7 @@ describe("analytic terrain surface", () => {
       layers: [createLayer(1, 1, 0, [{ x: 0, y: 0, gid: 7 }])],
       tilesets: [{ firstgid: 1, ...tileset }],
     });
-    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const surfaceCells = createSurfaceCellGrid(map, createFilledBiomeCellGrid(map.width, map.height, 0));
     const winner: SurfaceWinner = { shapeReference: 7, baseHeightLevel: 0, mapX: 0, mapY: 0 };
     const exactNormal = evaluateSurfaceSample(lookup, winner.shapeReference, winner.baseHeightLevel, 0.5, 0.5).worldNormal;
     const smoothedResult = evaluateSurfaceLightingNormalFromCells(lookup, surfaceCells, winner, { x: 0.5, y: 0.5 }, 0.005);
@@ -239,7 +246,7 @@ describe("analytic terrain surface", () => {
       tilesets: [{ firstgid: 1, ...sampleTileset }],
     });
     const lookup = createSurfaceShapeLookup(tileset);
-    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const surfaceCells = createSurfaceCellGrid(map, createFilledBiomeCellGrid(map.width, map.height, 0));
     const leftWinner: SurfaceWinner = { shapeReference: 2, baseHeightLevel: 0, mapX: 0, mapY: 0 };
     const rightWinner: SurfaceWinner = { shapeReference: 1, baseHeightLevel: 1, mapX: 1, mapY: 0 };
     const leftResult = evaluateSurfaceLightingNormalFromCells(
