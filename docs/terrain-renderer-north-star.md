@@ -22,7 +22,7 @@ The shipped Three renderer no longer uses a runtime global surface texture.
 - pass 1 resolves visibility from the packed 8-slice terrain stack and writes unlit albedo
 - pass 1 computes exact coarse analytic `worldHeight` from the resolved winner tile
 - pass 1 computes a lighting normal from a separate logical world-cell surface map that stores the topmost non-empty terrain cell at each `(mapX, mapY)`
-- pass 2 performs lighting only
+- pass 2 performs the final terrain composite: dry-terrain lighting plus the optional stylized sea overlay driven by the pass-1 terrain payload
 
 This keeps visibility and exported height exact while moving normal smoothing onto a map-space source that can smooth across tile boundaries and map edges.
 
@@ -146,7 +146,7 @@ The current implementation writes one surface metadata attachment during pass 1 
 - `RGB`: smoothed lighting normal derived from finite differences over the logical world-cell surface map
 - `A`: exact analytic world height
 
-Pass 2 samples that attachment and applies lighting only.
+Pass 2 samples that attachment, lights dry terrain, and optionally composites the global stylized sea overlay using the same exact terrain height.
 
 ## 5. Per-Pixel Resolve Algorithm
 

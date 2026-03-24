@@ -24,6 +24,7 @@ import {
   getWorldHeightFromLevel,
   SURFACE_NORMAL_FILTER_RADIUS_TILES,
 } from "./surface.ts";
+import { DEFAULT_THREE_SEA_DEBUG_VIEW, DEFAULT_THREE_SEA_SETTINGS, createSeaShaderChunk } from "./sea.ts";
 
 export type ThreeLightingSettings = {
   sunAzimuthDeg: number;
@@ -34,18 +35,105 @@ export type ThreeLightingSettings = {
 
 export type ThreeDebugView = "beauty" | "checker";
 
+export type ThreeSeaMode = "off" | "sea";
+
+export type ThreeSeaDebugView =
+  | "final"
+  | "water-depth"
+  | "water-normal"
+  | "foam"
+  | "caustics"
+  | "underwater-transmittance";
+
+export type ThreeSeaWaveBandSettings = {
+  amplitudeLevels: number;
+  wavelengthTiles: number;
+  speed: number;
+  directionDeg: number;
+};
+
+export type ThreeSeaRippleSettings = {
+  normalStrength: number;
+  scale: number;
+  speed: number;
+};
+
+export type ThreeSeaFoamSettings = {
+  shoreStrength: number;
+  crestStrength: number;
+  softness: number;
+  voronoiScale: number;
+  voronoiJitter: number;
+  flowSpeed: number;
+  warpStrength: number;
+};
+
+export type ThreeSeaCausticsSettings = {
+  strength: number;
+  scale: number;
+  speed: number;
+  depthFadeLevels: number;
+};
+
+export type ThreeSeaQualitySettings = {
+  waveOctaves: 2 | 3;
+  voronoiOctaves: 1 | 2;
+};
+
+export type ThreeSeaSettings = {
+  mode: ThreeSeaMode;
+  waterLevelLevels: number;
+  foamWidthLevels: number;
+  surfaceOpacity: number;
+  absorptionDepthLevels: number;
+  bottomVisibility: number;
+  refractionStrengthPx: number;
+  fresnelPower: number;
+  fresnelStrength: number;
+  specularStrength: number;
+  glintTightness: number;
+  shallowColor: number;
+  deepColor: number;
+  foamColor: number;
+  causticsColor: number;
+  skyReflectionColor: number;
+  swellA: ThreeSeaWaveBandSettings;
+  swellB: ThreeSeaWaveBandSettings;
+  chop: ThreeSeaWaveBandSettings;
+  ripple: ThreeSeaRippleSettings;
+  foam: ThreeSeaFoamSettings;
+  caustics: ThreeSeaCausticsSettings;
+  quality: ThreeSeaQualitySettings;
+};
+
 export type ThreeTerrainApp = {
   destroy: () => void;
   resize: (width: number, height: number) => void;
   setPaused: (paused: boolean) => void;
   setLighting: (settings: ThreeLightingSettings) => void;
+  setSea: (settings: ThreeSeaSettings) => void;
   setDebugView: (view: ThreeDebugView) => void;
+  setSeaDebugView: (view: ThreeSeaDebugView) => void;
 };
 
 const CAMERA_Z = 1000;
 const PICK_DRAG_THRESHOLD_PX = 4;
 const SURFACE_GROUND_SEARCH_ITERATIONS = 16;
-const { Var, float, mrt, texture, textureLoad, uniform, vec2, vec4, viewportUV, wgsl, wgslFn } = THREE.TSL;
+const {
+  Var,
+  clamp,
+  cos,
+  float,
+  mrt,
+  sin,
+  texture,
+  textureLoad,
+  uniform,
+  vec2,
+  viewportUV,
+  wgsl,
+  wgslFn,
+} = THREE.TSL;
 const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
@@ -100,6 +188,32 @@ function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
   }
 }
 
+function getThreeSeaDebugViewUniformValue(view: ThreeSeaDebugView): number {
+  switch (view) {
+    case "final": {
+      return 0;
+    }
+    case "water-depth": {
+      return 1;
+    }
+    case "water-normal": {
+      return 2;
+    }
+    case "foam": {
+      return 3;
+    }
+    case "caustics": {
+      return 4;
+    }
+    case "underwater-transmittance": {
+      return 5;
+    }
+    default: {
+      throw new Error(view satisfies never);
+    }
+  }
+}
+
 function getMapLayerLevel(layer: TerrainMap["layers"][number]): number {
   for (const property of layer.properties) {
     if (property.name === "level" && typeof property.value === "number") return property.value;
@@ -125,6 +239,12 @@ function configureTexture(textureValue: THREE.Texture) {
   textureValue.minFilter = THREE.NearestFilter;
   textureValue.generateMipmaps = false;
   textureValue.needsUpdate = true;
+}
+
+function setLinearColorVector(vector: THREE.Vector3, colorHex: number) {
+  const color = new THREE.Color(colorHex);
+  color.convertSRGBToLinear();
+  vector.set(color.r, color.g, color.b);
 }
 
 function createResolveTarget(width: number, height: number): THREE.RenderTarget {
@@ -164,7 +284,11 @@ class UnsupportedWebGPUApp implements ThreeTerrainApp {
 
   setLighting(_settings: ThreeLightingSettings) {}
 
+  setSea(_settings: ThreeSeaSettings) {}
+
   setDebugView(_view: ThreeDebugView) {}
+
+  setSeaDebugView(_view: ThreeSeaDebugView) {}
 }
 
 class TerrainRuntime implements ThreeTerrainApp {
@@ -183,13 +307,34 @@ class TerrainRuntime implements ThreeTerrainApp {
   private cameraState: CameraState;
   private readonly cameraWorldUniform = uniform(new THREE.Vector2());
   private readonly cameraViewSizeUniform = uniform(new THREE.Vector2());
+  private readonly viewportResolutionUniform = uniform(new THREE.Vector2(1, 1));
   private readonly sunDirectionUniform = uniform(getSunDirectionVector(DEFAULT_THREE_LIGHTING_SETTINGS));
   private readonly ambientUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.ambient);
   private readonly aliasingRadiusUniform = uniform(DEFAULT_THREE_LIGHTING_SETTINGS.aliasingRadiusTiles);
   private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
+  private readonly seaModeUniform = uniform(1);
+  private readonly seaDebugViewUniform = uniform(getThreeSeaDebugViewUniformValue(DEFAULT_THREE_SEA_DEBUG_VIEW));
+  private readonly seaTimeUniform = uniform(0);
+  private readonly seaLevelFoamUniform = uniform(new THREE.Vector2());
+  private readonly seaOpticsAUniform = uniform(new THREE.Vector4());
+  private readonly seaOpticsBUniform = uniform(new THREE.Vector4());
+  private readonly seaShallowColorUniform = uniform(new THREE.Vector3());
+  private readonly seaDeepColorUniform = uniform(new THREE.Vector3());
+  private readonly seaFoamColorUniform = uniform(new THREE.Vector3());
+  private readonly seaCausticsColorUniform = uniform(new THREE.Vector3());
+  private readonly seaSkyReflectionColorUniform = uniform(new THREE.Vector3());
+  private readonly seaSwellAUniform = uniform(new THREE.Vector4());
+  private readonly seaSwellBUniform = uniform(new THREE.Vector4());
+  private readonly seaChopUniform = uniform(new THREE.Vector4());
+  private readonly seaRippleUniform = uniform(new THREE.Vector4());
+  private readonly seaFoamAUniform = uniform(new THREE.Vector4());
+  private readonly seaFoamBUniform = uniform(new THREE.Vector4());
+  private readonly seaCausticsUniform = uniform(new THREE.Vector4());
+  private readonly seaQualityUniform = uniform(new THREE.Vector2());
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly cleanups: Array<() => void> = [];
   private paused = false;
+  private seaTimeSeconds = 0;
   private drag: { startPointer: { x: number; y: number }; startCenter: { x: number; y: number }; moved: boolean } | null =
     null;
   private lastFrameAt = performance.now();
@@ -853,14 +998,272 @@ class TerrainRuntime implements ThreeTerrainApp {
     // Fullscreen lighting is a complete overwrite of the frame, not a blend pass.
     material.transparent = false;
     material.blending = THREE.NoBlending;
+    const halfTileWidthInv = 2 / this.bundle.map.tilewidth;
+    const halfTileHeightInv = 2 / this.bundle.map.tileheight;
+    const heightImpactOnScreenY = getSurfaceHeightImpactOnScreenY(this.bundle.map.tileheight);
+    const seaHelpers = wgsl(/* wgsl */ `
+      ${createSeaShaderChunk()}
+
+      fn worldToSeaTileCoord(world: vec2<f32>) -> vec2<f32> {
+        let tileX = (world.x * ${halfTileWidthInv.toFixed(8)} + world.y * ${halfTileHeightInv.toFixed(8)}) * 0.5 - 1.0;
+        let tileY = (world.y * ${halfTileHeightInv.toFixed(8)} - world.x * ${halfTileWidthInv.toFixed(8)}) * 0.5;
+        return vec2<f32>(tileX, tileY);
+      }
+
+      fn shadeTerrainAndSea(
+        world: vec2<f32>,
+        terrainColor: vec3<f32>,
+        terrainAlpha: f32,
+        terrainNormal: vec3<f32>,
+        terrainHeight: f32,
+        refractedTerrainColor: vec3<f32>,
+        refractedTerrainAlpha: f32,
+        refractedTerrainNormal: vec3<f32>,
+        refractedTerrainHeight: f32,
+        seaMode: f32,
+        seaDebugView: f32,
+        seaTime: f32,
+        sunDirection: vec3<f32>,
+        seaLevelFoam: vec2<f32>,
+        seaOpticsA: vec4<f32>,
+        seaOpticsB: vec4<f32>,
+        shallowColor: vec3<f32>,
+        deepColor: vec3<f32>,
+        foamColor: vec3<f32>,
+        causticsColor: vec3<f32>,
+        skyReflectionColor: vec3<f32>,
+        swellA: vec4<f32>,
+        swellB: vec4<f32>,
+        chop: vec4<f32>,
+        ripple: vec4<f32>,
+        foamA: vec4<f32>,
+        foamB: vec4<f32>,
+        caustics: vec4<f32>,
+        quality: vec2<f32>,
+      ) -> vec4<f32> {
+        if (terrainAlpha <= 0.0) {
+          return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+
+        if (seaMode < 0.5) {
+          return vec4<f32>(terrainColor, terrainAlpha);
+        }
+
+        let tileCoord = worldToSeaTileCoord(world);
+        let seaSurface = seaEvaluateSurface(seaLevelFoam, swellA, swellB, chop, ripple, quality, tileCoord, seaTime);
+        let waterDepthWorld = seaSurface.x - terrainHeight;
+
+        if (waterDepthWorld <= 0.0) {
+          if (seaDebugView < 0.5) {
+            return vec4<f32>(terrainColor, terrainAlpha);
+          }
+
+          return vec4<f32>(0.0, 0.0, 0.0, terrainAlpha);
+        }
+
+        let waterDepthLevels = waterDepthWorld / SURFACE_WORLD_HEIGHT_SCALE;
+        let seaNormal = rotateTerrainNormalToWorld(seaSafeNormalize(vec3<f32>(-seaSurface.y, seaSurface.z, 1.0)));
+        let viewDirection = seaSafeNormalize(vec3<f32>(0.0, 1.0, ${heightImpactOnScreenY.toFixed(8)}));
+        let transmittance = seaUnderwaterTransmittance(waterDepthLevels, seaOpticsA.y, seaOpticsA.z);
+        let depthRamp = seaClampUnit(waterDepthLevels / max(seaOpticsA.y, 0.001));
+        let waterVolumeColor = mix(shallowColor, deepColor, depthRamp);
+        let refractedTerrainIsValid = refractedTerrainAlpha > 0.0 && seaSurface.x > refractedTerrainHeight;
+        var submergedTerrainColor = terrainColor;
+        var submergedTerrainNormal = terrainNormal;
+
+        if (refractedTerrainIsValid) {
+          submergedTerrainColor = refractedTerrainColor;
+          submergedTerrainNormal = refractedTerrainNormal;
+        }
+
+        let causticsEdge = seaAnimatedVoronoiEdge(
+          tileCoord + vec2<f32>(5.3, -2.1),
+          caustics.y,
+          foamB.x,
+          caustics.z,
+          foamB.z * 0.6,
+          seaTime,
+          quality.y,
+        );
+        let causticsDepthFade = 1.0 - seaClampUnit(waterDepthLevels / max(caustics.w, 0.001));
+        let causticsAmount = caustics.x * causticsEdge * causticsDepthFade * transmittance * submergedTerrainNormal.z;
+        let underwaterColor = mix(
+          waterVolumeColor,
+          submergedTerrainColor + causticsColor * causticsAmount,
+          transmittance,
+        );
+
+        let shorelineFoam = pow(
+          seaClampUnit((seaLevelFoam.y - waterDepthLevels) / max(seaLevelFoam.y, 0.001)),
+          max(foamA.z, 0.01),
+        );
+        let crestFoam = smoothstep(max(0.35, 0.72 - foamA.z), 0.95, seaSurface.w);
+        let foamVoronoi = seaAnimatedVoronoiEdge(tileCoord, foamA.w, foamB.x, foamB.y, foamB.z, seaTime, quality.y);
+        let foamAmount = seaClampUnit((shorelineFoam * foamA.x + crestFoam * foamA.y) * foamVoronoi);
+
+        let fresnelBase = 1.0 - max(dot(viewDirection, seaNormal), 0.0);
+        let fresnel = pow(fresnelBase, max(seaOpticsB.x, 0.001)) * seaOpticsB.y;
+        let halfVector = seaSafeNormalize(viewDirection + sunDirection);
+        let glint = pow(max(dot(seaNormal, halfVector), 0.0), max(seaOpticsB.w, 1.0)) * seaOpticsB.z;
+        let diffuse = max(dot(seaNormal, sunDirection), 0.0) * 0.08;
+        let surfaceColor =
+          mix(waterVolumeColor, skyReflectionColor, seaClampUnit(fresnel)) +
+          shallowColor * diffuse +
+          skyReflectionColor * (fresnel * 0.25) +
+          vec3<f32>(glint, glint, glint) +
+          foamColor * foamAmount;
+        let surfaceBlend = seaClampUnit(seaOpticsA.x + fresnel * 0.65 + foamAmount * 0.55);
+        let finalSeaColor = mix(underwaterColor, surfaceColor, surfaceBlend);
+
+        if (seaDebugView < 0.5) {
+          return vec4<f32>(finalSeaColor, terrainAlpha);
+        }
+        if (seaDebugView < 1.5) {
+          return vec4<f32>(vec3<f32>(seaClampUnit(waterDepthLevels / max(seaOpticsA.y, 0.001))), terrainAlpha);
+        }
+        if (seaDebugView < 2.5) {
+          return vec4<f32>(seaNormal * 0.5 + vec3<f32>(0.5, 0.5, 0.5), terrainAlpha);
+        }
+        if (seaDebugView < 3.5) {
+          return vec4<f32>(vec3<f32>(foamAmount), terrainAlpha);
+        }
+        if (seaDebugView < 4.5) {
+          return vec4<f32>(vec3<f32>(causticsAmount), terrainAlpha);
+        }
+
+        return vec4<f32>(vec3<f32>(transmittance), terrainAlpha);
+      }
+    `);
+    const shadeTerrainAndSeaNode = wgslFn(/* wgsl */ `
+      fn shadeTerrainAndSeaNode(
+        world: vec2<f32>,
+        terrainColor: vec3<f32>,
+        terrainAlpha: f32,
+        terrainNormal: vec3<f32>,
+        terrainHeight: f32,
+        refractedTerrainColor: vec3<f32>,
+        refractedTerrainAlpha: f32,
+        refractedTerrainNormal: vec3<f32>,
+        refractedTerrainHeight: f32,
+        seaMode: f32,
+        seaDebugView: f32,
+        seaTime: f32,
+        sunDirection: vec3<f32>,
+        seaLevelFoam: vec2<f32>,
+        seaOpticsA: vec4<f32>,
+        seaOpticsB: vec4<f32>,
+        shallowColor: vec3<f32>,
+        deepColor: vec3<f32>,
+        foamColor: vec3<f32>,
+        causticsColor: vec3<f32>,
+        skyReflectionColor: vec3<f32>,
+        swellA: vec4<f32>,
+        swellB: vec4<f32>,
+        chop: vec4<f32>,
+        ripple: vec4<f32>,
+        foamA: vec4<f32>,
+        foamB: vec4<f32>,
+        caustics: vec4<f32>,
+        quality: vec2<f32>,
+      ) -> vec4<f32> {
+        return shadeTerrainAndSea(
+          world,
+          terrainColor,
+          terrainAlpha,
+          terrainNormal,
+          terrainHeight,
+          refractedTerrainColor,
+          refractedTerrainAlpha,
+          refractedTerrainNormal,
+          refractedTerrainHeight,
+          seaMode,
+          seaDebugView,
+          seaTime,
+          sunDirection,
+          seaLevelFoam,
+          seaOpticsA,
+          seaOpticsB,
+          shallowColor,
+          deepColor,
+          foamColor,
+          causticsColor,
+          skyReflectionColor,
+          swellA,
+          swellB,
+          chop,
+          ripple,
+          foamA,
+          foamB,
+          caustics,
+          quality,
+        );
+      }
+    `, [seaHelpers]);
+    const screen = this.createScreenNode();
+    const tileCoord = vec2(
+      screen.x.mul(halfTileWidthInv).add(screen.y.mul(halfTileHeightInv)).mul(0.5).sub(float(1)),
+      screen.y.mul(halfTileHeightInv).sub(screen.x.mul(halfTileWidthInv)).mul(0.5),
+    );
+    const refractionPhaseA = tileCoord.x
+      .mul(this.seaRippleUniform.y)
+      .add(tileCoord.y.mul(0.63))
+      .add(this.seaTimeUniform.mul(this.seaRippleUniform.z));
+    const refractionPhaseB = tileCoord.y
+      .mul(this.seaRippleUniform.y.mul(0.87))
+      .sub(tileCoord.x.mul(0.49))
+      .sub(this.seaTimeUniform.mul(this.seaRippleUniform.z).mul(1.13));
+    const refractionDirection = vec2(
+      sin(refractionPhaseA).add(cos(refractionPhaseB.mul(1.27))),
+      sin(refractionPhaseB).sub(cos(refractionPhaseA.mul(1.11))),
+    );
+    const refractedUv = clamp(
+      viewportUV.add(refractionDirection.mul(this.seaOpticsAUniform.w).div(this.viewportResolutionUniform)),
+      vec2(0.0, 0.0),
+      vec2(1.0, 1.0),
+    );
     const albedo = texture(this.resolveTarget.texture).toVar("terrainAlbedo");
-    const terrainNormal = texture(this.getResolveSurfaceTexture(), viewportUV)
-      .rgb
-      .normalize()
-      .toVar("terrainLightingNormal");
+    const terrainSurface = texture(this.getResolveSurfaceTexture(), viewportUV).toVar("terrainSurface");
+    const terrainNormal = terrainSurface.rgb.normalize().toVar("terrainLightingNormal");
     const diffuse = terrainNormal.dot(this.sunDirectionUniform).max(float(0));
     const shade = this.ambientUniform.add(float(1).sub(this.ambientUniform).mul(diffuse));
-    material.outputNode = vec4(albedo.rgb.mul(shade), albedo.a);
+    const dryTerrainColor = albedo.rgb.mul(shade).toVar("dryTerrainColor");
+    const refractedAlbedo = texture(this.resolveTarget.texture, refractedUv).toVar("terrainRefractedAlbedo");
+    const refractedSurface = texture(this.getResolveSurfaceTexture(), refractedUv).toVar("terrainRefractedSurface");
+    const refractedTerrainNormal = refractedSurface.rgb.normalize().toVar("terrainRefractedLightingNormal");
+    const refractedDiffuse = refractedTerrainNormal.dot(this.sunDirectionUniform).max(float(0));
+    const refractedShade = this.ambientUniform.add(float(1).sub(this.ambientUniform).mul(refractedDiffuse));
+    const refractedDryTerrainColor = refractedAlbedo.rgb.mul(refractedShade).toVar("refractedDryTerrainColor");
+    material.outputNode = shadeTerrainAndSeaNode({
+      world: screen,
+      terrainColor: dryTerrainColor,
+      terrainAlpha: albedo.a,
+      terrainNormal,
+      terrainHeight: terrainSurface.a,
+      refractedTerrainColor: refractedDryTerrainColor,
+      refractedTerrainAlpha: refractedAlbedo.a,
+      refractedTerrainNormal,
+      refractedTerrainHeight: refractedSurface.a,
+      seaMode: this.seaModeUniform,
+      seaDebugView: this.seaDebugViewUniform,
+      seaTime: this.seaTimeUniform,
+      sunDirection: this.sunDirectionUniform,
+      seaLevelFoam: this.seaLevelFoamUniform,
+      seaOpticsA: this.seaOpticsAUniform,
+      seaOpticsB: this.seaOpticsBUniform,
+      shallowColor: this.seaShallowColorUniform,
+      deepColor: this.seaDeepColorUniform,
+      foamColor: this.seaFoamColorUniform,
+      causticsColor: this.seaCausticsColorUniform,
+      skyReflectionColor: this.seaSkyReflectionColorUniform,
+      swellA: this.seaSwellAUniform,
+      swellB: this.seaSwellBUniform,
+      chop: this.seaChopUniform,
+      ripple: this.seaRippleUniform,
+      foamA: this.seaFoamAUniform,
+      foamB: this.seaFoamBUniform,
+      caustics: this.seaCausticsUniform,
+      quality: this.seaQualityUniform,
+    });
     return material;
   }
 
@@ -892,7 +1295,9 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.setupSelection();
     this.resize(this.viewport.width, this.viewport.height);
     this.setLighting(DEFAULT_THREE_LIGHTING_SETTINGS);
+    this.setSea(DEFAULT_THREE_SEA_SETTINGS);
     this.setDebugView(DEFAULT_THREE_DEBUG_VIEW);
+    this.setSeaDebugView(DEFAULT_THREE_SEA_DEBUG_VIEW);
     this.bindEvents();
     this.renderer.setAnimationLoop(this.render);
   }
@@ -1076,6 +1481,10 @@ class TerrainRuntime implements ThreeTerrainApp {
     const delta = Math.max(now - this.lastFrameAt, 0.0001);
     this.lastFrameAt = now;
     fpsBus.emitDebounced(1000 / delta);
+    if (!this.paused) {
+      this.seaTimeSeconds += delta * 0.001;
+      this.seaTimeUniform.value = this.seaTimeSeconds;
+    }
 
     this.renderer.setRenderTarget(this.resolveTarget);
     this.renderer.clear();
@@ -1100,6 +1509,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.viewport.height = Math.max(height, 1);
     this.renderer.setSize(this.viewport.width, this.viewport.height, true);
     this.resolveTarget.setSize(this.viewport.width, this.viewport.height);
+    this.viewportResolutionUniform.value.set(this.viewport.width, this.viewport.height);
     this.cameraState = resizeCameraState(this.cameraState, this.bundle.bounds, this.viewport);
     this.syncCamera();
   }
@@ -1115,8 +1525,77 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.aliasingRadiusUniform.value = settings.aliasingRadiusTiles;
   }
 
+  setSea(settings: ThreeSeaSettings) {
+    this.seaModeUniform.value = settings.mode === "sea" ? 1 : 0;
+    this.seaLevelFoamUniform.value.set(settings.waterLevelLevels, settings.foamWidthLevels);
+    this.seaOpticsAUniform.value.set(
+      settings.surfaceOpacity,
+      settings.absorptionDepthLevels,
+      settings.bottomVisibility,
+      settings.refractionStrengthPx,
+    );
+    this.seaOpticsBUniform.value.set(
+      settings.fresnelPower,
+      settings.fresnelStrength,
+      settings.specularStrength,
+      settings.glintTightness,
+    );
+    setLinearColorVector(this.seaShallowColorUniform.value, settings.shallowColor);
+    setLinearColorVector(this.seaDeepColorUniform.value, settings.deepColor);
+    setLinearColorVector(this.seaFoamColorUniform.value, settings.foamColor);
+    setLinearColorVector(this.seaCausticsColorUniform.value, settings.causticsColor);
+    setLinearColorVector(this.seaSkyReflectionColorUniform.value, settings.skyReflectionColor);
+    this.seaSwellAUniform.value.set(
+      settings.swellA.amplitudeLevels,
+      settings.swellA.wavelengthTiles,
+      settings.swellA.speed,
+      (settings.swellA.directionDeg * Math.PI) / 180,
+    );
+    this.seaSwellBUniform.value.set(
+      settings.swellB.amplitudeLevels,
+      settings.swellB.wavelengthTiles,
+      settings.swellB.speed,
+      (settings.swellB.directionDeg * Math.PI) / 180,
+    );
+    this.seaChopUniform.value.set(
+      settings.chop.amplitudeLevels,
+      settings.chop.wavelengthTiles,
+      settings.chop.speed,
+      (settings.chop.directionDeg * Math.PI) / 180,
+    );
+    this.seaRippleUniform.value.set(
+      settings.ripple.normalStrength,
+      settings.ripple.scale,
+      settings.ripple.speed,
+      0,
+    );
+    this.seaFoamAUniform.value.set(
+      settings.foam.shoreStrength,
+      settings.foam.crestStrength,
+      settings.foam.softness,
+      settings.foam.voronoiScale,
+    );
+    this.seaFoamBUniform.value.set(
+      settings.foam.voronoiJitter,
+      settings.foam.flowSpeed,
+      settings.foam.warpStrength,
+      0,
+    );
+    this.seaCausticsUniform.value.set(
+      settings.caustics.strength,
+      settings.caustics.scale,
+      settings.caustics.speed,
+      settings.caustics.depthFadeLevels,
+    );
+    this.seaQualityUniform.value.set(settings.quality.waveOctaves, settings.quality.voronoiOctaves);
+  }
+
   setDebugView(view: ThreeDebugView) {
     this.debugViewUniform.value = getThreeDebugViewUniformValue(view);
+  }
+
+  setSeaDebugView(view: ThreeSeaDebugView) {
+    this.seaDebugViewUniform.value = getThreeSeaDebugViewUniformValue(view);
   }
 }
 
