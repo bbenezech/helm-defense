@@ -95,8 +95,7 @@ function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
       return 1;
     }
     default: {
-      const exhaustiveView: never = view;
-      throw new Error(`Unexpected Three debug view "${exhaustiveView}".`);
+      throw new Error(view satisfies never);
     }
   }
 }

@@ -41,4 +41,5 @@
 ## Quality Gate
 
 - The repo-level compiler gate is `bun check`, which resolves to `tsgo --build`.
+- ESLint is intentionally focused on runtime/app modules; `tests/**` and `scripts/**` rely on TypeScript plus their own execution paths instead of lint coverage.
 - Formatting and other auto-fixable cleanup are expected to be handled outside CI/pre-commit policy, not by a hosted pipeline.

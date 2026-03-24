@@ -4,10 +4,9 @@ import {
   MIN_THREE_ALIASING_RADIUS_TILES,
   type ThreeLightingSettings,
 } from "../../three/app.ts";
-import { localStore } from "./index.ts";
+import { localStore, type StorageCodec } from "./index.ts";
 
 const STORAGE_KEY = "three-lighting";
-const store = localStore<ThreeLightingSettings>(STORAGE_KEY, DEFAULT_THREE_LIGHTING_SETTINGS);
 
 type SetStateAction = ThreeLightingSettings | ((previousState: ThreeLightingSettings) => ThreeLightingSettings);
 
@@ -56,6 +55,40 @@ export function parseThreeLightingSettings(value: unknown): ThreeLightingSetting
     aliasingRadiusTiles,
   };
 }
+
+function parseStoredThreeLightingNumber(value: string, label: string): number {
+  if (value.length === 0) throw new Error(`Missing stored Three lighting ${label}.`);
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) throw new Error(`Invalid stored Three lighting ${label} "${value}".`);
+  return numericValue;
+}
+
+function parseStoredThreeLightingSettings(storedValue: string): ThreeLightingSettings {
+  const parts = storedValue.split("|");
+  if (parts.length !== 4) throw new Error(`Invalid stored Three lighting settings "${storedValue}".`);
+  const [sunAzimuthDegPart, sunElevationDegPart, ambientPart, aliasingRadiusTilesPart] = parts;
+  if (sunAzimuthDegPart === undefined) throw new Error("Missing stored Three lighting azimuth.");
+  if (sunElevationDegPart === undefined) throw new Error("Missing stored Three lighting elevation.");
+  if (ambientPart === undefined) throw new Error("Missing stored Three lighting ambient.");
+  if (aliasingRadiusTilesPart === undefined) throw new Error("Missing stored Three lighting aliasing radius.");
+
+  return parseThreeLightingSettings({
+    sunAzimuthDeg: parseStoredThreeLightingNumber(sunAzimuthDegPart, "azimuth"),
+    sunElevationDeg: parseStoredThreeLightingNumber(sunElevationDegPart, "elevation"),
+    ambient: parseStoredThreeLightingNumber(ambientPart, "ambient"),
+    aliasingRadiusTiles: parseStoredThreeLightingNumber(aliasingRadiusTilesPart, "aliasing radius"),
+  });
+}
+
+const threeLightingStorageCodec: StorageCodec<ThreeLightingSettings> = {
+  parse: (storedValue) => parseStoredThreeLightingSettings(storedValue),
+  serialize: (value) =>
+    [value.sunAzimuthDeg, value.sunElevationDeg, value.ambient, value.aliasingRadiusTiles].map((part) => part.toString()).join(
+      "|",
+    ),
+};
+
+const store = localStore(STORAGE_KEY, DEFAULT_THREE_LIGHTING_SETTINGS, threeLightingStorageCodec);
 
 function readStoredThreeLightingSettings(): ThreeLightingSettings {
   try {

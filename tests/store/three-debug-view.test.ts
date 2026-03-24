@@ -60,7 +60,7 @@ afterEach(() => {
 
 describe("three debug view store", () => {
   it("reads and persists valid debug views", async () => {
-    globalThis.localStorage.setItem("three-debug-view", '"checker"');
+    globalThis.localStorage.setItem("three-debug-view", "checker");
 
     const threeDebugViewStoreModule = await import("../../src/store/three-debug-view.ts");
     const store = threeDebugViewStoreModule.default;
@@ -71,11 +71,11 @@ describe("three debug view store", () => {
     expect(store.get()).toBe("beauty");
 
     store.set("checker");
-    expect(globalThis.localStorage.getItem("three-debug-view")).toBe('"checker"');
+    expect(globalThis.localStorage.getItem("three-debug-view")).toBe("checker");
   });
 
   it("resets invalid stored debug views", async () => {
-    globalThis.localStorage.setItem("three-debug-view", '"nope"');
+    globalThis.localStorage.setItem("three-debug-view", "nope");
 
     const threeDebugViewStoreModule = await import("../../src/store/three-debug-view.ts");
     const store = threeDebugViewStoreModule.default;

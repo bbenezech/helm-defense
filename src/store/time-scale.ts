@@ -1,8 +1,8 @@
-import { sessionStore } from "./index.ts";
+import { finiteNumberStorageCodec, sessionStore } from "./index.ts";
 
 const options: number[] = [0, 0.25, 0.5, 1, 2, 4];
 
-const { get, set, subscribe, setDebounced } = sessionStore("time-scale", 1);
+const { get, set, subscribe, setDebounced } = sessionStore("time-scale", 1, finiteNumberStorageCodec);
 
 export default {
   get,

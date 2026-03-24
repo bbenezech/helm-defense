@@ -14,6 +14,12 @@ type Options = {
   debounceDuration: number;
   debounceOptions: DebounceOptions;
 };
+
+export type StorageCodec<T> = {
+  parse: (storedValue: string) => T;
+  serialize: (value: T) => string;
+};
+
 const optionsDefault: Options = {
   debounceDuration: 100,
   debounceOptions: { leading: false, trailing: true, maxWait: 500 },
@@ -76,77 +82,98 @@ export function memoryStore<T>(initialState: T, options = optionsDefault): Store
   return { subscribe, set, setDebounced, get };
 }
 
+export const finiteNumberStorageCodec: StorageCodec<number> = {
+  parse: (storedValue) => {
+    const value = Number(storedValue);
+    if (!Number.isFinite(value)) throw new Error(`Stored number "${storedValue}" is invalid.`);
+    return value;
+  },
+  serialize: (value) => value.toString(),
+};
+
 const sessionKeys = new Set<string>();
-export function sessionStore<T>(key: string, defaultValue: T, options = optionsDefault): Store<T> {
+export function sessionStore<T>(
+  key: string,
+  defaultValue: T,
+  storageCodec: StorageCodec<T>,
+  options = optionsDefault,
+): Store<T> {
   if (sessionKeys.has(key) && !import.meta.hot) throw new Error(`Session store with key "${key}" already exists.`);
   sessionKeys.add(key);
 
   const { subscribe, emit, emitDebounced } = bus<T>(options);
-  const get = () => readSession<T>(key, defaultValue);
+  const get = () => readSession(key, defaultValue, storageCodec);
   const set = (action: SetStateAction<T>) => {
     const value = resolveSetStateAction(action, get());
-    writeSession(key, value, defaultValue);
+    writeSession(key, value, defaultValue, storageCodec);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
     const value = resolveSetStateAction(action, get());
-    writeSession(key, value, defaultValue);
+    writeSession(key, value, defaultValue, storageCodec);
     emitDebounced(value);
   };
   return { subscribe, set, setDebounced, get };
 }
 
-function readSession<T>(key: string, defaultValue: T): T {
+function readSession<T>(key: string, defaultValue: T, storageCodec: StorageCodec<T>): T {
   const storedValue = globalThis.sessionStorage.getItem(key);
   if (storedValue === null) return defaultValue;
   try {
-    return JSON.parse(storedValue);
+    return storageCodec.parse(storedValue);
   } catch {
+    globalThis.sessionStorage.removeItem(key);
     return defaultValue;
   }
 }
 
-function writeSession<T>(key: string, value: T, defaultValue: T): void {
-  if (value === undefined || value === defaultValue) {
+function writeSession<T>(key: string, value: T, defaultValue: T, storageCodec: StorageCodec<T>): void {
+  if (value === defaultValue) {
     globalThis.sessionStorage.removeItem(key);
   } else {
-    globalThis.sessionStorage.setItem(key, JSON.stringify(value));
+    globalThis.sessionStorage.setItem(key, storageCodec.serialize(value));
   }
 }
 
 const localKeys = new Set<string>();
-export function localStore<T>(key: string, defaultValue: T, options = optionsDefault): Store<T> {
+export function localStore<T>(
+  key: string,
+  defaultValue: T,
+  storageCodec: StorageCodec<T>,
+  options = optionsDefault,
+): Store<T> {
   if (localKeys.has(key) && !import.meta.hot) throw new Error(`Local store with key "${key}" already exists.`);
   localKeys.add(key);
   const { subscribe, emit, emitDebounced } = bus<T>(options);
-  const get = () => readLocal<T>(key, defaultValue);
+  const get = () => readLocal(key, defaultValue, storageCodec);
   const set = (action: SetStateAction<T>) => {
     const value = resolveSetStateAction(action, get());
-    writeLocal(key, value, defaultValue);
+    writeLocal(key, value, defaultValue, storageCodec);
     emit(value);
   };
   const setDebounced = (action: SetStateAction<T>) => {
     const value = resolveSetStateAction(action, get());
-    writeLocal(key, value, defaultValue);
+    writeLocal(key, value, defaultValue, storageCodec);
     emitDebounced(value);
   };
   return { subscribe, set, setDebounced, get };
 }
 
-function readLocal<T>(key: string, defaultValue: T): T {
+function readLocal<T>(key: string, defaultValue: T, storageCodec: StorageCodec<T>): T {
   const storedValue = globalThis.localStorage.getItem(key);
   if (storedValue === null) return defaultValue;
   try {
-    return JSON.parse(storedValue);
+    return storageCodec.parse(storedValue);
   } catch {
+    globalThis.localStorage.removeItem(key);
     return defaultValue;
   }
 }
 
-function writeLocal<T>(key: string, value: T, defaultValue: T): void {
-  if (value === undefined || value === defaultValue) {
+function writeLocal<T>(key: string, value: T, defaultValue: T, storageCodec: StorageCodec<T>): void {
+  if (value === defaultValue) {
     globalThis.localStorage.removeItem(key);
   } else {
-    globalThis.localStorage.setItem(key, JSON.stringify(value));
+    globalThis.localStorage.setItem(key, storageCodec.serialize(value));
   }
 }

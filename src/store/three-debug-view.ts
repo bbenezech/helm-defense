@@ -1,15 +1,22 @@
 import { DEFAULT_THREE_DEBUG_VIEW, type ThreeDebugView } from "../../three/app.ts";
-import { localStore } from "./index.ts";
+import { localStore, type StorageCodec } from "./index.ts";
 
 const STORAGE_KEY = "three-debug-view";
-const store = localStore<ThreeDebugView>(STORAGE_KEY, DEFAULT_THREE_DEBUG_VIEW);
 
 type SetStateAction = ThreeDebugView | ((previousState: ThreeDebugView) => ThreeDebugView);
 
 export function parseThreeDebugView(value: unknown): ThreeDebugView {
   if (value === "beauty" || value === "checker") return value;
-  throw new Error(`Invalid Three debug view "${String(value)}".`);
+  if (typeof value === "string") throw new Error(`Invalid Three debug view "${value}"; expected "beauty" or "checker".`);
+  throw new Error('Invalid Three debug view; expected "beauty" or "checker".');
 }
+
+const threeDebugViewStorageCodec: StorageCodec<ThreeDebugView> = {
+  parse: (storedValue) => parseThreeDebugView(storedValue),
+  serialize: (value) => value,
+};
+
+const store = localStore(STORAGE_KEY, DEFAULT_THREE_DEBUG_VIEW, threeDebugViewStorageCodec);
 
 function readStoredThreeDebugView(): ThreeDebugView {
   try {

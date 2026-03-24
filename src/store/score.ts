@@ -1,5 +1,5 @@
-import { localStore } from "./index.ts";
+import { finiteNumberStorageCodec, localStore } from "./index.ts";
 
-const score = localStore("score", 0);
+const score = localStore("score", 0, finiteNumberStorageCodec);
 
 export default score;

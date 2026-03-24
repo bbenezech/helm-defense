@@ -60,10 +60,7 @@ afterEach(() => {
 
 describe("three lighting store", () => {
   it("returns a stable snapshot until lighting changes", async () => {
-    globalThis.localStorage.setItem(
-      "three-lighting",
-      '{"sunAzimuthDeg":15,"sunElevationDeg":35,"ambient":0.7,"aliasingRadiusTiles":0.125}',
-    );
+    globalThis.localStorage.setItem("three-lighting", "15|35|0.7|0.125");
 
     const threeLightingStoreModule = await import("../../src/store/three-lighting.ts");
     const store = threeLightingStoreModule.default;

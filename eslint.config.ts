@@ -11,7 +11,6 @@ import noValueDefaultOrRule from "./eslint/rules/no-value-default-or.ts";
 const projectRoot = import.meta.dirname;
 const scopedFiles = [
   "three/**/*.ts",
-  "tests/three/**/*.ts",
   "src/components/**/*.ts",
   "src/components/**/*.tsx",
   "src/store/**/*.ts",
@@ -47,6 +46,8 @@ export default tseslint.config(
       "**/coverage/",
       "**/assets/",
       "**/public/",
+      "tests/**",
+      "scripts/**",
     ],
   },
   ...tseslint.configs.recommended, // https://typescript-eslint.io/users/configs/#recommended, https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/src/configs/eslintrc/recommended.ts
@@ -91,7 +92,7 @@ export default tseslint.config(
     plugins: { "helm-defense": helmDefensePlugin },
     linterOptions: { noInlineConfig: true },
     languageOptions: {
-      parserOptions: { projectService: { allowDefaultProject: ["tests/*/*.ts"] }, tsconfigRootDir: projectRoot },
+      parserOptions: { projectService: true, tsconfigRootDir: projectRoot },
     },
     rules: {
       "@typescript-eslint/ban-ts-comment": [
@@ -101,6 +102,11 @@ export default tseslint.config(
       "@typescript-eslint/no-base-to-string": "error",
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         {
@@ -130,6 +136,26 @@ export default tseslint.config(
           message: "Angle-bracket type assertions are forbidden in scoped AGENTS-enforced files.",
         },
         { selector: "ChainExpression", message: "Optional chaining is forbidden in scoped AGENTS-enforced files." },
+        {
+          selector: 'TemplateLiteral CallExpression[callee.name="String"]',
+          message: "Don't use String() in template literals. Fix the upstream type instead.",
+        },
+        {
+          selector: 'TemplateLiteral LogicalExpression[operator="??"][right.value=0]',
+          message: "Don't use ?? 0 in template literals. Fix the upstream type instead.",
+        },
+        {
+          selector: 'TemplateLiteral LogicalExpression[operator="||"][right.value=0]',
+          message: "Don't use || 0 in template literals. Fix the upstream type instead.",
+        },
+        {
+          selector: 'TemplateLiteral LogicalExpression[operator="??"][right.value=""]',
+          message: 'Don\'t use ?? "" in template literals. Fix the upstream type instead.',
+        },
+        {
+          selector: 'TemplateLiteral LogicalExpression[operator="||"][right.value=""]',
+          message: 'Don\'t use || "" in template literals. Fix the upstream type instead.',
+        },
         {
           selector: "LogicalExpression[operator='??']",
           message: "Nullish coalescing is forbidden in scoped AGENTS-enforced files.",
