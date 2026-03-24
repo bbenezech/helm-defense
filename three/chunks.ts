@@ -9,3 +9,9 @@ export type PackedTerrainStack = {
   slices: 8;
   origin: Point2;
 };
+
+export type SurfaceCellGrid = {
+  data: Uint32Array<ArrayBuffer>;
+  width: number;
+  height: number;
+};

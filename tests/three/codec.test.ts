@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseTerrainMap, parseTerrainTileset, type TerrainMap, type TerrainMapLayer } from "../../three/assets.ts";
 import {
+  createSurfaceCellGrid,
   createPackedTerrainCodec,
   decodeBaseHeightLevel,
   decodeBiomeIndex,
@@ -85,6 +86,26 @@ describe("packed terrain codec", () => {
     expect(decodeShapeReference(word)).toBe(19);
     expect(decodeBiomeIndex(word)).toBe(7);
     expect(decodeBaseHeightLevel(word)).toBe(321);
+  });
+
+  it("builds a top-surface world-cell grid from the highest non-empty authored level", () => {
+    const map = parseTerrainMap(sampleMap);
+    const surfaceCells = createSurfaceCellGrid(map, 0);
+    const centerWord = surfaceCells.data[4];
+    const topLeftWord = surfaceCells.data[0];
+    const emptyWord = createSurfaceCellGrid(createTestMap([], 0, 0), 0).data[0];
+
+    if (centerWord === undefined || topLeftWord === undefined || emptyWord === undefined) {
+      throw new Error("Expected the surface cell grid test texels to exist.");
+    }
+
+    expect(surfaceCells.width).toBe(map.width);
+    expect(surfaceCells.height).toBe(map.height);
+    expect(decodeShapeReference(centerWord)).toBe(2);
+    expect(decodeBaseHeightLevel(centerWord)).toBe(1);
+    expect(decodeShapeReference(topLeftWord)).toBe(1);
+    expect(decodeBaseHeightLevel(topLeftWord)).toBe(0);
+    expect(emptyWord).toBe(0);
   });
 
   it("preserves screen placement when folding levels above 8, 16, and 24", () => {

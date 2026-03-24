@@ -1,5 +1,8 @@
 import { TERRAIN_TILE_INDEX, TILE_ELEVATION_RATIO } from "../src/game/lib/terrain.ts";
 import { barycentricWeights, type Vector3 } from "../src/game/lib/vector.ts";
+import { decodeBaseHeightLevel, decodeShapeReference } from "./codec.ts";
+import type { SurfaceCellGrid } from "./chunks.ts";
+import type { Point2 } from "./projection.ts";
 import type { TerrainTileset, TerrainTilesetTile } from "./assets.ts";
 
 type SurfaceShape = {
@@ -27,6 +30,19 @@ export type SurfaceSample = {
   worldNormal: Vector3;
 };
 
+export type SurfaceWinner = {
+  shapeReference: number;
+  baseHeightLevel: number;
+  mapX: number;
+  mapY: number;
+};
+
+export type SurfaceLightingNormalResult =
+  | { kind: "exact"; worldNormal: Vector3 }
+  | { kind: "smoothed"; worldNormal: Vector3 };
+
+type SurfaceHeightSample = { kind: "missing" } | { kind: "sample"; worldHeight: number };
+
 type SurfaceVertex = {
   x: number;
   y: number;
@@ -36,6 +52,7 @@ type SurfaceVertex = {
 const COS_45 = Math.SQRT1_2;
 const SIN_45 = Math.SQRT1_2;
 const EMPTY_NORMAL: Vector3 = [0, 0, 1];
+export const SURFACE_NORMAL_FILTER_RADIUS_TILES = 1 / 16;
 const EMPTY_SHAPE: SurfaceShape = {
   north: 0,
   east: 0,
@@ -68,7 +85,7 @@ function getTileNumberProperty(tile: TerrainTilesetTile, name: string): number {
   throw new Error(`Missing numeric tileset tile property "${name}" for tile ${tile.id}.`);
 }
 
-function rotateTerrainNormalToWorld(normal: Vector3): Vector3 {
+export function rotateTerrainNormalToWorld(normal: Vector3): Vector3 {
   // Match the legacy packed-surface shader exactly.
   // GLSL mat3 constructors are column-major, so the historical rotation45 matrix
   // applied a -45 degree Z rotation when converting terrain-space normals to world-space.
@@ -77,6 +94,16 @@ function rotateTerrainNormalToWorld(normal: Vector3): Vector3 {
     -SIN_45 * normal[0] + COS_45 * normal[1],
     normal[2],
   ];
+}
+
+function normalizeVector3(vector: Vector3): Vector3 {
+  const length = Math.hypot(vector[0], vector[1], vector[2]);
+
+  if (length === 0) {
+    throw new Error("Surface lighting normal must not be degenerate.");
+  }
+
+  return [vector[0] / length, vector[1] / length, vector[2] / length];
 }
 
 function findSurfaceShape(tile: TerrainTilesetTile): SurfaceShape {
@@ -205,6 +232,130 @@ export function evaluateSurfaceSample(
     worldHeight: getWorldHeightFromLevel(localHeightLevel),
     terrainNormal,
     worldNormal,
+  };
+}
+
+function getSurfaceCellWord(surfaceCells: SurfaceCellGrid, mapX: number, mapY: number): number {
+  if (mapX < 0 || mapY < 0 || mapX >= surfaceCells.width || mapY >= surfaceCells.height) {
+    return 0;
+  }
+
+  const word = surfaceCells.data[mapY * surfaceCells.width + mapX];
+  return word === undefined ? 0 : word;
+}
+
+function sampleSurfaceCellWorldHeight(
+  lookup: SurfaceShapeLookup,
+  surfaceCells: SurfaceCellGrid,
+  tileCoord: Point2,
+): SurfaceHeightSample {
+  const mapX = Math.floor(tileCoord.x);
+  const mapY = Math.floor(tileCoord.y);
+  const word = getSurfaceCellWord(surfaceCells, mapX, mapY);
+  const shapeReference = decodeShapeReference(word);
+
+  if (shapeReference === 0) {
+    return { kind: "missing" };
+  }
+
+  return {
+    kind: "sample",
+    worldHeight: evaluateSurfaceSample(
+      lookup,
+      shapeReference,
+      decodeBaseHeightLevel(word),
+      tileCoord.x - mapX,
+      tileCoord.y - mapY,
+    ).worldHeight,
+  };
+}
+
+export function deriveAdaptiveHeightGradient(
+  centerHeight: number,
+  negativeHeight: number | null,
+  positiveHeight: number | null,
+  radiusTiles: number,
+): number | null {
+  if (radiusTiles <= 0) {
+    throw new Error(`Surface normal filter radius must be greater than zero, received ${radiusTiles}.`);
+  }
+
+  if (negativeHeight !== null && positiveHeight !== null) {
+    return (positiveHeight - negativeHeight) / (2 * radiusTiles);
+  }
+  if (positiveHeight !== null) {
+    return (positiveHeight - centerHeight) / radiusTiles;
+  }
+  if (negativeHeight !== null) {
+    return (centerHeight - negativeHeight) / radiusTiles;
+  }
+
+  return null;
+}
+
+export function deriveLightingNormalFromHeightGradients(dHeightDx: number, dHeightDy: number): Vector3 {
+  return rotateTerrainNormalToWorld(normalizeVector3([-dHeightDx, -dHeightDy, 1]));
+}
+
+export function evaluateSurfaceLightingNormalFromCells(
+  lookup: SurfaceShapeLookup,
+  surfaceCells: SurfaceCellGrid,
+  winner: SurfaceWinner,
+  tileCoord: Point2,
+  radiusTiles: number,
+): SurfaceLightingNormalResult {
+  const exactSample = evaluateSurfaceSample(
+    lookup,
+    winner.shapeReference,
+    winner.baseHeightLevel,
+    tileCoord.x - winner.mapX,
+    tileCoord.y - winner.mapY,
+  );
+  const topSurfaceWord = getSurfaceCellWord(surfaceCells, winner.mapX, winner.mapY);
+
+  if (decodeShapeReference(topSurfaceWord) !== winner.shapeReference) {
+    return { kind: "exact", worldNormal: exactSample.worldNormal };
+  }
+  if (decodeBaseHeightLevel(topSurfaceWord) !== winner.baseHeightLevel) {
+    return { kind: "exact", worldNormal: exactSample.worldNormal };
+  }
+
+  const negativeXSample = sampleSurfaceCellWorldHeight(lookup, surfaceCells, {
+    x: tileCoord.x - radiusTiles,
+    y: tileCoord.y,
+  });
+  const positiveXSample = sampleSurfaceCellWorldHeight(lookup, surfaceCells, {
+    x: tileCoord.x + radiusTiles,
+    y: tileCoord.y,
+  });
+  const negativeYSample = sampleSurfaceCellWorldHeight(lookup, surfaceCells, {
+    x: tileCoord.x,
+    y: tileCoord.y - radiusTiles,
+  });
+  const positiveYSample = sampleSurfaceCellWorldHeight(lookup, surfaceCells, {
+    x: tileCoord.x,
+    y: tileCoord.y + radiusTiles,
+  });
+  const dHeightDx = deriveAdaptiveHeightGradient(
+    exactSample.worldHeight,
+    negativeXSample.kind === "sample" ? negativeXSample.worldHeight : null,
+    positiveXSample.kind === "sample" ? positiveXSample.worldHeight : null,
+    radiusTiles,
+  );
+  const dHeightDy = deriveAdaptiveHeightGradient(
+    exactSample.worldHeight,
+    negativeYSample.kind === "sample" ? negativeYSample.worldHeight : null,
+    positiveYSample.kind === "sample" ? positiveYSample.worldHeight : null,
+    radiusTiles,
+  );
+
+  if (dHeightDx === null || dHeightDy === null) {
+    return { kind: "exact", worldNormal: exactSample.worldNormal };
+  }
+
+  return {
+    kind: "smoothed",
+    worldNormal: deriveLightingNormalFromHeightGradients(dHeightDx, dHeightDy),
   };
 }
 

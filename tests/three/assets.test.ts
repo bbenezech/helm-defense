@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   encodePackedTerrainTextureData,
+  encodeSurfaceCellTextureData,
   getAtlasRegion,
   loadTerrainAssetBundle,
   parseBiomeManifest,
   parseTerrainMap,
   parseTerrainTileset,
 } from "../../three/assets.ts";
+import { decodeBaseHeightLevel, decodeShapeReference } from "../../three/codec.ts";
 import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 const originalFetch = globalThis.fetch;
@@ -74,6 +76,16 @@ describe("terrain assets", () => {
       height: 1,
       slices: 8,
       origin: { x: 0, y: 0 },
+    });
+
+    expect([...data.slice(0, 8)]).toEqual([0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a]);
+  });
+
+  it("packs world-cell surface words into RGBA bytes for WebGPU sampling", () => {
+    const data = encodeSurfaceCellTextureData({
+      data: new Uint32Array([0x12_34_56_78, 0x9a_bc_de_f0]),
+      width: 2,
+      height: 1,
     });
 
     expect([...data.slice(0, 8)]).toEqual([0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a]);
@@ -178,6 +190,14 @@ describe("terrain assets", () => {
     expect(bundle.checkerAtlas.height).toBe(2);
     expect(bundle.checkerAtlas.depth).toBe(1);
     expect([...bundle.checkerAtlas.data]).toEqual([...createSolidImageData(2, 2, 220, 220, 220, 255)]);
+    expect(bundle.surfaceCells.grid.width).toBe(sampleMap.width);
+    expect(bundle.surfaceCells.grid.height).toBe(sampleMap.height);
+    expect(bundle.surfaceCells.texture.image.width).toBe(sampleMap.width);
+    expect(bundle.surfaceCells.texture.image.height).toBe(sampleMap.height);
+    const centerWord = bundle.surfaceCells.grid.data[4];
+    if (centerWord === undefined) throw new Error("Expected the sample surface grid to contain the center texel.");
+    expect(decodeShapeReference(centerWord)).toBe(2);
+    expect(decodeBaseHeightLevel(centerWord)).toBe(1);
     expect(fetchCalls).not.toContain("/Grass_23-512x512/random.tileableHeightmap.json");
   });
 });

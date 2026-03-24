@@ -18,7 +18,12 @@ import {
   type CameraState,
   type Viewport,
 } from "./projection.ts";
-import { createSurfaceShaderTables, getSurfaceHeightImpactOnScreenY, getWorldHeightFromLevel } from "./surface.ts";
+import {
+  createSurfaceShaderTables,
+  getSurfaceHeightImpactOnScreenY,
+  getWorldHeightFromLevel,
+  SURFACE_NORMAL_FILTER_RADIUS_TILES,
+} from "./surface.ts";
 
 export type ThreeLightingSettings = { sunAzimuthDeg: number; sunElevationDeg: number; ambient: number };
 
@@ -220,6 +225,13 @@ class TerrainRuntime implements ThreeTerrainApp {
     return surfaceTexture;
   }
 
+  private createScreenNode() {
+    return vec2(
+      this.cameraWorldUniform.x.add(viewportUV.x.mul(this.cameraViewSizeUniform.x)),
+      this.cameraWorldUniform.y.add(viewportUV.y.mul(this.cameraViewSizeUniform.y)),
+    );
+  }
+
   private createResolveMaterial(): THREE.MeshBasicNodeMaterial {
     const material = new THREE.MeshBasicNodeMaterial({ depthWrite: false, depthTest: false });
     // Pass 1 writes raw metadata; blending would treat world height as alpha and corrupt normals.
@@ -239,6 +251,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     const atlasTileHeight = this.bundle.tileset.tileheight;
     const surfaceSampleOffsetY = getSurfaceSampleOffsetY(this.bundle.map, this.bundle.tileset.tileheight);
     const heightImpactOnScreenY = getSurfaceHeightImpactOnScreenY(this.bundle.map.tileheight);
+    const surfaceNormalFilterRadiusTiles = SURFACE_NORMAL_FILTER_RADIUS_TILES;
     const maxWorldHeight = getWorldHeightFromLevel(getMaxBaseHeightLevel(this.bundle.map) + 2);
     const surfaceShaderTables = createSurfaceShaderTables(this.bundle.tileset);
     const winnerMapStride = Math.max(this.bundle.map.width, this.bundle.map.height) + 1;
@@ -402,9 +415,19 @@ class TerrainRuntime implements ThreeTerrainApp {
         return weightA * vertexA.z + weightB * vertexB.z + weightC * vertexC.z;
       }
 
-      fn evaluateAnalyticSurfaceMeta(shapeRef: u32, baseHeightLevel: u32, localTile: vec2<f32>) -> vec4<f32> {
+      fn rotateTerrainNormalToWorld(terrainNormal: vec3<f32>) -> vec3<f32> {
+        return normalize(
+          vec3<f32>(
+            0.70710678 * terrainNormal.x + 0.70710678 * terrainNormal.y,
+            -0.70710678 * terrainNormal.x + 0.70710678 * terrainNormal.y,
+            terrainNormal.z,
+          ),
+        );
+      }
+
+      fn evaluateAnalyticSurfaceHeight(shapeRef: u32, baseHeightLevel: u32, localTile: vec2<f32>) -> f32 {
         if (shapeRef == 0u) {
-          return vec4<f32>(0.0, 0.0, 1.0, -1.0);
+          return -1.0;
         }
 
         let north = SURFACE_NORTH[shapeRef];
@@ -414,7 +437,6 @@ class TerrainRuntime implements ThreeTerrainApp {
         let center = SURFACE_CENTER[shapeRef];
 
         var localHeight = 0.0;
-        var worldNormal = vec3<f32>(0.0, 0.0, 1.0);
 
         if (localTile.y < 1.0 - localTile.x) {
           if (localTile.y < localTile.x) {
@@ -424,7 +446,6 @@ class TerrainRuntime implements ThreeTerrainApp {
               vec3<f32>(1.0, 0.0, east),
               vec3<f32>(0.5, 0.5, center),
             );
-            worldNormal = SURFACE_WORLD_NORMAL_NE[shapeRef];
           } else {
             localHeight = interpolateTriangleHeight(
               localTile,
@@ -432,7 +453,6 @@ class TerrainRuntime implements ThreeTerrainApp {
               vec3<f32>(0.0, 0.0, north),
               vec3<f32>(0.5, 0.5, center),
             );
-            worldNormal = SURFACE_WORLD_NORMAL_NW[shapeRef];
           }
         } else if (localTile.y < localTile.x) {
           localHeight = interpolateTriangleHeight(
@@ -441,7 +461,6 @@ class TerrainRuntime implements ThreeTerrainApp {
             vec3<f32>(1.0, 1.0, south),
             vec3<f32>(0.5, 0.5, center),
           );
-          worldNormal = SURFACE_WORLD_NORMAL_SE[shapeRef];
         } else {
           localHeight = interpolateTriangleHeight(
             localTile,
@@ -449,11 +468,119 @@ class TerrainRuntime implements ThreeTerrainApp {
             vec3<f32>(0.0, 1.0, west),
             vec3<f32>(0.5, 0.5, center),
           );
-          worldNormal = SURFACE_WORLD_NORMAL_SW[shapeRef];
         }
 
-        let worldHeight = (f32(baseHeightLevel) + localHeight) * SURFACE_WORLD_HEIGHT_SCALE;
-        return vec4<f32>(worldNormal, worldHeight);
+        return (f32(baseHeightLevel) + localHeight) * SURFACE_WORLD_HEIGHT_SCALE;
+      }
+
+      fn evaluateAnalyticSurfaceNormal(shapeRef: u32, localTile: vec2<f32>) -> vec3<f32> {
+        if (shapeRef == 0u) {
+          return vec3<f32>(0.0, 0.0, 1.0);
+        }
+
+        if (localTile.y < 1.0 - localTile.x) {
+          if (localTile.y < localTile.x) {
+            return SURFACE_WORLD_NORMAL_NE[shapeRef];
+          }
+
+          return SURFACE_WORLD_NORMAL_NW[shapeRef];
+        }
+
+        if (localTile.y < localTile.x) {
+          return SURFACE_WORLD_NORMAL_SE[shapeRef];
+        }
+
+        return SURFACE_WORLD_NORMAL_SW[shapeRef];
+      }
+
+      fn evaluateAnalyticSurfaceMeta(shapeRef: u32, baseHeightLevel: u32, localTile: vec2<f32>) -> vec4<f32> {
+        let worldHeight = evaluateAnalyticSurfaceHeight(shapeRef, baseHeightLevel, localTile);
+
+        if (worldHeight < 0.0) {
+          return vec4<f32>(0.0, 0.0, 1.0, -1.0);
+        }
+
+        return vec4<f32>(evaluateAnalyticSurfaceNormal(shapeRef, localTile), worldHeight);
+      }
+
+      fn loadSurfaceCellWord(surfaceCells: texture_2d<f32>, mapX: i32, mapY: i32) -> u32 {
+        if (mapX < 0 || mapY < 0 || mapX >= ${this.bundle.map.width} || mapY >= ${this.bundle.map.height}) {
+          return 0u;
+        }
+
+        return decodePackedTerrainWord(textureLoad(surfaceCells, vec2<i32>(mapX, mapY), 0));
+      }
+
+      fn sampleSurfaceCellHeight(surfaceCells: texture_2d<f32>, tileCoord: vec2<f32>) -> vec2<f32> {
+        let mapX = i32(floor(tileCoord.x));
+        let mapY = i32(floor(tileCoord.y));
+        let surfaceWord = loadSurfaceCellWord(surfaceCells, mapX, mapY);
+        let shapeRef = surfaceWord & ${SHAPE_REF_MASK}u;
+
+        if (shapeRef == 0u) {
+          return vec2<f32>(0.0, 0.0);
+        }
+
+        let localTile = tileCoord - vec2<f32>(f32(mapX), f32(mapY));
+        return vec2<f32>(
+          1.0,
+          evaluateAnalyticSurfaceHeight(shapeRef, surfaceWord >> ${BASE_HEIGHT_LEVEL_SHIFT}u, localTile),
+        );
+      }
+
+      fn deriveAdaptiveHeightGradient(centerHeight: f32, negativeSample: vec2<f32>, positiveSample: vec2<f32>) -> vec2<f32> {
+        let hasNegative = negativeSample.x > 0.5;
+        let hasPositive = positiveSample.x > 0.5;
+
+        if (hasNegative && hasPositive) {
+          return vec2<f32>(1.0, (positiveSample.y - negativeSample.y) / ${(2 * surfaceNormalFilterRadiusTiles).toFixed(8)});
+        }
+        if (hasPositive) {
+          return vec2<f32>(1.0, (positiveSample.y - centerHeight) / ${surfaceNormalFilterRadiusTiles.toFixed(8)});
+        }
+        if (hasNegative) {
+          return vec2<f32>(1.0, (centerHeight - negativeSample.y) / ${surfaceNormalFilterRadiusTiles.toFixed(8)});
+        }
+
+        return vec2<f32>(0.0, 0.0);
+      }
+
+      fn evaluateVisibleTerrainLightingNormal(
+        world: vec2<f32>,
+        winner: vec4<f32>,
+        exactSurfaceMeta: vec4<f32>,
+        surfaceCells: texture_2d<f32>,
+      ) -> vec3<f32> {
+        if (!hasVisibleTerrainWinner(winner)) {
+          return vec3<f32>(0.0, 0.0, 1.0);
+        }
+
+        let winnerShapeRef = unpackVisibleTerrainShapeRef(winner);
+        let winnerBaseHeightLevel = unpackVisibleTerrainBaseHeightLevel(winner);
+        let winnerMapX = unpackVisibleTerrainMapX(winner);
+        let winnerMapY = unpackVisibleTerrainMapY(winner);
+        let topSurfaceWord = loadSurfaceCellWord(surfaceCells, winnerMapX, winnerMapY);
+
+        if ((topSurfaceWord & ${SHAPE_REF_MASK}u) != winnerShapeRef) {
+          return exactSurfaceMeta.rgb;
+        }
+        if ((topSurfaceWord >> ${BASE_HEIGHT_LEVEL_SHIFT}u) != winnerBaseHeightLevel) {
+          return exactSurfaceMeta.rgb;
+        }
+
+        let tileCoord = worldToTileCoord(world);
+        let negativeXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x - ${surfaceNormalFilterRadiusTiles.toFixed(8)}, tileCoord.y));
+        let positiveXSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x + ${surfaceNormalFilterRadiusTiles.toFixed(8)}, tileCoord.y));
+        let negativeYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y - ${surfaceNormalFilterRadiusTiles.toFixed(8)}));
+        let positiveYSample = sampleSurfaceCellHeight(surfaceCells, vec2<f32>(tileCoord.x, tileCoord.y + ${surfaceNormalFilterRadiusTiles.toFixed(8)}));
+        let dHeightDx = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeXSample, positiveXSample);
+        let dHeightDy = deriveAdaptiveHeightGradient(exactSurfaceMeta.a, negativeYSample, positiveYSample);
+
+        if (dHeightDx.x < 0.5 || dHeightDy.x < 0.5) {
+          return exactSurfaceMeta.rgb;
+        }
+
+        return rotateTerrainNormalToWorld(normalize(vec3<f32>(-dHeightDx.y, -dHeightDy.y, 1.0)));
       }
 
       fn resolveVisibleTerrainWinner(
@@ -641,6 +768,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       fn resolveTerrainSurfaceMeta(
         screen: vec2<f32>,
         winner: vec4<f32>,
+        surfaceCells: texture_2d<f32>,
       ) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
@@ -648,13 +776,15 @@ class TerrainRuntime implements ThreeTerrainApp {
 
         let surfaceScreen = vec2<f32>(screen.x, screen.y + ${surfaceSampleOffsetY.toFixed(1)});
         let groundY = solveGroundScreenYForWinner(surfaceScreen, winner);
-        let surfaceMeta = evaluateVisibleTerrainSurfaceMeta(vec2<f32>(surfaceScreen.x, groundY), winner);
+        let resolvedPoint = vec2<f32>(surfaceScreen.x, groundY);
+        let surfaceMeta = evaluateVisibleTerrainSurfaceMeta(resolvedPoint, winner);
 
         if (surfaceMeta.a < 0.0) {
           return vec4<f32>(0.0, 0.0, 1.0, 0.0);
         }
 
-        return surfaceMeta;
+        let lightingNormal = evaluateVisibleTerrainLightingNormal(resolvedPoint, winner, surfaceMeta, surfaceCells);
+        return vec4<f32>(lightingNormal, surfaceMeta.a);
       }
     `, [resolveHelpers]);
 
@@ -668,10 +798,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       }
     `, [resolveHelpers]);
 
-    const screen = vec2(
-      this.cameraWorldUniform.x.add(viewportUV.x.mul(this.cameraViewSizeUniform.x)),
-      this.cameraWorldUniform.y.add(viewportUV.y.mul(this.cameraViewSizeUniform.y)),
-    );
+    const screen = this.createScreenNode();
     const visibleWinner = Var(resolveVisibleTerrainWinnerNode({
       screen,
       packedMap: textureLoad(this.bundle.packedTerrain.texture),
@@ -686,6 +813,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     const resolvedSurfaceMeta = resolveTerrainSurfaceMeta({
       screen,
       winner: visibleWinner,
+      surfaceCells: textureLoad(this.bundle.surfaceCells.texture),
     });
     material.outputNode = resolvedAlbedo;
     material.mrtNode = mrt({
@@ -702,8 +830,10 @@ class TerrainRuntime implements ThreeTerrainApp {
     material.transparent = false;
     material.blending = THREE.NoBlending;
     const albedo = texture(this.resolveTarget.texture).toVar("terrainAlbedo");
-    const surfaceMeta = texture(this.getResolveSurfaceTexture()).toVar("terrainSurfaceMeta");
-    const terrainNormal = surfaceMeta.rgb.normalize();
+    const terrainNormal = texture(this.getResolveSurfaceTexture(), viewportUV)
+      .rgb
+      .normalize()
+      .toVar("terrainLightingNormal");
     const diffuse = terrainNormal.dot(this.sunDirectionUniform).max(float(0));
     const shade = this.ambientUniform.add(float(1).sub(this.ambientUniform).mul(diffuse));
     material.outputNode = vec4(albedo.rgb.mul(shade), albedo.a);
@@ -720,6 +850,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     configureTexture(this.bundle.colorAtlas.texture);
     configureTexture(this.bundle.checkerAtlas.texture);
     configureTexture(this.bundle.packedTerrain.texture);
+    configureTexture(this.bundle.surfaceCells.texture);
     configureTexture(this.resolveTarget.texture);
     configureTexture(this.getResolveSurfaceTexture());
 
@@ -731,6 +862,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       this.bundle.colorAtlas.texture,
       this.bundle.checkerAtlas.texture,
       this.bundle.packedTerrain.texture,
+      this.bundle.surfaceCells.texture,
     );
 
     this.setupSelection();

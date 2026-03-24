@@ -1,5 +1,5 @@
 import type { TerrainMap, TerrainTileset } from "./assets.ts";
-import type { PackedTerrainStack, PackedTerrainWord } from "./chunks.ts";
+import type { PackedTerrainStack, PackedTerrainWord, SurfaceCellGrid } from "./chunks.ts";
 import type { Point2 } from "./projection.ts";
 
 export type PainterCandidate = {
@@ -258,6 +258,36 @@ export function createPackedTerrainStack(
     height,
     slices: 8,
     origin,
+  };
+}
+
+export function createSurfaceCellGrid(map: TerrainMap, biomeIndex = 0): SurfaceCellGrid {
+  if (map.renderorder !== "right-down") {
+    throw new Error(`Surface cell grid requires Tiled renderorder "right-down", received "${map.renderorder}".`);
+  }
+
+  const data = new Uint32Array(map.width * map.height);
+  const tileset = map.tilesets[0];
+  const firstgid = tileset === undefined ? 1 : tileset.firstgid;
+
+  for (const layer of getOrderedLayers(map)) {
+    const level = getLevel(layer);
+
+    for (let tileY = 0; tileY < layer.height; tileY++) {
+      for (let tileX = 0; tileX < layer.width; tileX++) {
+        const gid = layer.data[tileY * layer.width + tileX];
+        if (gid === 0 || gid === undefined) continue;
+        const tileId = gid - firstgid;
+        const shapeReference = tileId + 1;
+        data[tileY * map.width + tileX] = encodePackedTerrainWord(shapeReference, biomeIndex, level);
+      }
+    }
+  }
+
+  return {
+    data,
+    width: map.width,
+    height: map.height,
   };
 }
 

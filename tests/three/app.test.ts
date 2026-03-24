@@ -1,6 +1,10 @@
 import * as THREE from "three/src/Three.WebGPU.js";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THREE_LIGHTING_SETTINGS, getSurfaceSampleOffsetY, getSunDirectionVector } from "../../three/app.ts";
+import {
+  DEFAULT_THREE_LIGHTING_SETTINGS,
+  getSurfaceSampleOffsetY,
+  getSunDirectionVector,
+} from "../../three/app.ts";
 import { sampleMap, sampleTileset } from "./fixtures.ts";
 
 describe("three terrain math", () => {

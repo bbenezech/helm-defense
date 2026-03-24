@@ -11,8 +11,8 @@ declare global {
 }
 
 import * as THREE from "three/src/Three.WebGPU.js";
-import { type PackedTerrainStack } from "./chunks.ts";
-import { createPackedTerrainCodec, type PackedTerrainCodec } from "./codec.ts";
+import { type PackedTerrainStack, type SurfaceCellGrid } from "./chunks.ts";
+import { createPackedTerrainCodec, createSurfaceCellGrid, type PackedTerrainCodec } from "./codec.ts";
 import { getMapBounds, type Point2, type Rect } from "./projection.ts";
 
 export type TerrainTilesetProperty =
@@ -89,6 +89,7 @@ export type ColorAtlasArray = TerrainAtlasArray;
 export type CheckerAtlasArray = TerrainAtlasArray;
 
 export type PackedTerrainTexture = { texture: THREE.DataArrayTexture; stack: PackedTerrainStack };
+export type SurfaceCellTexture = { texture: THREE.DataTexture; grid: SurfaceCellGrid };
 
 export type TerrainAssetBundle = {
   map: TerrainMap;
@@ -99,6 +100,7 @@ export type TerrainAssetBundle = {
   colorAtlas: ColorAtlasArray;
   checkerAtlas: CheckerAtlasArray;
   packedTerrain: PackedTerrainTexture;
+  surfaceCells: SurfaceCellTexture;
   codec: PackedTerrainCodec;
 };
 
@@ -401,11 +403,11 @@ function assertAtlasArrayLayoutsMatch(colorAtlas: ColorAtlasArray, checkerAtlas:
   }
 }
 
-export function encodePackedTerrainTextureData(stack: PackedTerrainStack): Uint8Array<ArrayBuffer> {
-  const data = new Uint8Array(stack.data.length * 4);
+function encodeTerrainWordTextureData(words: Uint32Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+  const data = new Uint8Array(words.length * 4);
 
-  for (let index = 0; index < stack.data.length; index++) {
-    const word = stack.data[index];
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index];
     if (word === undefined) throw new Error(`Missing packed terrain word at index ${index}.`);
     const dataOffset = index * 4;
     data[dataOffset] = word & 0xff;
@@ -415,6 +417,14 @@ export function encodePackedTerrainTextureData(stack: PackedTerrainStack): Uint8
   }
 
   return data;
+}
+
+export function encodePackedTerrainTextureData(stack: PackedTerrainStack): Uint8Array<ArrayBuffer> {
+  return encodeTerrainWordTextureData(stack.data);
+}
+
+export function encodeSurfaceCellTextureData(grid: SurfaceCellGrid): Uint8Array<ArrayBuffer> {
+  return encodeTerrainWordTextureData(grid.data);
 }
 
 function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTexture {
@@ -430,6 +440,21 @@ function createPackedTerrainTexture(stack: PackedTerrainStack): PackedTerrainTex
 
   return { texture, stack };
 }
+
+function createSurfaceCellTexture(grid: SurfaceCellGrid): SurfaceCellTexture {
+  const textureData = encodeSurfaceCellTextureData(grid);
+  const texture = new THREE.DataTexture(textureData, grid.width, grid.height);
+  texture.format = THREE.RGBAFormat;
+  texture.type = THREE.UnsignedByteType;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+
+  return { texture, grid };
+}
+
 export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME): Promise<TerrainAssetBundle> {
   const tilesetUrl = getAssetUrl(`${tilesetName}/tileset.json`);
   const mapUrl = getAssetUrl(`${tilesetName}/${DEFAULT_MAP_NAME}`);
@@ -450,6 +475,7 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
   assertAtlasArrayLayoutsMatch(colorAtlas, checkerAtlas);
   const codec = createPackedTerrainCodec(map, tileset, elevationYOffsetPx, 0);
   const packedTerrain = createPackedTerrainTexture(codec.stack);
+  const surfaceCells = createSurfaceCellTexture(createSurfaceCellGrid(map, 0));
 
   return {
     map,
@@ -460,6 +486,7 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
     colorAtlas,
     checkerAtlas,
     packedTerrain,
+    surfaceCells,
     codec,
   };
 }
