@@ -44,6 +44,7 @@ export type ThreeTerrainSettings = {
 };
 
 export type ThreeDebugView = "beauty" | "checker";
+export type ThreeTerrainOverlay = "none" | "tile-boundaries";
 
 export type ThreeSeaMode = "off" | "sea";
 
@@ -114,6 +115,7 @@ export type ThreeTerrainApp = {
   setTerrain: (settings: ThreeTerrainSettings) => void;
   setSea: (settings: ThreeSeaSettings) => void;
   setDebugView: (view: ThreeDebugView) => void;
+  setTerrainOverlay: (overlay: ThreeTerrainOverlay) => void;
   setSeaDebugView: (view: ThreeSeaDebugView) => void;
 };
 
@@ -125,10 +127,13 @@ const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
   (Math.atan2(DEFAULT_SUN_DIRECTION.z, Math.hypot(DEFAULT_SUN_DIRECTION.x, DEFAULT_SUN_DIRECTION.y)) * 180) / Math.PI;
+const TERRAIN_BOUNDARY_OVERLAY_COLOR = new THREE.Color(0xff_ff_55).convertSRGBToLinear();
+const TERRAIN_BOUNDARY_OVERLAY_MIX = 0.9;
 export const MIN_THREE_ALIASING_RADIUS_TILES = 0;
 export const MAX_THREE_ALIASING_RADIUS_TILES = 0.25;
 
 export const DEFAULT_THREE_DEBUG_VIEW: ThreeDebugView = "beauty";
+export const DEFAULT_THREE_TERRAIN_OVERLAY: ThreeTerrainOverlay = "none";
 export const DEFAULT_THREE_LIGHTING_SETTINGS: ThreeLightingSettings = {
   sunAzimuthDeg: DEFAULT_SUN_AZIMUTH_DEG,
   sunElevationDeg: DEFAULT_SUN_ELEVATION_DEG,
@@ -177,6 +182,20 @@ function getThreeDebugViewUniformValue(view: ThreeDebugView): number {
     }
     default: {
       throw new Error(view satisfies never);
+    }
+  }
+}
+
+export function getThreeTerrainOverlayUniformValue(overlay: ThreeTerrainOverlay): number {
+  switch (overlay) {
+    case "none": {
+      return 0;
+    }
+    case "tile-boundaries": {
+      return 1;
+    }
+    default: {
+      throw new Error(overlay satisfies never);
     }
   }
 }
@@ -291,6 +310,8 @@ class UnsupportedWebGPUApp implements ThreeTerrainApp {
 
   setDebugView(_view: ThreeDebugView) {}
 
+  setTerrainOverlay(_overlay: ThreeTerrainOverlay) {}
+
   setSeaDebugView(_view: ThreeSeaDebugView) {}
 }
 
@@ -323,6 +344,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     ),
   );
   private readonly debugViewUniform = uniform(getThreeDebugViewUniformValue(DEFAULT_THREE_DEBUG_VIEW));
+  private readonly terrainOverlayUniform = uniform(getThreeTerrainOverlayUniformValue(DEFAULT_THREE_TERRAIN_OVERLAY));
   private readonly seaModeUniform = uniform(1);
   private readonly seaDebugViewUniform = uniform(getThreeSeaDebugViewUniformValue(DEFAULT_THREE_SEA_DEBUG_VIEW));
   private readonly seaTimeUniform = uniform(0);
@@ -1116,17 +1138,65 @@ class TerrainRuntime implements ThreeTerrainApp {
         let groundY = solveGroundScreenYForWinner(surfaceScreen, winner);
         return vec2<f32>(surfaceScreen.x, groundY);
       }
+
+      fn isSameVisibleTerrainTile(left: vec4<f32>, right: vec4<f32>) -> bool {
+        if (!hasVisibleTerrainWinner(left) || !hasVisibleTerrainWinner(right)) {
+          return false;
+        }
+
+        return
+          unpackVisibleTerrainBaseHeightLevel(left) == unpackVisibleTerrainBaseHeightLevel(right) &&
+          unpackVisibleTerrainMapX(left) == unpackVisibleTerrainMapX(right) &&
+          unpackVisibleTerrainMapY(left) == unpackVisibleTerrainMapY(right);
+      }
+
+      fn resolveVisibleTerrainBoundaryFactor(
+        screen: vec2<f32>,
+        winner: vec4<f32>,
+        packedMap: texture_2d_array<f32>,
+        ownershipAtlas: texture_2d_array<f32>,
+      ) -> f32 {
+        if (!hasVisibleTerrainWinner(winner)) {
+          return 0.0;
+        }
+
+        let leftWinner = resolveVisibleTerrainWinner(screen + vec2<f32>(-1.0, 0.0), packedMap, ownershipAtlas);
+        if (!isSameVisibleTerrainTile(winner, leftWinner)) {
+          return 1.0;
+        }
+
+        let rightWinner = resolveVisibleTerrainWinner(screen + vec2<f32>(1.0, 0.0), packedMap, ownershipAtlas);
+        if (!isSameVisibleTerrainTile(winner, rightWinner)) {
+          return 1.0;
+        }
+
+        let upWinner = resolveVisibleTerrainWinner(screen + vec2<f32>(0.0, -1.0), packedMap, ownershipAtlas);
+        if (!isSameVisibleTerrainTile(winner, upWinner)) {
+          return 1.0;
+        }
+
+        let downWinner = resolveVisibleTerrainWinner(screen + vec2<f32>(0.0, 1.0), packedMap, ownershipAtlas);
+        if (!isSameVisibleTerrainTile(winner, downWinner)) {
+          return 1.0;
+        }
+
+        return 0.0;
+      }
     `);
 
     const resolveTerrainAlbedo = wgslFn(
       /* wgsl */ `
       fn resolveTerrainAlbedo(
+        screen: vec2<f32>,
         winner: vec4<f32>,
         groundPoint: vec2<f32>,
         atlas: texture_2d_array<f32>,
         checkerAtlas: texture_2d_array<f32>,
         biomeCells: texture_2d<f32>,
+        packedMap: texture_2d_array<f32>,
+        ownershipAtlas: texture_2d_array<f32>,
         debugView: f32,
+        terrainOverlay: f32,
         terrainBlend: vec4<f32>,
       ) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
@@ -1156,6 +1226,19 @@ class TerrainRuntime implements ThreeTerrainApp {
           let biomeIndex = i32(floor(biomeBlend.biomeIndices.w + 0.5));
           let colorTexel = sampleVisibleTerrainAtlasForDebugView(winner, atlas, checkerAtlas, debugView, biomeIndex);
           color = color + decodeTerrainColor(colorTexel) * biomeBlend.weights.w;
+        }
+
+        if (terrainOverlay >= 0.5) {
+          let boundaryFactor = resolveVisibleTerrainBoundaryFactor(screen, winner, packedMap, ownershipAtlas);
+          color = mix(
+            color,
+            vec3<f32>(
+              ${TERRAIN_BOUNDARY_OVERLAY_COLOR.r.toFixed(8)},
+              ${TERRAIN_BOUNDARY_OVERLAY_COLOR.g.toFixed(8)},
+              ${TERRAIN_BOUNDARY_OVERLAY_COLOR.b.toFixed(8)}
+            ),
+            boundaryFactor * ${TERRAIN_BOUNDARY_OVERLAY_MIX.toFixed(8)},
+          );
         }
 
         return vec4<f32>(color, beautyTexel.a);
@@ -1231,12 +1314,16 @@ class TerrainRuntime implements ThreeTerrainApp {
       "visibleTerrainGroundPoint",
     );
     const resolvedAlbedo = resolveTerrainAlbedo({
+      screen,
       winner: visibleWinner,
       groundPoint: resolvedGroundPoint,
       atlas: textureLoad(this.bundle.colorAtlas.texture),
       checkerAtlas: textureLoad(this.bundle.checkerAtlas.texture),
       biomeCells: textureLoad(this.bundle.biomeCells.texture),
+      packedMap: textureLoad(this.bundle.packedTerrain.texture),
+      ownershipAtlas: textureLoad(this.bundle.colorAtlas.texture),
       debugView: this.debugViewUniform,
+      terrainOverlay: this.terrainOverlayUniform,
       terrainBlend: this.terrainBlendUniform,
     });
     const resolvedSurfaceMeta = resolveTerrainSurfaceMeta({
@@ -1561,6 +1648,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.setTerrain(DEFAULT_THREE_TERRAIN_SETTINGS);
     this.setSea(DEFAULT_THREE_SEA_SETTINGS);
     this.setDebugView(DEFAULT_THREE_DEBUG_VIEW);
+    this.setTerrainOverlay(DEFAULT_THREE_TERRAIN_OVERLAY);
     this.setSeaDebugView(DEFAULT_THREE_SEA_DEBUG_VIEW);
     this.bindEvents();
     this.renderer.setAnimationLoop(this.render);
@@ -1893,6 +1981,10 @@ class TerrainRuntime implements ThreeTerrainApp {
 
   setDebugView(view: ThreeDebugView) {
     this.debugViewUniform.value = getThreeDebugViewUniformValue(view);
+  }
+
+  setTerrainOverlay(overlay: ThreeTerrainOverlay) {
+    this.terrainOverlayUniform.value = getThreeTerrainOverlayUniformValue(overlay);
   }
 
   setSeaDebugView(view: ThreeSeaDebugView) {

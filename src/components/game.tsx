@@ -6,6 +6,7 @@ import threeCompassStore from "../store/three-compass.ts";
 import threeSeaDebugViewStore from "../store/three-sea-debug-view.ts";
 import threeSeaStore from "../store/three-sea.ts";
 import threeTerrainStore from "../store/three-terrain.ts";
+import threeTerrainOverlayStore from "../store/three-terrain-overlay.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import { useStoreValue } from "./useStore.ts";
 
@@ -19,6 +20,7 @@ export const Game = () => {
   const threeSea = useStoreValue(threeSeaStore);
   const threeSeaDebugView = useStoreValue(threeSeaDebugViewStore);
   const threeTerrain = useStoreValue(threeTerrainStore);
+  const threeTerrainOverlay = useStoreValue(threeTerrainOverlayStore);
   const appReference = React.useRef<ThreeTerrainApp | undefined>(undefined);
 
   React.useLayoutEffect(() => {
@@ -57,6 +59,7 @@ export const Game = () => {
         app.setTerrain(threeTerrainStore.get());
         app.setSea(threeSeaStore.get());
         app.setDebugView(threeDebugViewStore.get());
+        app.setTerrainOverlay(threeTerrainOverlayStore.get());
         app.setSeaDebugView(threeSeaDebugViewStore.get());
         app.resize(host.clientWidth, host.clientHeight);
         appReference.current = app;
@@ -119,6 +122,11 @@ export const Game = () => {
     const runningApp = appReference.current;
     if (runningApp !== undefined) runningApp.setDebugView(threeDebugView);
   }, [threeDebugView]);
+
+  React.useEffect(() => {
+    const runningApp = appReference.current;
+    if (runningApp !== undefined) runningApp.setTerrainOverlay(threeTerrainOverlay);
+  }, [threeTerrainOverlay]);
 
   React.useEffect(() => {
     const runningApp = appReference.current;

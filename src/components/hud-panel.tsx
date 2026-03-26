@@ -25,6 +25,7 @@ import threeTerrainStore, {
   THREE_TERRAIN_OCTAVE_MIX_STEP,
   THREE_TERRAIN_OCTAVE_SCALE_STEP,
 } from "../store/three-terrain.ts";
+import threeTerrainOverlayStore from "../store/three-terrain-overlay.ts";
 import timeScaleStore from "../store/time-scale.ts";
 import threeCompassStore from "../store/three-compass.ts";
 import { CompassRose } from "./compass-rose.tsx";
@@ -176,6 +177,7 @@ export function HudPanel() {
   const threeSea = useStoreValue(threeSeaStore);
   const threeSeaDebugView = useStoreValue(threeSeaDebugViewStore);
   const threeTerrain = useStoreValue(threeTerrainStore);
+  const threeTerrainOverlay = useStoreValue(threeTerrainOverlayStore);
   const allSectionsCollapsed = areAllHudPanelSectionsCollapsed(hudPanelState.sections);
 
   return (
@@ -232,6 +234,19 @@ export function HudPanel() {
               <div className="hud-button-row">
                 <HudButton label="Beauty" active={threeDebugView === "beauty"} onClick={() => threeDebugViewStore.set("beauty")} />
                 <HudButton label="Checker" active={threeDebugView === "checker"} onClick={() => threeDebugViewStore.set("checker")} />
+              </div>
+            </div>
+            <div className="hud-control">
+              <span className="hud-control-label">
+                Terrain Overlay <strong>{threeTerrainOverlay === "none" ? "Off" : "Boundaries"}</strong>
+              </span>
+              <div className="hud-button-row">
+                <HudButton label="Off" active={threeTerrainOverlay === "none"} onClick={() => threeTerrainOverlayStore.set("none")} />
+                <HudButton
+                  label="Boundaries"
+                  active={threeTerrainOverlay === "tile-boundaries"}
+                  onClick={() => threeTerrainOverlayStore.set("tile-boundaries")}
+                />
               </div>
             </div>
             <div className="hud-control">

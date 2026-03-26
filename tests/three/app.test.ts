@@ -2,6 +2,8 @@ import * as THREE from "three/src/Three.WebGPU.js";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_THREE_LIGHTING_SETTINGS,
+  DEFAULT_THREE_TERRAIN_OVERLAY,
+  getThreeTerrainOverlayUniformValue,
   getSurfaceSampleOffsetY,
   getSunDirectionVector,
 } from "../../three/app.ts";
@@ -17,5 +19,10 @@ describe("three terrain math", () => {
 
   it("offsets global surface shading by the tileset frame overhang", () => {
     expect(getSurfaceSampleOffsetY(sampleMap, sampleTileset.tileheight)).toBe(32);
+  });
+
+  it("maps terrain overlay states to resolve-pass uniform values", () => {
+    expect(getThreeTerrainOverlayUniformValue(DEFAULT_THREE_TERRAIN_OVERLAY)).toBe(0);
+    expect(getThreeTerrainOverlayUniformValue("tile-boundaries")).toBe(1);
   });
 });
