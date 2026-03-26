@@ -137,7 +137,8 @@ build
 release
 .DS_Store
 assets/*
-!assets/compass.png
+!assets/*.png
+downloads/
 scripts/__pycache__/
 public/*/tilesets/
 tmp/

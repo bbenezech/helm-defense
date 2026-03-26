@@ -3,7 +3,8 @@ import { EXAMPLE_TILE_GID_LAYERS, STRESS_HEIGHTMAP_FIXTURES, type TileGidLayers 
 import { generateTilableHeightmap } from "../../src/game/lib/heightmap.ts";
 import { tileableHeightmapToTileData } from "../../src/game/lib/terrain.ts";
 import { terrainToLayers } from "../../src/game/lib/tilemap.ts";
-import { getTileset } from "../../src/game/lib/tileset.ts";
+import biomeJson from "../../three/biome.json" with { type: "json" };
+import { parseTerrainTileset } from "../../three/assets.ts";
 import type { BinaryFrame } from "./terrain-ownership.ts";
 
 export type CoverageTilesetProperty = {
@@ -105,18 +106,8 @@ export function getElevationYOffsetPx(tileset: CoverageTileset) {
   throw new Error(`Tileset "${tileset.name}" is missing elevationYOffsetPx`);
 }
 
-export function getCanonicalTileset(actualTileset: CoverageTileset) {
-  const elevationYOffsetPx = getElevationYOffsetPx(actualTileset);
-  return getTileset({
-    name: "coverage-proof",
-    imageFilename: actualTileset.image,
-    tilewidth: actualTileset.tilewidth,
-    tileheight: actualTileset.tileheight,
-    elevationYOffsetPx,
-    terrainTileNames: ORDERED_SLOPES,
-    tileMargin: actualTileset.spacing / 2,
-    tilesetMargin: actualTileset.margin - actualTileset.spacing / 2,
-  });
+export function getCanonicalTileset() {
+  return parseTerrainTileset(biomeJson);
 }
 
 export function assertSceneAndTilesetContracts(actualTileset: CoverageTileset, canonicalTileset: CoverageTileset) {
@@ -341,7 +332,6 @@ export function hasCoverageFailure(result: CoverageFixtureResult) {
 
 export function buildCoverageFixtures(canonicalTileset: CoverageTileset): CoverageFixture[] {
   const elevationYOffsetPx = getElevationYOffsetPx(canonicalTileset);
-  const terrainTileset = getCanonicalTileset(canonicalTileset);
   const fixtures: CoverageFixture[] = [
     {
       name: "example",
@@ -359,7 +349,7 @@ export function buildCoverageFixtures(canonicalTileset: CoverageTileset): Covera
     fixtures.push({
       name: stressFixture.name,
       layers: getCoverageLayersFromTileGidLayers(
-        terrainToLayers(tileableHeightmapToTileData(heightmap), terrainTileset),
+        terrainToLayers(tileableHeightmapToTileData(heightmap), biomeJson),
         elevationYOffsetPx,
       ),
     });

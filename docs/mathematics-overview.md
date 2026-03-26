@@ -163,7 +163,7 @@ The executable TypeScript files in `scripts/` are orchestration layers, not new 
 | Location | Role | Mathematical note |
 | ---------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts/heightmap.ts` | Runs the terrain/normalmap generation pipeline | Calls shared math in `src/game/lib/heightmap.ts` and `src/game/lib/terrain.ts`; no meaningful local trig |
-| `scripts/tileset.ts` | Rasterizes the terrain tileset bundle and assembles derived assets | Mostly pipeline geometry and image processing; no meaningful local trig, but it does encode project-specific proportions such as `elevationYOffsetPx` |
+| `scripts/biome.ts` | Builds one runtime biome atlas folder from one source PNG | Mostly pipeline geometry and image processing; no meaningful local trig, but it applies the shared `three/biome.json` proportions such as `elevationYOffsetPx` |
 | `scripts/lib/terrain-raster.ts` | Rasterizes beauty terrain frames directly from scene-spec UVs | Uses deterministic screen-space projection, nearest-neighbor texture sampling, UV rotation, clamp-to-edge addressing, and ownership flood fill |
 | `scripts/lib/terrain-ownership.ts` | Rasterizes exact native ownership masks and analytic checker frames from the shared scene/tile contract | Uses deterministic screen-space projection and half-open tile ownership to make the terrain atlas provably hole-free and overlap-free at native resolution |
 

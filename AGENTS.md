@@ -70,7 +70,7 @@ They apply to all codebase, including scripts, tests and configs.
 
 **Core Principle:** Types must reflect reality 1:1, ALWAYS, ON EACH LINE. If a type lies, the application crashes. We prefer crashing loudly over silent failures.
 
-- **The Forbidden Casts:** NEVER use `eslint-disable`, `@ts-ignore`, `any`, `as`, `!`, or type assertion functions (e.g., `function isUser(x): x is User`). ALL ARE UNSAFE AND ABSOLUTELY FORBIDDEN.
+- **The Forbidden Casts:** NEVER use `eslint-disable`, `@ts-ignore`, `any`, `as`, `!`, or type assertion functions (e.g., `function isUser(x): x is User`). ALL ARE UNSAFE AND ABSOLUTELY FORBIDDEN. `as const` is of course fine.
 - **Type Inference:** ALWAYS use type inference as much as possible; never export custom semi-authoritative shapes. If a type mismatch occurs, prove the type via control flow analysis or runtime validation.
 - **Strict Primitives:** NEVER use `string` instead of an `enum` of union of literals, and **no JSON.stringify** inside Typescript boundaries. Always pass precisely typed objects as far as possible.
 - **No Brittle Probing that turn into REFACTORING trap:** NEVER probe shapes with `instanceof`, `Reflect.XXX`, the `in` operator: `'type' in object && object.type === 'something'`) fails silently during refactoring/renaming FOR THE REST OF TIME if object shape's changes. Use discriminating unions instead.

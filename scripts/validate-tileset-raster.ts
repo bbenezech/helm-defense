@@ -6,12 +6,8 @@ import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { ImageData } from "../src/game/lib/heightmap.ts";
+import biomeJson from "../three/biome.json" with { type: "json" };
 import { imageToImageData, saveImageDataToImage } from "./lib/file.ts";
-import {
-  DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
-  DEFAULT_CHECKER_ATLAS_DARK_VALUE,
-  DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
-} from "./lib/terrain-ownership.ts";
 import { ACTIVE_TERRAIN_TEXTURE_ROTATION, ORDERED_SLOPES } from "./lib/terrain-scene-spec.ts";
 import { createTerrainAtlasImageData, rasterizeTerrainFrames } from "./lib/terrain-raster.ts";
 import { parseTerrainTileset, type TerrainTileset } from "../three/assets.ts";
@@ -40,9 +36,10 @@ type RasterValidationSummary = {
 };
 
 const __dirname = import.meta.dirname;
-const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/Grass_23-512x512");
+const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/biome/grass");
 const DEFAULT_REPORT_DIRECTORY = path.resolve(__dirname, "../tmp/tileset-raster-report");
-const REFERENCE_ATLAS_FILENAME = "tileset.checker.png";
+const SOURCE_TEXTURE_FILENAME = "source.png";
+const RASTER_ATLAS_FILENAME = "tileset.png";
 
 function createEmptyCounts(): RasterFrameCounts {
   return {
@@ -202,12 +199,12 @@ async function main() {
     .usage("Usage: bun run validate:tileset-raster [tileset-directory] [options]")
     .command(
       "$0 [tileset-directory]",
-      "Render a canonical checker through the CPU beauty rasterizer and compare it to tileset.checker.png",
+      "Rerender a biome source texture through the CPU beauty rasterizer and compare it to tileset.png",
       (builder) =>
         builder.positional("tileset-directory", {
           type: "string",
           default: DEFAULT_TILESET_DIRECTORY,
-          describe: "Directory containing tileset.json and tileset.checker.png",
+          describe: "Directory containing source.png and tileset.png",
         }),
     )
     .option("report-dir", {
@@ -222,25 +219,18 @@ async function main() {
 
   const tilesetDirectory = path.resolve(String(argv["tileset-directory"]));
   const reportDirectory = path.resolve(String(argv["report-dir"]));
-  const tilesetJsonPath = path.join(tilesetDirectory, "tileset.json");
-  const referenceAtlasPath = path.join(tilesetDirectory, REFERENCE_ATLAS_FILENAME);
-  if (!fs.existsSync(tilesetJsonPath)) throw new Error(`Missing tileset.json in ${tilesetDirectory}.`);
-  if (!fs.existsSync(referenceAtlasPath)) throw new Error(`Missing ${REFERENCE_ATLAS_FILENAME} in ${tilesetDirectory}.`);
+  const sourceTexturePath = path.join(tilesetDirectory, SOURCE_TEXTURE_FILENAME);
+  const referenceAtlasPath = path.join(tilesetDirectory, RASTER_ATLAS_FILENAME);
+  if (!fs.existsSync(sourceTexturePath)) throw new Error(`Missing ${SOURCE_TEXTURE_FILENAME} in ${tilesetDirectory}.`);
+  if (!fs.existsSync(referenceAtlasPath)) throw new Error(`Missing ${RASTER_ATLAS_FILENAME} in ${tilesetDirectory}.`);
 
   fs.rmSync(reportDirectory, { recursive: true, force: true });
   fs.mkdirSync(reportDirectory, { recursive: true });
 
-  const tilesetJson = JSON.parse(fs.readFileSync(tilesetJsonPath, "utf8"));
-  const tileset = parseTerrainTileset(tilesetJson);
+  const tileset = parseTerrainTileset(biomeJson);
   const referenceAtlas = await imageToImageData(referenceAtlasPath);
-  const checkerSourceTexture = createCheckerSourceTextureImageData(
-    tileset.tilewidth,
-    tileset.tilewidth,
-    DEFAULT_CHECKER_ATLAS_CELLS_PER_AXIS,
-    DEFAULT_CHECKER_ATLAS_LIGHT_VALUE,
-    DEFAULT_CHECKER_ATLAS_DARK_VALUE,
-  );
-  const rasterFrames = rasterizeTerrainFrames(checkerSourceTexture, undefined, ACTIVE_TERRAIN_TEXTURE_ROTATION);
+  const sourceTexture = await imageToImageData(sourceTexturePath);
+  const rasterFrames = rasterizeTerrainFrames(sourceTexture, undefined, ACTIVE_TERRAIN_TEXTURE_ROTATION);
   const rasterAtlas = createTerrainAtlasImageData(rasterFrames, tileset);
 
   const frameSummaries: RasterFrameSummary[] = [];

@@ -14,7 +14,9 @@ electron phaser game react top-down edge-scrolling full-screen
 brew install bun imagemagick
 bun install
 cp .env.example .env
-bun run tile ./assets/textures/compass.png
+bun biome ./assets/grass.png
+bun biome ./assets/mud.png
+bun biome ./assets/checkers.png
 ```
 
 ## Run server

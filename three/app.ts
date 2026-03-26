@@ -62,11 +62,7 @@ export type ThreeSeaWaveBandSettings = {
   directionDeg: number;
 };
 
-export type ThreeSeaRippleSettings = {
-  normalStrength: number;
-  scale: number;
-  speed: number;
-};
+export type ThreeSeaRippleSettings = { normalStrength: number; scale: number; speed: number };
 
 export type ThreeSeaFoamSettings = {
   shoreStrength: number;
@@ -78,17 +74,9 @@ export type ThreeSeaFoamSettings = {
   warpStrength: number;
 };
 
-export type ThreeSeaCausticsSettings = {
-  strength: number;
-  scale: number;
-  speed: number;
-  depthFadeLevels: number;
-};
+export type ThreeSeaCausticsSettings = { strength: number; scale: number; speed: number; depthFadeLevels: number };
 
-export type ThreeSeaQualitySettings = {
-  waveOctaves: 2 | 3;
-  voronoiOctaves: 1 | 2;
-};
+export type ThreeSeaQualitySettings = { waveOctaves: 2 | 3; voronoiOctaves: 1 | 2 };
 
 export type ThreeSeaSettings = {
   mode: ThreeSeaMode;
@@ -132,21 +120,7 @@ export type ThreeTerrainApp = {
 const CAMERA_Z = 1000;
 const PICK_DRAG_THRESHOLD_PX = 4;
 const SURFACE_GROUND_SEARCH_ITERATIONS = 16;
-const {
-  Var,
-  clamp,
-  cos,
-  float,
-  mrt,
-  sin,
-  texture,
-  textureLoad,
-  uniform,
-  vec2,
-  viewportUV,
-  wgsl,
-  wgslFn,
-} = THREE.TSL;
+const { Var, clamp, cos, float, mrt, sin, texture, textureLoad, uniform, vec2, viewportUV, wgsl, wgslFn } = THREE.TSL;
 const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, -1, 0.7).normalize();
 const DEFAULT_SUN_AZIMUTH_DEG = (Math.atan2(DEFAULT_SUN_DIRECTION.y, DEFAULT_SUN_DIRECTION.x) * 180) / Math.PI;
 const DEFAULT_SUN_ELEVATION_DEG =
@@ -374,8 +348,11 @@ class TerrainRuntime implements ThreeTerrainApp {
   private compassState: ThreeCompassState;
   private paused = false;
   private seaTimeSeconds = 0;
-  private drag: { startPointer: { x: number; y: number }; startCenter: { x: number; y: number }; moved: boolean } | null =
-    null;
+  private drag: {
+    startPointer: { x: number; y: number };
+    startCenter: { x: number; y: number };
+    moved: boolean;
+  } | null = null;
   private lastFrameAt = performance.now();
 
   constructor(host: HTMLElement, bundle: TerrainAssetBundle) {
@@ -551,18 +528,24 @@ class TerrainRuntime implements ThreeTerrainApp {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
 
-        return sampleVisibleTerrainAtlasForBiome(winner, atlas, unpackVisibleTerrainBiomeIndex(winner));
+        return sampleVisibleTerrainAtlasForBiome(
+          winner,
+          atlas,
+          unpackVisibleTerrainBiomeIndex(winner),
+          ${this.bundle.colorAtlas.depth},
+        );
       }
 
       fn sampleVisibleTerrainAtlasForBiome(
         winner: vec4<f32>,
         atlas: texture_2d_array<f32>,
         biomeIndex: i32,
+        atlasDepth: i32,
       ) -> vec4<f32> {
         if (!hasVisibleTerrainWinner(winner)) {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
-        if (biomeIndex < 0 || biomeIndex >= ${this.bundle.colorAtlas.depth}) {
+        if (biomeIndex < 0 || biomeIndex >= atlasDepth) {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
 
@@ -582,10 +565,10 @@ class TerrainRuntime implements ThreeTerrainApp {
         biomeIndex: i32,
       ) -> vec4<f32> {
         if (debugView >= 0.5) {
-          return sampleVisibleTerrainAtlasForBiome(winner, checkerAtlas, biomeIndex);
+          return sampleVisibleTerrainAtlasForBiome(winner, checkerAtlas, 0, ${this.bundle.checkerAtlas.depth});
         }
 
-        return sampleVisibleTerrainAtlasForBiome(winner, atlas, biomeIndex);
+        return sampleVisibleTerrainAtlasForBiome(winner, atlas, biomeIndex, ${this.bundle.colorAtlas.depth});
       }
 
       fn worldToTileCoord(world: vec2<f32>) -> vec2<f32> {
@@ -1135,7 +1118,8 @@ class TerrainRuntime implements ThreeTerrainApp {
       }
     `);
 
-    const resolveTerrainAlbedo = wgslFn(/* wgsl */ `
+    const resolveTerrainAlbedo = wgslFn(
+      /* wgsl */ `
       fn resolveTerrainAlbedo(
         winner: vec4<f32>,
         groundPoint: vec2<f32>,
@@ -1176,9 +1160,12 @@ class TerrainRuntime implements ThreeTerrainApp {
 
         return vec4<f32>(color, beautyTexel.a);
       }
-    `, [resolveHelpers]);
+    `,
+      [resolveHelpers],
+    );
 
-    const resolveTerrainSurfaceMeta = wgslFn(/* wgsl */ `
+    const resolveTerrainSurfaceMeta = wgslFn(
+      /* wgsl */ `
       fn resolveTerrainSurfaceMeta(
         winner: vec4<f32>,
         groundPoint: vec2<f32>,
@@ -1204,9 +1191,12 @@ class TerrainRuntime implements ThreeTerrainApp {
         );
         return vec4<f32>(lightingNormal, surfaceMeta.a);
       }
-    `, [resolveHelpers]);
+    `,
+      [resolveHelpers],
+    );
 
-    const resolveVisibleTerrainWinnerNode = wgslFn(/* wgsl */ `
+    const resolveVisibleTerrainWinnerNode = wgslFn(
+      /* wgsl */ `
       fn resolveVisibleTerrainWinnerNode(
         screen: vec2<f32>,
         packedMap: texture_2d_array<f32>,
@@ -1214,24 +1204,32 @@ class TerrainRuntime implements ThreeTerrainApp {
       ) -> vec4<f32> {
         return resolveVisibleTerrainWinner(screen, packedMap, ownershipAtlas);
       }
-    `, [resolveHelpers]);
+    `,
+      [resolveHelpers],
+    );
 
-    const resolveVisibleTerrainGroundPointNode = wgslFn(/* wgsl */ `
+    const resolveVisibleTerrainGroundPointNode = wgslFn(
+      /* wgsl */ `
       fn resolveVisibleTerrainGroundPointNode(screen: vec2<f32>, winner: vec4<f32>) -> vec2<f32> {
         return resolveVisibleTerrainGroundPoint(screen, winner);
       }
-    `, [resolveHelpers]);
+    `,
+      [resolveHelpers],
+    );
 
     const screen = this.createScreenNode();
-    const visibleWinner = Var(resolveVisibleTerrainWinnerNode({
-      screen,
-      packedMap: textureLoad(this.bundle.packedTerrain.texture),
-      ownershipAtlas: textureLoad(this.bundle.colorAtlas.texture),
-    }), "visibleTerrainWinner");
-    const resolvedGroundPoint = Var(resolveVisibleTerrainGroundPointNode({
-      screen,
-      winner: visibleWinner,
-    }), "visibleTerrainGroundPoint");
+    const visibleWinner = Var(
+      resolveVisibleTerrainWinnerNode({
+        screen,
+        packedMap: textureLoad(this.bundle.packedTerrain.texture),
+        ownershipAtlas: textureLoad(this.bundle.colorAtlas.texture),
+      }),
+      "visibleTerrainWinner",
+    );
+    const resolvedGroundPoint = Var(
+      resolveVisibleTerrainGroundPointNode({ screen, winner: visibleWinner }),
+      "visibleTerrainGroundPoint",
+    );
     const resolvedAlbedo = resolveTerrainAlbedo({
       winner: visibleWinner,
       groundPoint: resolvedGroundPoint,
@@ -1248,10 +1246,7 @@ class TerrainRuntime implements ThreeTerrainApp {
       aliasingRadius: this.aliasingRadiusUniform,
     });
     material.outputNode = resolvedAlbedo;
-    material.mrtNode = mrt({
-      output: resolvedAlbedo,
-      surface: resolvedSurfaceMeta,
-    });
+    material.mrtNode = mrt({ output: resolvedAlbedo, surface: resolvedSurfaceMeta });
 
     return material;
   }
@@ -1397,7 +1392,8 @@ class TerrainRuntime implements ThreeTerrainApp {
         return vec4<f32>(vec3<f32>(transmittance), terrainAlpha);
       }
     `);
-    const shadeTerrainAndSeaNode = wgslFn(/* wgsl */ `
+    const shadeTerrainAndSeaNode = wgslFn(
+      /* wgsl */ `
       fn shadeTerrainAndSeaNode(
         world: vec2<f32>,
         terrainColor: vec3<f32>,
@@ -1461,7 +1457,9 @@ class TerrainRuntime implements ThreeTerrainApp {
           quality,
         );
       }
-    `, [seaHelpers]);
+    `,
+      [seaHelpers],
+    );
     const screen = this.createScreenNode();
     const tileCoord = vec2(
       screen.x.mul(halfTileWidthInv).add(screen.y.mul(halfTileHeightInv)).mul(0.5).sub(float(1)),
@@ -1481,8 +1479,8 @@ class TerrainRuntime implements ThreeTerrainApp {
     );
     const refractedUv = clamp(
       viewportUV.add(refractionDirection.mul(this.seaOpticsAUniform.w).div(this.viewportResolutionUniform)),
-      vec2(0.0, 0.0),
-      vec2(1.0, 1.0),
+      vec2(0, 0),
+      vec2(1, 1),
     );
     const albedo = texture(this.resolveTarget.texture).toVar("terrainAlbedo");
     const terrainSurface = texture(this.getResolveSurfaceTexture(), viewportUV).toVar("terrainSurface");
@@ -1606,10 +1604,7 @@ class TerrainRuntime implements ThreeTerrainApp {
     this.cameraState = {
       ...this.cameraState,
       center: clampCameraCenter(
-        {
-          x: this.drag.startCenter.x - dragWorldOffset.x,
-          y: this.drag.startCenter.y - dragWorldOffset.y,
-        },
+        { x: this.drag.startCenter.x - dragWorldOffset.x, y: this.drag.startCenter.y - dragWorldOffset.y },
         this.bundle.bounds,
         this.viewport,
         this.cameraState.zoom,
@@ -1642,22 +1637,13 @@ class TerrainRuntime implements ThreeTerrainApp {
     const pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const anchoredWorld = screenPointToWorld(pointer, this.cameraState, this.viewport);
     const zoom = getContinuousZoom(this.cameraState.zoom, event.deltaY, this.cameraState.zooms);
-    const nextCameraState = {
-      ...this.cameraState,
-      zoom,
-    };
+    const nextCameraState = { ...this.cameraState, zoom };
     const pointerWorldOffset = screenOffsetToWorldOffset(
-      {
-        x: pointer.x - this.viewport.width * 0.5,
-        y: pointer.y - this.viewport.height * 0.5,
-      },
+      { x: pointer.x - this.viewport.width * 0.5, y: pointer.y - this.viewport.height * 0.5 },
       nextCameraState,
     );
     const center = clampCameraCenter(
-      {
-        x: anchoredWorld.x - pointerWorldOffset.x,
-        y: anchoredWorld.y - pointerWorldOffset.y,
-      },
+      { x: anchoredWorld.x - pointerWorldOffset.x, y: anchoredWorld.y - pointerWorldOffset.y },
       this.bundle.bounds,
       this.viewport,
       zoom,
@@ -1888,24 +1874,14 @@ class TerrainRuntime implements ThreeTerrainApp {
       settings.chop.speed,
       (settings.chop.directionDeg * Math.PI) / 180,
     );
-    this.seaRippleUniform.value.set(
-      settings.ripple.normalStrength,
-      settings.ripple.scale,
-      settings.ripple.speed,
-      0,
-    );
+    this.seaRippleUniform.value.set(settings.ripple.normalStrength, settings.ripple.scale, settings.ripple.speed, 0);
     this.seaFoamAUniform.value.set(
       settings.foam.shoreStrength,
       settings.foam.crestStrength,
       settings.foam.softness,
       settings.foam.voronoiScale,
     );
-    this.seaFoamBUniform.value.set(
-      settings.foam.voronoiJitter,
-      settings.foam.flowSpeed,
-      settings.foam.warpStrength,
-      0,
-    );
+    this.seaFoamBUniform.value.set(settings.foam.voronoiJitter, settings.foam.flowSpeed, settings.foam.warpStrength, 0);
     this.seaCausticsUniform.value.set(
       settings.caustics.strength,
       settings.caustics.scale,

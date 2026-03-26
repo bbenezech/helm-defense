@@ -35,7 +35,7 @@ type PlacementReport = Placement & {
 };
 
 function getTilesetJsonPath() {
-  return path.resolve(import.meta.dirname, "../../public/Grass_23-512x512/tileset.json");
+  return path.resolve(import.meta.dirname, "../../three/biome.json");
 }
 
 function loadNativeTileset(): ResolveTerrainTileset & CoverageTileset {

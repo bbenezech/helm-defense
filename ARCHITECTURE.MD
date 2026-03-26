@@ -16,7 +16,7 @@
 - Web demo entry: `bun run demo`
 - Production build: `bun run build`
 - Electron dev loop: `bun run electron:dev`
-- Tileset generation: `bun run tile ...`
+- Biome generation: `bun biome <source.png>`
 - Tileset compass validation: `bun run validate:tileset-compass [tileset-directory] --report-dir <dir>`
 - Tileset raster validation: `bun run validate:tileset-raster [tileset-directory] --report-dir <dir>`
 - Terrain coverage validation: `bun run validate:terrain-coverage ...`
@@ -24,19 +24,21 @@
 
 ## Terrain Assets
 
-- `bun run tile ...` generates the terrain asset bundle directly next to the source `texture.png`. For the checked-in sample, `bun run tile public/Grass_23-512x512/texture.png` regenerates the bundle under `public/Grass_23-512x512/`.
-- The runtime bundle includes `tileset.png` for biome color, `tileset.checker.png` for the optional checker debug view, `biomes.json` that points each biome at the color and checker atlases, and `random.map.json` for tile placement.
+- `downloads/` is the raw, uncommitted holding area for candidate textures and triage material. `assets/` contains only active source PNGs that we intentionally build from.
+- `three/biome.json` is the checked-in runtime terrain contract for the shared 19-slope tileset layout. It owns the common tile order, atlas geometry, and `elevationYOffsetPx`.
+- `bun biome <source.png>` accepts any PNG path, derives the lowercase biome id from the source basename, recreates `public/biome/<id>/`, copies the input to `source.png`, and writes the generated runtime atlas to `tileset.png`.
+- A biome runtime folder now contains exactly two generated assets: `source.png` and `tileset.png`.
+- The Three runtime does not fetch map JSON or biome manifests anymore. `three/assets.ts` imports `three/biome.json`, generates the default terrain map and deterministic two-biome ownership grid in code, loads `grass` and `mud` as the beauty atlas array, and loads `checkers` as the dedicated checker/debug atlas.
 - Color tiles are now rasterized deterministically on the CPU from the shared terrain scene spec, visible UV coverage, and ownership masks. The beauty path uses nearest-neighbor texture sampling, clamp-to-edge UV behavior, and an ownership flood fill for UV-invisible owned leftovers so `tileset.png` has no transparent holes.
-- The checker atlas is generated from the same ownership masks and UV contract as the beauty atlas. In Three it is a debug-only RGB source switch; visibility always comes from beauty alpha.
 - The Three renderer now uses two terrain data maps at runtime. The packed 8-slice terrain stack remains the visibility structure whose word is `shapeRef + biomeIndex + baseHeightLevel`, while a separate logical world-cell surface map stores the topmost non-empty terrain cell at each `(mapX, mapY)` using the same word layout. Pass 1 resolves the visible beauty/checker color from the packed stack, computes exact coarse world height analytically from the winning tile, and computes a smoothed lighting normal from the world-cell surface map.
 - Pass 2 is now the final terrain-and-sea composite. Dry terrain lighting still comes entirely from the pass-1 attachments, and the stylized sea renderer applies a global animated water level on top with pure threshold flooding, depth-based transmittance, Voronoi-driven foam/caustics, and no extra asset files or extra fullscreen pass.
 
 ## Terrain Validation
 
 - `scripts/lib/terrain-coverage-proof.ts` owns the native terrain placement contract used by validators and tests. It is the shared semantic proof for fixture placement, canvas bounds, and coverage composition against the canonical `128 x 96 / 64 / 16` terrain geometry.
-- `bun run validate:tileset-compass ...` renders the vendored `assets/compass.png` through the CPU beauty rasterizer after extracting and tinting the four cardinal needles. It checks all 19 terrain poses, so pose-specific mirror or half-turn mistakes cannot hide behind representative sampling, and emits `source-compass.png`, `tinted-compass.png`, `raster-atlas.png`, plus per-frame `raster.png`, `overlay.png`, and `summary.json` under `tmp/tileset-compass-report/`.
-- `bun run validate:tileset-raster ...` generates a canonical UV-space checker source texture, renders it through the CPU beauty rasterizer, compares the result to `tileset.checker.png` with exact RGBA equality, and emits `reference-atlas.png`, `raster-atlas.png`, `diff-atlas.png`, `summary.json`, and per-frame diagnostics under `tmp/tileset-raster-report/`.
-- `bun run validate:terrain-coverage ...` compares the generated `tileset.png` atlas against the ownership oracle and emits per-fixture overlap, uncovered, stray, and wrong-owner diagnostics under `tmp/terrain-coverage-report/`.
+- `bun run validate:tileset-compass ...` renders `scripts/fixtures/compass.png` through the CPU beauty rasterizer using the shared `three/biome.json` layout. It checks all 19 terrain poses and emits `source-compass.png`, `tinted-compass.png`, `raster-atlas.png`, plus per-frame `raster.png`, `overlay.png`, and `summary.json` under `tmp/tileset-compass-report/`.
+- `bun run validate:tileset-raster ...` rerenders a biome folder’s `source.png` through the CPU beauty rasterizer using `three/biome.json`, compares the result to that folder’s `tileset.png`, and emits `reference-atlas.png`, `raster-atlas.png`, `diff-atlas.png`, `summary.json`, and per-frame diagnostics under `tmp/tileset-raster-report/`.
+- `bun run validate:terrain-coverage ...` compares a biome folder’s generated `tileset.png` atlas against the ownership oracle defined by the shared `three/biome.json` contract and emits per-fixture overlap, uncovered, stray, and wrong-owner diagnostics under `tmp/terrain-coverage-report/`.
 - The Three-side correctness loop is now test-first: the packed terrain codec is covered by ownership oracle tests, and the analytic surface evaluator is covered against the canonical `tileDataToTerrain(...)` output across the shipped terrain poses.
 
 ## Quality Gate

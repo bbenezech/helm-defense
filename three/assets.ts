@@ -11,6 +11,7 @@ declare global {
 }
 
 import * as THREE from "three/src/Three.WebGPU.js";
+import biomeJson from "./biome.json" with { type: "json" };
 import { type BiomeCellGrid, type PackedTerrainStack, type SurfaceCellGrid } from "./chunks.ts";
 import {
   BIOME_INDEX_MASK,
@@ -19,6 +20,9 @@ import {
   type PackedTerrainCodec,
 } from "./codec.ts";
 import { getMapBounds, type Point2, type Rect } from "./projection.ts";
+import { generateTilableHeightmap } from "../src/game/lib/heightmap.ts";
+import { tileableHeightmapToTileData } from "../src/game/lib/terrain.ts";
+import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.ts";
 
 export type TerrainTilesetProperty =
   | { name: "NESW"; type: string; value: string }
@@ -78,10 +82,6 @@ export type TerrainMap = {
 
 export type TileAtlasRegion = { offset: Point2; scale: Point2 };
 
-export type BiomeManifestEntry = { id: string; atlas: string; checkerAtlas: string };
-
-export type BiomeManifest = { biomes: BiomeManifestEntry[] };
-
 export type TerrainBiomeGrid = {
   type: "biome-grid";
   width: number;
@@ -109,7 +109,6 @@ export type TerrainAssetBundle = {
   tileset: TerrainTileset;
   bounds: Rect;
   elevationYOffsetPx: number;
-  biomeManifest: BiomeManifest;
   colorAtlas: ColorAtlasArray;
   checkerAtlas: CheckerAtlasArray;
   biomeCells: BiomeCellTexture;
@@ -118,10 +117,14 @@ export type TerrainAssetBundle = {
   codec: PackedTerrainCodec;
 };
 
-const DEFAULT_TILESET_NAME = "Grass_23-512x512";
-const DEFAULT_MAP_NAME = "random.map.json";
-const DEFAULT_BIOME_MANIFEST_NAME = "biomes.json";
-const DEFAULT_BIOME_GRID_NAME = "random.biome-grid.json";
+const BIOME_ROOT_DIRECTORY = "biome";
+const BIOME_TILESET_FILENAME = "tileset.png";
+const BEAUTY_BIOME_IDS = ["grass", "mud"] as const;
+const CHECKER_BIOME_IDS = ["checkers"] as const;
+const DEFAULT_TERRAIN_TILE_WIDTH = 100;
+const DEFAULT_TERRAIN_TILE_HEIGHT = 100;
+const DEFAULT_TERRAIN_MAX_VALUE = 10;
+const DEFAULT_TERRAIN_SEED = "1";
 
 function assertObject(value: unknown, message: string): asserts value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(message);
@@ -226,8 +229,9 @@ export function parseTerrainTileset(value: unknown): TerrainTileset {
 
 function parseLayerProperty(value: unknown, index: number) {
   assertObject(value, `Invalid map layer property at index ${index}`);
-  if (typeof value["value"] !== "number" && typeof value["value"] !== "string")
+  if (typeof value["value"] !== "number" && typeof value["value"] !== "string") {
     throw new Error(`Invalid map layer property value at index ${index}`);
+  }
 
   return {
     name: assertString(value["name"], `Missing map layer property name at index ${index}`),
@@ -265,6 +269,7 @@ export function parseTerrainMap(value: unknown): TerrainMap {
   const tilesets = assertArray(value["tilesets"], "Missing map tilesets");
   if (tilesets.length !== 1) throw new Error(`Expected exactly one tileset, received ${tilesets.length}`);
   const tilesetWithFirstGid = tilesets[0];
+  if (tilesetWithFirstGid === undefined) throw new Error("Expected exactly one map tileset entry.");
   assertObject(tilesetWithFirstGid, "Invalid map tileset entry");
 
   return {
@@ -283,26 +288,6 @@ export function parseTerrainMap(value: unknown): TerrainMap {
       },
     ],
   };
-}
-
-export function parseBiomeManifest(value: unknown): BiomeManifest {
-  assertObject(value, "Invalid biome manifest");
-  const biomes = assertArray(value["biomes"], "Missing biome manifest entries").map((entry, index) => {
-    assertObject(entry, `Invalid biome entry at index ${index}`);
-
-    return {
-      id: assertString(entry["id"], `Missing biome id at index ${index}`),
-      atlas: assertString(entry["atlas"], `Missing biome atlas at index ${index}`),
-      checkerAtlas: assertString(entry["checkerAtlas"], `Missing biome checker atlas at index ${index}`),
-    };
-  });
-
-  if (biomes.length === 0) throw new Error("Biome manifest must contain at least one biome.");
-  if (biomes.length > BIOME_INDEX_MASK + 1) {
-    throw new Error(`Biome manifest exceeds the packed terrain biome limit of ${BIOME_INDEX_MASK + 1}.`);
-  }
-
-  return { biomes };
 }
 
 export function parseTerrainBiomeGrid(value: unknown): TerrainBiomeGrid {
@@ -327,15 +312,9 @@ function getAssetUrl(pathname: string): string {
   return new URL(pathname.replace(/^\//u, ""), baseUrl).toString();
 }
 
-async function fetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`);
-  return response.json();
-}
-
 function getTilesetNumberProperty(tileset: TerrainTileset, name: string): number {
   const property = tileset.properties.find((entry) => entry.name === name && typeof entry.value === "number");
-  if (!property || typeof property.value !== "number") throw new Error(`Missing tileset property "${name}"`);
+  if (property === undefined || typeof property.value !== "number") throw new Error(`Missing tileset property "${name}"`);
   return property.value;
 }
 
@@ -407,16 +386,15 @@ function createAtlasArray(images: LoadedAtlasImage[], label: string): TerrainAtl
   return { texture, data, width: layout.width, height: layout.height, depth: layout.depth };
 }
 
-async function loadAtlasArray(
-  tilesetName: string,
-  manifest: BiomeManifest,
-  selector: (biome: BiomeManifestEntry) => string,
-  label: string,
-): Promise<TerrainAtlasArray> {
+function getBiomeAtlasPathname(biomeId: string): string {
+  return `${BIOME_ROOT_DIRECTORY}/${biomeId}/${BIOME_TILESET_FILENAME}`;
+}
+
+async function loadBiomeAtlasArray(biomeIds: readonly string[], label: string): Promise<TerrainAtlasArray> {
   const images = await Promise.all(
-    manifest.biomes.map(async (biome) => {
-      const pathname = selector(biome);
-      const image = await loadImagePixels(getAssetUrl(`${tilesetName}/${pathname}`));
+    biomeIds.map(async (biomeId) => {
+      const pathname = getBiomeAtlasPathname(biomeId);
+      const image = await loadImagePixels(getAssetUrl(pathname));
       return { ...image, pathname };
     }),
   );
@@ -424,22 +402,10 @@ async function loadAtlasArray(
   return createAtlasArray(images, label);
 }
 
-async function loadColorAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<ColorAtlasArray> {
-  return loadAtlasArray(tilesetName, manifest, (biome) => biome.atlas, "Biome color atlas");
-}
-
-async function loadCheckerAtlasArray(tilesetName: string, manifest: BiomeManifest): Promise<CheckerAtlasArray> {
-  return loadAtlasArray(tilesetName, manifest, (biome) => biome.checkerAtlas, "Biome checker atlas");
-}
-
-function assertAtlasArrayLayoutsMatch(colorAtlas: ColorAtlasArray, checkerAtlas: CheckerAtlasArray) {
-  if (
-    colorAtlas.width !== checkerAtlas.width ||
-    colorAtlas.height !== checkerAtlas.height ||
-    colorAtlas.depth !== checkerAtlas.depth
-  ) {
+function assertAtlasSliceDimensionsMatch(colorAtlas: ColorAtlasArray, checkerAtlas: CheckerAtlasArray) {
+  if (colorAtlas.width !== checkerAtlas.width || colorAtlas.height !== checkerAtlas.height) {
     throw new Error(
-      `Biome atlas layout mismatch: color atlas is ${colorAtlas.width}x${colorAtlas.height}x${colorAtlas.depth}, checker atlas is ${checkerAtlas.width}x${checkerAtlas.height}x${checkerAtlas.depth}.`,
+      `Biome atlas layout mismatch: color atlas is ${colorAtlas.width}x${colorAtlas.height}, checker atlas is ${checkerAtlas.width}x${checkerAtlas.height}.`,
     );
   }
 }
@@ -512,11 +478,7 @@ function createSurfaceCellTexture(grid: SurfaceCellGrid): SurfaceCellTexture {
   return { texture, grid };
 }
 
-function createBiomeCellGrid(
-  map: TerrainMap,
-  biomeGrid: TerrainBiomeGrid,
-  biomeCount: number,
-): BiomeCellGrid {
+function createBiomeCellGrid(map: TerrainMap, biomeGrid: TerrainBiomeGrid, biomeCount: number): BiomeCellGrid {
   if (biomeGrid.width !== map.width || biomeGrid.height !== map.height) {
     throw new Error(
       `Biome grid size ${biomeGrid.width}x${biomeGrid.height} must match terrain map size ${map.width}x${map.height}.`,
@@ -559,28 +521,77 @@ function createBiomeCellTexture(grid: BiomeCellGrid): BiomeCellTexture {
   return { texture, grid };
 }
 
-export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME): Promise<TerrainAssetBundle> {
-  const tilesetUrl = getAssetUrl(`${tilesetName}/tileset.json`);
-  const mapUrl = getAssetUrl(`${tilesetName}/${DEFAULT_MAP_NAME}`);
-  const biomeManifestUrl = getAssetUrl(`${tilesetName}/${DEFAULT_BIOME_MANIFEST_NAME}`);
-  const biomeGridUrl = getAssetUrl(`${tilesetName}/${DEFAULT_BIOME_GRID_NAME}`);
-  const [tilesetJson, mapJson, biomeManifestJson, biomeGridJson] = await Promise.all([
-    fetchJson(tilesetUrl),
-    fetchJson(mapUrl),
-    fetchJson(biomeManifestUrl),
-    fetchJson(biomeGridUrl),
-  ]);
-  const tileset = parseTerrainTileset(tilesetJson);
-  const map = parseTerrainMap(mapJson);
-  const biomeManifest = parseBiomeManifest(biomeManifestJson);
-  const biomeGrid = parseTerrainBiomeGrid(biomeGridJson);
+function hash01(value: number): number {
+  return Math.abs(Math.sin(value * 12.9898) * 43_758.545_312_3) % 1;
+}
+
+function createDefaultTerrainMap(): TerrainMap {
+  const tileableHeightmap = generateTilableHeightmap({
+    tileWidth: DEFAULT_TERRAIN_TILE_WIDTH,
+    tileHeight: DEFAULT_TERRAIN_TILE_HEIGHT,
+    maxValue: DEFAULT_TERRAIN_MAX_VALUE,
+    seed: DEFAULT_TERRAIN_SEED,
+  });
+  const terrain = tileableHeightmapToTileData(tileableHeightmap);
+  return parseTerrainMap(getTilemap(terrainToLayers(terrain, biomeJson), biomeJson));
+}
+
+function createDefaultTerrainBiomeGrid(map: TerrainMap): TerrainBiomeGrid {
+  const biomeCount = BEAUTY_BIOME_IDS.length;
+  const columns = Math.ceil(Math.sqrt(biomeCount));
+  const rows = Math.ceil(biomeCount / columns);
+  const regionWidth = map.width / columns;
+  const regionHeight = map.height / rows;
+  const seeds = Array.from({ length: biomeCount }, (_unused, biomeIndex) => {
+    const column = biomeIndex % columns;
+    const row = Math.floor(biomeIndex / columns);
+    return {
+      biomeIndex,
+      x: (column + 0.25 + hash01(biomeIndex + 1) * 0.5) * regionWidth,
+      y: (row + 0.25 + hash01((biomeIndex + 1) * 17) * 0.5) * regionHeight,
+    };
+  });
+  const data: number[] = [];
+
+  for (let tileY = 0; tileY < map.height; tileY++) {
+    for (let tileX = 0; tileX < map.width; tileX++) {
+      let closestBiomeIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+
+      for (const seed of seeds) {
+        const deltaX = tileX + 0.5 - seed.x;
+        const deltaY = tileY + 0.5 - seed.y;
+        const distance = deltaX * deltaX + deltaY * deltaY;
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestBiomeIndex = seed.biomeIndex;
+        }
+      }
+
+      data.push(closestBiomeIndex);
+    }
+  }
+
+  return parseTerrainBiomeGrid({
+    type: "biome-grid",
+    width: map.width,
+    height: map.height,
+    data,
+  });
+}
+
+export async function loadTerrainAssetBundle(): Promise<TerrainAssetBundle> {
+  const tileset = parseTerrainTileset(biomeJson);
+  const map = createDefaultTerrainMap();
+  const biomeGrid = createDefaultTerrainBiomeGrid(map);
   const elevationYOffsetPx = getTilesetNumberProperty(tileset, "elevationYOffsetPx");
   const [colorAtlas, checkerAtlas] = await Promise.all([
-    loadColorAtlasArray(tilesetName, biomeManifest),
-    loadCheckerAtlasArray(tilesetName, biomeManifest),
+    loadBiomeAtlasArray(BEAUTY_BIOME_IDS, "Biome color atlas"),
+    loadBiomeAtlasArray(CHECKER_BIOME_IDS, "Biome checker atlas"),
   ]);
-  assertAtlasArrayLayoutsMatch(colorAtlas, checkerAtlas);
-  const biomeCells = createBiomeCellTexture(createBiomeCellGrid(map, biomeGrid, biomeManifest.biomes.length));
+  assertAtlasSliceDimensionsMatch(colorAtlas, checkerAtlas);
+  const biomeCells = createBiomeCellTexture(createBiomeCellGrid(map, biomeGrid, BEAUTY_BIOME_IDS.length));
   const codec = createPackedTerrainCodec(map, tileset, elevationYOffsetPx, biomeCells.grid);
   const packedTerrain = createPackedTerrainTexture(codec.stack);
   const surfaceCells = createSurfaceCellTexture(createSurfaceCellGrid(map, biomeCells.grid));
@@ -590,7 +601,6 @@ export async function loadTerrainAssetBundle(tilesetName = DEFAULT_TILESET_NAME)
     tileset,
     bounds: getMapBounds(map),
     elevationYOffsetPx,
-    biomeManifest,
     colorAtlas,
     checkerAtlas,
     biomeCells,

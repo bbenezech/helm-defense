@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import biomeJson from "../three/biome.json" with { type: "json" };
+import { parseTerrainTileset } from "../three/assets.ts";
 import { ORDERED_SLOPES } from "./lib/terrain-scene-spec.ts";
 import { countCoveredPixels, rasterizeOwnershipFrames, type BinaryFrame } from "./lib/terrain-ownership.ts";
 import { imageToImageData, saveImageDataToImage } from "./lib/file.ts";
@@ -20,10 +22,9 @@ import {
   type CoverageFixtureResult,
   type CoverageImage,
 } from "./lib/terrain-coverage-proof.ts";
-import type { Tileset } from "../src/game/lib/tileset.ts";
 
 const __dirname = import.meta.dirname;
-const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/Grass_23-512x512");
+const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/biome/grass");
 const DEFAULT_REPORT_DIRECTORY = path.resolve(__dirname, "../tmp/terrain-coverage-report");
 const ALPHA_THRESHOLD = 127;
 
@@ -51,7 +52,7 @@ function imageDataToBinaryFrame(
   return { width, height, coverage } satisfies BinaryFrame;
 }
 
-async function loadFramesFromTilesetSheet(tilesetDirectory: string, tileset: Tileset) {
+async function loadFramesFromTilesetSheet(tilesetDirectory: string, tileset: ReturnType<typeof parseTerrainTileset>) {
   const imagePath = path.join(tilesetDirectory, tileset.image);
   const image = await imageToImageData(imagePath);
   const frames: BinaryFrame[] = [];
@@ -195,7 +196,11 @@ function assertNegativeCheck(
   if (!predicate(result.counts)) throw new Error(`Negative self-check "${label}" did not fail as expected.`);
 }
 
-function runNegativeSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[], actualFrames: BinaryFrame[]) {
+function runNegativeSelfChecks(
+  tileset: ReturnType<typeof parseTerrainTileset>,
+  oracleFrames: BinaryFrame[],
+  actualFrames: BinaryFrame[],
+) {
   const elevationYOffsetPx = getElevationYOffsetPx(tileset);
   const singleTileFixture: CoverageFixture = {
     name: "self-check-single",
@@ -239,7 +244,7 @@ function runNegativeSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[], ac
   );
 }
 
-function runOracleSelfChecks(tileset: Tileset, oracleFrames: BinaryFrame[]) {
+function runOracleSelfChecks(tileset: ReturnType<typeof parseTerrainTileset>, oracleFrames: BinaryFrame[]) {
   const elevationYOffsetPx = getElevationYOffsetPx(tileset);
   const fixtures: CoverageFixture[] = [
     {
@@ -274,7 +279,7 @@ async function main() {
       y.positional("tileset-directory", {
         type: "string",
         default: DEFAULT_TILESET_DIRECTORY,
-        describe: "Directory containing tileset.png and tileset.json",
+        describe: "Directory containing tileset.png for one built biome",
       }),
     )
     .option("report-dir", {
@@ -290,16 +295,14 @@ async function main() {
   const tilesetDirectory = path.resolve(String(argv["tileset-directory"] ?? DEFAULT_TILESET_DIRECTORY));
   const reportDirectory = path.resolve(String(argv["report-dir"] ?? DEFAULT_REPORT_DIRECTORY));
 
-  const tilesetJsonPath = path.join(tilesetDirectory, "tileset.json");
-  if (!fs.existsSync(tilesetJsonPath)) throw new Error(`Missing tileset.json in ${tilesetDirectory}`);
   if (!fs.existsSync(path.join(tilesetDirectory, "tileset.png")))
     throw new Error(`Missing tileset.png in ${tilesetDirectory}`);
 
   fs.rmSync(reportDirectory, { recursive: true, force: true });
   fs.mkdirSync(reportDirectory, { recursive: true });
 
-  const actualTileset = JSON.parse(fs.readFileSync(tilesetJsonPath, "utf8")) as Tileset;
-  const canonicalTileset = getCanonicalTileset(actualTileset);
+  const actualTileset = parseTerrainTileset(biomeJson);
+  const canonicalTileset = getCanonicalTileset();
   assertSceneAndTilesetContracts(actualTileset, canonicalTileset);
 
   const [oracleFrames, actualFrames] = await Promise.all([

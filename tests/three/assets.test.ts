@@ -5,7 +5,6 @@ import {
   encodeSurfaceCellTextureData,
   getAtlasRegion,
   loadTerrainAssetBundle,
-  parseBiomeManifest,
   parseTerrainBiomeGrid,
   parseTerrainMap,
   parseTerrainTileset,
@@ -60,17 +59,6 @@ describe("terrain assets", () => {
     expect(() => parseTerrainTileset({ ...sampleTileset, tiles: "nope" })).toThrow(/Missing tileset tiles/u);
   });
 
-  it("validates biome manifests", () => {
-    expect(
-      parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png", checkerAtlas: "tileset.checker.png" }] }).biomes,
-    ).toHaveLength(1);
-    expect(() => parseBiomeManifest({ biomes: [] })).toThrow(/at least one biome/u);
-    expect(() => parseBiomeManifest({ biomes: [{ id: "grass" }] })).toThrow(/biome atlas/u);
-    expect(() => parseBiomeManifest({ biomes: [{ id: "grass", atlas: "tileset.png" }] })).toThrow(
-      /checker atlas/u,
-    );
-  });
-
   it("validates terrain biome grids", () => {
     expect(parseTerrainBiomeGrid(sampleBiomeGrid).data).toHaveLength(9);
     expect(() => parseTerrainBiomeGrid({ ...sampleBiomeGrid, data: ["nope"] })).toThrow(/Invalid biome grid value/u);
@@ -111,18 +99,11 @@ describe("terrain assets", () => {
 
   it("loads terrain atlas payloads into the terrain bundle without requesting a runtime surface", async () => {
     const imageAssets = new Map<string, { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }>([
-      ["/Grass_23-512x512/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 10, 20, 30, 255) }],
-      [
-        "/Grass_23-512x512/tileset.checker.png",
-        { width: 2, height: 2, data: createSolidImageData(2, 2, 220, 220, 220, 255) },
-      ],
-      ["/Grass_23-512x512/tileset.sand.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 200, 160, 90, 255) }],
-      [
-        "/Grass_23-512x512/tileset.sand.checker.png",
-        { width: 2, height: 2, data: createSolidImageData(2, 2, 140, 120, 90, 255) },
-      ],
+      ["/biome/grass/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 10, 20, 30, 255) }],
+      ["/biome/mud/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 200, 160, 90, 255) }],
+      ["/biome/checkers/tileset.png", { width: 2, height: 2, data: createSolidImageData(2, 2, 220, 220, 220, 255) }],
     ]);
-    const fetchCalls: string[] = [];
+    const fetchMock = vi.fn();
 
     class MockImage {
       decoding = "async";
@@ -185,51 +166,35 @@ describe("terrain assets", () => {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
       writable: true,
-      value: vi.fn(async (url: string) => {
-        const pathname = new URL(url).pathname;
-        fetchCalls.push(pathname);
-        if (pathname.endsWith("/tileset.json")) return { ok: true, json: async () => sampleTileset };
-        if (pathname.endsWith("/random.map.json")) return { ok: true, json: async () => sampleMap };
-        if (pathname.endsWith("/biomes.json")) {
-          return {
-            ok: true,
-            json: async () => ({
-              biomes: [
-                { id: "grass", atlas: "tileset.png", checkerAtlas: "tileset.checker.png" },
-                { id: "sand", atlas: "tileset.sand.png", checkerAtlas: "tileset.sand.checker.png" },
-              ],
-            }),
-          };
-        }
-        if (pathname.endsWith("/random.biome-grid.json")) return { ok: true, json: async () => sampleBiomeGrid };
-
-        return { ok: false, status: 404, json: async () => null };
-      }),
+      value: fetchMock,
     });
 
     const bundle = await loadTerrainAssetBundle();
 
-    const firstBiome = bundle.biomeManifest.biomes[0];
-    if (firstBiome === undefined) throw new Error("Expected a biome entry in the loaded terrain bundle.");
-    expect(firstBiome.atlas).toBe("tileset.png");
-    expect(firstBiome.checkerAtlas).toBe("tileset.checker.png");
+    expect(bundle.map.width).toBe(100);
+    expect(bundle.map.height).toBe(100);
+    expect(bundle.colorAtlas.width).toBe(2);
+    expect(bundle.colorAtlas.height).toBe(2);
+    expect(bundle.colorAtlas.depth).toBe(2);
     expect(bundle.checkerAtlas.width).toBe(2);
     expect(bundle.checkerAtlas.height).toBe(2);
-    expect(bundle.checkerAtlas.depth).toBe(2);
-    expect(bundle.biomeCells.grid.width).toBe(sampleMap.width);
-    expect(bundle.biomeCells.grid.height).toBe(sampleMap.height);
-    expect(bundle.biomeCells.texture.image.width).toBe(sampleMap.width);
-    expect(bundle.biomeCells.texture.image.height).toBe(sampleMap.height);
-    expect(bundle.biomeCells.grid.data[1]).toBe(1);
-    expect(bundle.surfaceCells.grid.width).toBe(sampleMap.width);
-    expect(bundle.surfaceCells.grid.height).toBe(sampleMap.height);
-    expect(bundle.surfaceCells.texture.image.width).toBe(sampleMap.width);
-    expect(bundle.surfaceCells.texture.image.height).toBe(sampleMap.height);
-    const centerWord = bundle.surfaceCells.grid.data[4];
-    if (centerWord === undefined) throw new Error("Expected the sample surface grid to contain the center texel.");
-    expect(decodeShapeReference(centerWord)).toBe(2);
-    expect(decodeBaseHeightLevel(centerWord)).toBe(1);
-    expect(decodeBiomeIndex(centerWord)).toBe(1);
-    expect(fetchCalls).not.toContain("/Grass_23-512x512/random.tileableHeightmap.json");
+    expect(bundle.checkerAtlas.depth).toBe(1);
+    expect(bundle.biomeCells.grid.width).toBe(bundle.map.width);
+    expect(bundle.biomeCells.grid.height).toBe(bundle.map.height);
+    expect(bundle.biomeCells.texture.image.width).toBe(bundle.map.width);
+    expect(bundle.biomeCells.texture.image.height).toBe(bundle.map.height);
+    expect(bundle.surfaceCells.grid.width).toBe(bundle.map.width);
+    expect(bundle.surfaceCells.grid.height).toBe(bundle.map.height);
+    expect(bundle.surfaceCells.texture.image.width).toBe(bundle.map.width);
+    expect(bundle.surfaceCells.texture.image.height).toBe(bundle.map.height);
+    expect(bundle.biomeCells.grid.data.some((biomeIndex) => biomeIndex === 0)).toBe(true);
+    expect(bundle.biomeCells.grid.data.some((biomeIndex) => biomeIndex === 1)).toBe(true);
+
+    const firstSurfaceWord = bundle.surfaceCells.grid.data.find((word) => word !== 0);
+    if (firstSurfaceWord === undefined) throw new Error("Expected at least one populated surface cell in the terrain bundle.");
+    expect(decodeShapeReference(firstSurfaceWord)).toBeGreaterThan(0);
+    expect(decodeBaseHeightLevel(firstSurfaceWord)).toBeGreaterThanOrEqual(0);
+    expect(decodeBiomeIndex(firstSurfaceWord)).toBeLessThan(2);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

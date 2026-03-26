@@ -10,7 +10,7 @@ This document extracts the math behind the project's 30 degree isometric view an
 - `src/game/lib/tileset.ts`
 - `src/game/scene/LightningFilter.ts`
 - `src/game/scene/lightningShader.frag`
-- `scripts/tileset.ts`
+- `scripts/biome.ts`
 - `scripts/lib/terrain-scene-spec.ts`
 - `scripts/lib/terrain-raster.ts`
 - `scripts/lib/terrain-ownership.ts`
@@ -623,7 +623,7 @@ The asset pipeline encodes how much vertical offset each stacked isometric layer
 
 ### 9.1 Tileset geometry
 
-In `scripts/tileset.ts`:
+In the shared terrain contract (`three/biome.json`, built by `scripts/biome.ts`):
 
 ```ts
 elevationYOffsetPx = (tileImage.height - tileImage.width / 2) / 2

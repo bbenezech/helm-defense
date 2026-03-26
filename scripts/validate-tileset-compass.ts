@@ -6,6 +6,7 @@ import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { ImageData } from "../src/game/lib/heightmap.ts";
+import biomeJson from "../three/biome.json" with { type: "json" };
 import { parseTerrainTileset } from "../three/assets.ts";
 import { imageToImageData, saveImageDataToImage } from "./lib/file.ts";
 import { rasterizeVisibleUvFrame } from "./lib/terrain-ownership.ts";
@@ -36,9 +37,9 @@ type FrameDiagnostic = {
 };
 
 const __dirname = import.meta.dirname;
-const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/Grass_23-512x512");
+const DEFAULT_TILESET_DIRECTORY = path.resolve(__dirname, "../public/biome/grass");
 const DEFAULT_REPORT_DIRECTORY = path.resolve(__dirname, "../tmp/tileset-compass-report");
-const DEFAULT_COMPASS_PATH = path.resolve(__dirname, "../assets/compass.png");
+const DEFAULT_COMPASS_PATH = path.resolve(__dirname, "./fixtures/compass.png");
 const MIN_NEEDLE_RADIUS_SQUARED = 6 * 6;
 const MAX_NEEDLE_RADIUS_SQUARED = 32 * 32;
 
@@ -291,7 +292,7 @@ async function main() {
         builder.positional("tileset-directory", {
           type: "string",
           default: DEFAULT_TILESET_DIRECTORY,
-          describe: "Directory containing tileset.json for atlas layout",
+          describe: "Directory containing tileset.png for one built biome",
         }),
     )
     .option("report-dir", {
@@ -312,15 +313,15 @@ async function main() {
   const tilesetDirectory = path.resolve(String(argv["tileset-directory"]));
   const reportDirectory = path.resolve(String(argv["report-dir"]));
   const compassPath = path.resolve(String(argv.compass));
-  const tilesetJsonPath = path.join(tilesetDirectory, "tileset.json");
-  if (!fs.existsSync(tilesetJsonPath)) throw new Error(`Missing tileset.json in ${tilesetDirectory}.`);
+  if (!fs.existsSync(path.join(tilesetDirectory, "tileset.png"))) {
+    throw new Error(`Missing tileset.png in ${tilesetDirectory}.`);
+  }
   if (!fs.existsSync(compassPath)) throw new Error(`Missing compass PNG at ${compassPath}.`);
 
   fs.rmSync(reportDirectory, { recursive: true, force: true });
   fs.mkdirSync(reportDirectory, { recursive: true });
 
-  const tilesetJson = JSON.parse(fs.readFileSync(tilesetJsonPath, "utf8"));
-  const tileset = parseTerrainTileset(tilesetJson);
+  const tileset = parseTerrainTileset(biomeJson);
   const sourceCompassImage = normalizeCompassImage(await imageToImageData(compassPath));
   const tintedCompassImage = tintCompassImage(sourceCompassImage);
   const rasterFrames = rasterizeTerrainFrames(tintedCompassImage);
