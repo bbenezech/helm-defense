@@ -11,6 +11,8 @@ declare global {
 }
 
 import * as THREE from "three/src/Three.WebGPU.js";
+import alea from "alea";
+import { createNoise2D } from "simplex-noise";
 import biomeJson from "./biome.json" with { type: "json" };
 import { type BiomeCellGrid, type PackedTerrainStack, type SurfaceCellGrid } from "./chunks.ts";
 import {
@@ -21,7 +23,7 @@ import {
 } from "./codec.ts";
 import { getMapBounds, type Point2, type Rect } from "./projection.ts";
 import { generateTilableHeightmap } from "../src/game/lib/heightmap.ts";
-import { tileableHeightmapToTileData } from "../src/game/lib/terrain.ts";
+import { tileableHeightmapToTileData, type TileData } from "../src/game/lib/terrain.ts";
 import { getTilemap, terrainToLayers } from "../src/game/lib/tilemap.ts";
 
 export type TerrainTilesetProperty =
@@ -125,6 +127,13 @@ const DEFAULT_TERRAIN_TILE_WIDTH = 100;
 const DEFAULT_TERRAIN_TILE_HEIGHT = 100;
 const DEFAULT_TERRAIN_MAX_VALUE = 10;
 const DEFAULT_TERRAIN_SEED = "1";
+const DEFAULT_BIOME_AREA_SCALE = 0.03;
+const DEFAULT_BIOME_WARP_SCALE = 0.07;
+const DEFAULT_BIOME_WARP_AMPLITUDE_TILES = 6;
+const DEFAULT_BIOME_ELEVATION_WEIGHT = 0.45;
+const DEFAULT_BIOME_SCORE_THRESHOLD = -0.15;
+const DEFAULT_GRASS_BIOME_INDEX = 0;
+const DEFAULT_MUD_BIOME_INDEX = 1;
 
 function assertObject(value: unknown, message: string): asserts value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(message);
@@ -521,55 +530,127 @@ function createBiomeCellTexture(grid: BiomeCellGrid): BiomeCellTexture {
   return { texture, grid };
 }
 
-function hash01(value: number): number {
-  return Math.abs(Math.sin(value * 12.9898) * 43_758.545_312_3) % 1;
-}
+type DefaultTerrainWorld = {
+  map: TerrainMap;
+  tileData: TileData[][];
+};
 
-function createDefaultTerrainMap(): TerrainMap {
+type TileLevelRange = {
+  min: number;
+  max: number;
+};
+
+function createDefaultTerrainWorld(): DefaultTerrainWorld {
   const tileableHeightmap = generateTilableHeightmap({
     tileWidth: DEFAULT_TERRAIN_TILE_WIDTH,
     tileHeight: DEFAULT_TERRAIN_TILE_HEIGHT,
     maxValue: DEFAULT_TERRAIN_MAX_VALUE,
     seed: DEFAULT_TERRAIN_SEED,
   });
-  const terrain = tileableHeightmapToTileData(tileableHeightmap);
-  return parseTerrainMap(getTilemap(terrainToLayers(terrain, biomeJson), biomeJson));
+  const tileData = tileableHeightmapToTileData(tileableHeightmap);
+
+  return {
+    map: parseTerrainMap(getTilemap(terrainToLayers(tileData, biomeJson), biomeJson)),
+    tileData,
+  };
 }
 
-function createDefaultTerrainBiomeGrid(map: TerrainMap): TerrainBiomeGrid {
-  const biomeCount = BEAUTY_BIOME_IDS.length;
-  const columns = Math.ceil(Math.sqrt(biomeCount));
-  const rows = Math.ceil(biomeCount / columns);
-  const regionWidth = map.width / columns;
-  const regionHeight = map.height / rows;
-  const seeds = Array.from({ length: biomeCount }, (_unused, biomeIndex) => {
-    const column = biomeIndex % columns;
-    const row = Math.floor(biomeIndex / columns);
-    return {
-      biomeIndex,
-      x: (column + 0.25 + hash01(biomeIndex + 1) * 0.5) * regionWidth,
-      y: (row + 0.25 + hash01((biomeIndex + 1) * 17) * 0.5) * regionHeight,
-    };
-  });
+function getDefaultTerrainBiomeIndices(): { grassBiomeIndex: number; mudBiomeIndex: number } {
+  if (BEAUTY_BIOME_IDS.length !== 2) {
+    throw new Error(`Default biome worldgen requires exactly 2 beauty biomes, received ${BEAUTY_BIOME_IDS.length}.`);
+  }
+  if (BEAUTY_BIOME_IDS[DEFAULT_GRASS_BIOME_INDEX] !== "grass") {
+    throw new Error('Default biome worldgen requires "grass" at biome index 0.');
+  }
+  if (BEAUTY_BIOME_IDS[DEFAULT_MUD_BIOME_INDEX] !== "mud") {
+    throw new Error('Default biome worldgen requires "mud" at biome index 1.');
+  }
+
+  return {
+    grassBiomeIndex: DEFAULT_GRASS_BIOME_INDEX,
+    mudBiomeIndex: DEFAULT_MUD_BIOME_INDEX,
+  };
+}
+
+function getTileLevelRange(tileData: TileData[][]): TileLevelRange {
+  const firstRow = tileData[0];
+  if (firstRow === undefined || firstRow.length === 0) {
+    throw new Error("Default biome worldgen requires non-empty tile data.");
+  }
+
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (const row of tileData) {
+    for (const cell of row) {
+      if (cell.level < min) min = cell.level;
+      if (cell.level > max) max = cell.level;
+    }
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    throw new Error("Default biome worldgen could not resolve tile level bounds.");
+  }
+
+  return { min, max };
+}
+
+function getNormalizedTileLevel(level: number, levelRange: TileLevelRange): number {
+  const range = levelRange.max - levelRange.min;
+  if (range === 0) {
+    return 0.5;
+  }
+
+  return (level - levelRange.min) / range;
+}
+
+function createBiomeNoise2D(seedSuffix: string) {
+  return createNoise2D(alea(`${DEFAULT_TERRAIN_SEED}:${seedSuffix}`));
+}
+
+function createDefaultTerrainBiomeGrid(map: TerrainMap, tileData: TileData[][]): TerrainBiomeGrid {
+  if (tileData.length !== map.height) {
+    throw new Error(`Default terrain tile data height ${tileData.length} must match map height ${map.height}.`);
+  }
+
+  const firstRow = tileData[0];
+  if (firstRow === undefined) throw new Error("Default terrain tile data must not be empty.");
+  if (firstRow.length !== map.width) {
+    throw new Error(`Default terrain tile data width ${firstRow.length} must match map width ${map.width}.`);
+  }
+
+  const { grassBiomeIndex, mudBiomeIndex } = getDefaultTerrainBiomeIndices();
+  const levelRange = getTileLevelRange(tileData);
+  const areaNoise = createBiomeNoise2D("biome-area");
+  const warpNoiseX = createBiomeNoise2D("biome-warp-x");
+  const warpNoiseY = createBiomeNoise2D("biome-warp-y");
   const data: number[] = [];
 
   for (let tileY = 0; tileY < map.height; tileY++) {
+    const tileRow = tileData[tileY];
+    if (tileRow === undefined) throw new Error(`Missing default terrain tile row ${tileY}.`);
+
     for (let tileX = 0; tileX < map.width; tileX++) {
-      let closestBiomeIndex = 0;
-      let closestDistance = Number.POSITIVE_INFINITY;
+      const tile = tileRow[tileX];
+      if (tile === undefined) throw new Error(`Missing default terrain tile at (${tileX}, ${tileY}).`);
 
-      for (const seed of seeds) {
-        const deltaX = tileX + 0.5 - seed.x;
-        const deltaY = tileY + 0.5 - seed.y;
-        const distance = deltaX * deltaX + deltaY * deltaY;
+      const tileCenterX = tileX + 0.5;
+      const tileCenterY = tileY + 0.5;
+      const warpOffsetX =
+        warpNoiseX(tileCenterX * DEFAULT_BIOME_WARP_SCALE + 17.13, tileCenterY * DEFAULT_BIOME_WARP_SCALE - 8.71) *
+        DEFAULT_BIOME_WARP_AMPLITUDE_TILES;
+      const warpOffsetY =
+        warpNoiseY(tileCenterX * DEFAULT_BIOME_WARP_SCALE - 11.41, tileCenterY * DEFAULT_BIOME_WARP_SCALE + 23.97) *
+        DEFAULT_BIOME_WARP_AMPLITUDE_TILES;
+      const biomeNoise = areaNoise(
+        (tileCenterX + warpOffsetX) * DEFAULT_BIOME_AREA_SCALE,
+        (tileCenterY + warpOffsetY) * DEFAULT_BIOME_AREA_SCALE,
+      );
+      const normalizedLevel = getNormalizedTileLevel(tile.level, levelRange);
+      const elevationBias = (normalizedLevel * 2 - 1) * DEFAULT_BIOME_ELEVATION_WEIGHT;
+      const biomeScore = biomeNoise + elevationBias;
 
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestBiomeIndex = seed.biomeIndex;
-        }
-      }
-
-      data.push(closestBiomeIndex);
+      data.push(biomeScore >= DEFAULT_BIOME_SCORE_THRESHOLD ? grassBiomeIndex : mudBiomeIndex);
     }
   }
 
@@ -583,8 +664,8 @@ function createDefaultTerrainBiomeGrid(map: TerrainMap): TerrainBiomeGrid {
 
 export async function loadTerrainAssetBundle(): Promise<TerrainAssetBundle> {
   const tileset = parseTerrainTileset(biomeJson);
-  const map = createDefaultTerrainMap();
-  const biomeGrid = createDefaultTerrainBiomeGrid(map);
+  const { map, tileData } = createDefaultTerrainWorld();
+  const biomeGrid = createDefaultTerrainBiomeGrid(map, tileData);
   const elevationYOffsetPx = getTilesetNumberProperty(tileset, "elevationYOffsetPx");
   const [colorAtlas, checkerAtlas] = await Promise.all([
     loadBiomeAtlasArray(BEAUTY_BIOME_IDS, "Biome color atlas"),

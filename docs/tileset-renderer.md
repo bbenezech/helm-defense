@@ -55,7 +55,7 @@ The Three runtime imports that JSON directly. Per-biome JSON files are gone beca
 - loads `grass` and `mud` from `public/biome/<name>/tileset.png` into the beauty atlas array
 - loads `checkers` from `public/biome/checkers/tileset.png` as the dedicated checker/debug atlas
 - generates the default terrain map in code
-- generates the deterministic two-biome ownership grid in code
+- generates a deterministic noise-driven biome ownership grid in code, using the terrain seed and a height bias so higher ground trends toward `grass` and lower ground trends toward `mud`
 
 `checkers` is a normal biome build output. The only special case is in the Three renderer, where its atlas is used for the checker debug view instead of the grass/mud terrain blend.
 
